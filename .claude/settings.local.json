@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(open /Users/vansh/Documents/Claude/Projects/Performance-tracking-DB/config.js)",
+      "Bash(xargs ls:*)"
+    ]
+  }
+}

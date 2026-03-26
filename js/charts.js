@@ -1,0 +1,275 @@
+/**
+ * charts.js — Chart.js chart builders
+ *
+ * All charts are destroyed and recreated on each render to handle
+ * dynamic data updates cleanly.
+ */
+
+const charts = (() => {
+  const _instances = {};
+
+  // ── Colour Palette ────────────────────────────────────────────────────
+
+  const COLORS = {
+    navy:   '#1a2332',
+    accent: '#4a90d9',
+    teal:   '#26a69a',
+    amber:  '#ffa726',
+    red:    '#e53935',
+    green:  '#43a047',
+    purple: '#7e57c2',
+    pink:   '#ec407a',
+  };
+
+  const ALPHA = (hex, a) => {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    return `rgba(${r},${g},${b},${a})`;
+  };
+
+  // ── Common Chart Defaults ─────────────────────────────────────────────
+
+  const BASE_OPTS = {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {
+      legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12 } },
+      tooltip: { mode: 'index', intersect: false },
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(0,0,0,0.04)' },
+        ticks: { font: { size: 11 }, maxRotation: 45 },
+      },
+      y: {
+        grid: { color: 'rgba(0,0,0,0.06)' },
+        ticks: { font: { size: 11 } },
+        beginAtZero: true,
+      },
+    },
+  };
+
+  function _destroy(id) {
+    if (_instances[id]) {
+      _instances[id].destroy();
+      delete _instances[id];
+    }
+  }
+
+  // ── Chart 1: Orders Picked (left) vs Picking Hours (right) ───────────
+
+  function renderOrdersHoursChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
+    const orders  = aggregated.map(d => d.total_orders_picked || 0);
+    const hours   = aggregated.map(d => +(d.total_picking_hours || 0).toFixed(1));
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Orders Picked',
+            data: orders,
+            borderColor: COLORS.accent,
+            backgroundColor: ALPHA(COLORS.accent, 0.1),
+            fill: true,
+            tension: 0.3,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Picking Hours',
+            data: hours,
+            borderColor: COLORS.amber,
+            backgroundColor: ALPHA(COLORS.amber, 0.1),
+            fill: true,
+            tension: 0.3,
+            yAxisID: 'y2',
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y:  { ...BASE_OPTS.scales.y, position: 'left',  title: { display: true, text: 'Orders' } },
+          y2: { ...BASE_OPTS.scales.y, position: 'right', title: { display: true, text: 'Hours' }, grid: { drawOnChartArea: false } },
+        },
+      },
+    });
+  }
+
+  // ── Chart 2: Avg Time Metrics (grouped bar) ───────────────────────────
+
+  function renderTimeMetricsChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
+
+    // Convert seconds to minutes for readability
+    const toMin = v => +(v / 60).toFixed(2);
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Pick Time/Order (min)',
+            data: aggregated.map(d => toMin(d.avg_picking_time_per_order || 0)),
+            backgroundColor: ALPHA(COLORS.accent, 0.75),
+          },
+          {
+            label: 'Delay to Start (min)',
+            data: aggregated.map(d => toMin(d.avg_assigned_to_started || 0)),
+            backgroundColor: ALPHA(COLORS.purple, 0.75),
+          },
+          {
+            label: 'Billing Time (min)',
+            data: aggregated.map(d => toMin(d.avg_billing_time || 0)),
+            backgroundColor: ALPHA(COLORS.pink, 0.75),
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Minutes' } },
+        },
+      },
+    });
+  }
+
+  // ── Chart 3: Avg IPH trend (line) ─────────────────────────────────────
+
+  function renderIPHChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Avg IPH',
+            data: aggregated.map(d => +(d.avg_iph || 0).toFixed(1)),
+            borderColor: COLORS.teal,
+            backgroundColor: ALPHA(COLORS.teal, 0.12),
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Items / Hour' } },
+        },
+      },
+    });
+  }
+
+  // ── Chart 4: Complaints stacked bar ──────────────────────────────────
+
+  function renderComplaintsChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Missing',
+            data: aggregated.map(d => d.missing_complaints || 0),
+            backgroundColor: ALPHA(COLORS.red, 0.8),
+            stack: 'complaints',
+          },
+          {
+            label: 'Wrong',
+            data: aggregated.map(d => d.wrong_complaints || 0),
+            backgroundColor: ALPHA(COLORS.amber, 0.8),
+            stack: 'complaints',
+          },
+          {
+            label: 'Other',
+            data: aggregated.map(d => d.other_complaints || 0),
+            backgroundColor: ALPHA(COLORS.purple, 0.7),
+            stack: 'complaints',
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y: { ...BASE_OPTS.scales.y, stacked: true, title: { display: true, text: 'Count' } },
+          x: { ...BASE_OPTS.scales.x, stacked: true },
+        },
+      },
+    });
+  }
+
+  // ── Sparkline for Captain Profile ─────────────────────────────────────
+
+  function renderSparkline(canvasId, labels, values, flagDays, color = COLORS.accent) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const pointColors = values.map((_, i) => flagDays[i] ? COLORS.red : ALPHA(color, 0.7));
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '',
+          data: values,
+          borderColor: color,
+          backgroundColor: ALPHA(color, 0.08),
+          fill: true,
+          tension: 0.3,
+          pointRadius: values.map((_, i) => flagDays[i] ? 5 : 3),
+          pointBackgroundColor: pointColors,
+          pointBorderColor: pointColors,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: false }, tooltip: { mode: 'index' } },
+        scales: {
+          x: { display: true, grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45 } },
+          y: { display: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 } }, beginAtZero: false },
+        },
+      },
+    });
+  }
+
+  return {
+    renderOrdersHoursChart,
+    renderTimeMetricsChart,
+    renderIPHChart,
+    renderComplaintsChart,
+    renderSparkline,
+  };
+})();

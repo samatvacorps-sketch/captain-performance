@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Captain Performance — Samatva Intelligence</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<!-- ── AUTH SCREEN ─────────────────────────────────────────────────────── -->
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-card">
+    <img src="assets/samatva-logo.png" alt="Samatva Intelligence" style="width:110px;height:110px;object-fit:contain;border-radius:16px;margin-bottom:8px;">
+    <h1 style="font-size:22px;margin-bottom:2px;">Captain Performance</h1>
+    <p style="font-size:12px;color:#888;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:18px;">by Samatva Intelligence</p>
+    <p>Sign in with your Google account to access captain performance data.</p>
+    <div id="google-signin-btn"></div>
+    <p class="auth-note">You must have access to the source Google Sheet.</p>
+  </div>
+</div>
+
+<!-- ── MAIN APP ────────────────────────────────────────────────────────── -->
+<div id="app" class="app hidden">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <img src="assets/samatva-logo.png" alt="Samatva Intelligence" style="width:32px;height:32px;object-fit:contain;border-radius:6px;">
+      <div style="display:flex;flex-direction:column;line-height:1.2;">
+        <span class="header-title">Captain Performance</span>
+        <span style="font-size:10px;color:#888;letter-spacing:1.2px;text-transform:uppercase;">Samatva Intelligence</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <span id="last-refreshed" class="last-refreshed"></span>
+      <button id="refresh-btn" class="btn btn-secondary" onclick="app.refresh()">⟳ Refresh</button>
+      <span id="user-name" class="user-name"></span>
+      <button class="btn btn-ghost" onclick="auth.signOut()">Sign out</button>
+    </div>
+  </header>
+
+  <!-- Tab Navigation -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="store-overview" onclick="app.switchTab('store-overview')">
+      📈 Store Overview
+    </button>
+    <button class="tab-btn" data-tab="captain-deep-dive" onclick="app.switchTab('captain-deep-dive')">
+      🔍 Captain Deep Dive
+    </button>
+    <button class="tab-btn" data-tab="daily-flags" onclick="app.switchTab('daily-flags')">
+      🚩 Daily Flags
+    </button>
+    <button class="tab-btn" data-tab="captain-profile" onclick="app.switchTab('captain-profile')">
+      👤 Captain Profile
+    </button>
+    <button class="tab-btn" data-tab="tier-analysis" onclick="app.switchTab('tier-analysis')">
+      🏅 Tier Analysis
+    </button>
+    <button class="tab-btn" data-tab="config-panel" onclick="app.switchTab('config-panel')">
+      ⚙️ Config
+    </button>
+  </nav>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <p>Loading data from Google Sheets…</p>
+  </div>
+
+  <!-- ── STORE OVERVIEW ──────────────────────────────────────────────── -->
+  <section id="tab-store-overview" class="tab-content active">
+    <div class="section-header">
+      <h2>Store Overview</h2>
+      <div class="controls">
+        <label>View:</label>
+        <select id="overview-period" onchange="ui.renderStoreOverview()">
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Chart Grid -->
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>Orders Picked vs Picking Hours</h3>
+        <canvas id="chart-orders-hours"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Avg Time Metrics (mm:ss)</h3>
+        <canvas id="chart-time-metrics"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Avg Items Put Away/Hr (IPH)</h3>
+        <canvas id="chart-iph"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Complaints by Type</h3>
+        <canvas id="chart-complaints"></canvas>
+      </div>
+    </div>
+
+    <!-- Summary Tables -->
+    <div class="table-section">
+      <h3 id="overview-table-title">Weekly Summary</h3>
+      <div class="table-wrapper">
+        <table id="overview-table" class="data-table">
+          <thead id="overview-table-head"></thead>
+          <tbody id="overview-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CAPTAIN DEEP DIVE ───────────────────────────────────────────── -->
+  <section id="tab-captain-deep-dive" class="tab-content hidden">
+    <div class="section-header">
+      <h2>Captain Deep Dive</h2>
+      <div class="controls" style="flex-wrap:wrap;gap:10px;">
+        <div class="control-group" id="deep-dive-preset-group">
+          <label>Quick select:</label>
+          <select id="deep-dive-period" onchange="ui.onDeepDivePresetChange()"></select>
+        </div>
+        <div class="control-group" style="display:flex;align-items:center;gap:6px;">
+          <label>From:</label>
+          <input type="date" id="deep-dive-start" onchange="ui.onDeepDiveDateChange()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
+          <label>To:</label>
+          <input type="date" id="deep-dive-end" onchange="ui.onDeepDiveDateChange()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
+        </div>
+        <div class="control-group">
+          <label>Flow:</label>
+          <select id="deep-dive-flow" onchange="ui.renderDeepDive()">
+            <option value="all">All Flows</option>
+            <option value="picking">Picking</option>
+            <option value="putting">Putting</option>
+            <option value="audit">Audit</option>
+            <option value="fnv">FNV Audit</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="badge badge-dark-red">■</span> &gt;2 SD worse
+      <span class="badge badge-red">■</span> &gt;1 SD worse (flagged)
+      <span class="badge badge-yellow">■</span> 0.5–1 SD worse
+      <span class="badge badge-green">■</span> At/above avg
+    </div>
+
+    <div id="deep-dive-content"></div>
+  </section>
+
+  <!-- ── DAILY FLAGS ─────────────────────────────────────────────────── -->
+  <section id="tab-daily-flags" class="tab-content hidden">
+    <div class="section-header">
+      <h2>Daily Flags</h2>
+      <div class="controls">
+        <label>Date:</label>
+        <input type="date" id="flags-date" onchange="ui.renderDailyFlags()" />
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-cards" id="flags-summary-cards"></div>
+
+    <!-- Drill-down Table -->
+    <div class="table-section">
+      <h3>Flagged Captains</h3>
+      <div class="table-wrapper">
+        <table id="flags-table" class="data-table">
+          <thead>
+            <tr>
+              <th>Captain</th>
+              <th>ID</th>
+              <th>Active Flows</th>
+              <th>Flagged Metrics</th>
+              <th>Worst Dev.</th>
+              <th>Slacker Score</th>
+            </tr>
+          </thead>
+          <tbody id="flags-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CAPTAIN PROFILE ─────────────────────────────────────────────── -->
+  <section id="tab-captain-profile" class="tab-content hidden">
+    <div class="section-header">
+      <h2>Captain Profile</h2>
+      <div class="controls" style="flex-wrap:wrap;gap:10px;">
+        <div class="control-group">
+          <label>Captain:</label>
+          <select id="profile-captain" onchange="ui.renderCaptainProfile()">
+            <option value="">— Select Captain —</option>
+          </select>
+        </div>
+        <div class="control-group" style="display:flex;align-items:center;gap:6px;">
+          <label>From:</label>
+          <input type="date" id="profile-start" onchange="ui.renderCaptainProfile()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
+          <label>To:</label>
+          <input type="date" id="profile-end" onchange="ui.renderCaptainProfile()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
+          <button onclick="ui.resetProfileDates()" style="background:#333;color:#aaa;border:1px solid #444;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;">All time</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="profile-content">
+      <p class="placeholder-text">Select a captain to view their performance profile.</p>
+    </div>
+  </section>
+
+  <!-- ── TIER ANALYSIS ───────────────────────────────────────────────── -->
+  <section id="tab-tier-analysis" class="tab-content hidden">
+    <div class="section-header">
+      <h2>Tier Analysis</h2>
+      <div class="controls" style="flex-wrap:wrap;gap:10px;">
+        <div class="control-group">
+          <label>Quick select:</label>
+          <select id="tiers-period" onchange="ui.onTierPresetChange()"></select>
+        </div>
+        <div class="control-group" style="display:flex;align-items:center;gap:6px;">
+          <label>From:</label>
+          <input type="date" id="tiers-start" onchange="ui.onTierDateChange()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
+          <label>To:</label>
+          <input type="date" id="tiers-end" onchange="ui.onTierDateChange()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
+        </div>
+      </div>
+    </div>
+    <div id="tiers-content"></div>
+  </section>
+
+  <!-- ── CONFIG PANEL ────────────────────────────────────────────────── -->
+  <section id="tab-config-panel" class="tab-content hidden">
+    <div class="section-header">
+      <h2>Configuration</h2>
+    </div>
+    <div class="config-grid">
+      <div class="config-card">
+        <h3>Flagging Threshold</h3>
+        <p>Number of standard deviations worse than store average to flag a captain.</p>
+        <div class="config-row">
+          <label>Multiplier:</label>
+          <input type="number" id="threshold-input" min="0.5" max="3" step="0.1" value="1.0"
+                 onchange="app.updateThreshold(this.value)" />
+        </div>
+        <p class="config-hint">Default: 1.0 (= 1 SD). Higher = stricter (fewer flags).</p>
+      </div>
+      <div class="config-card">
+        <h3>Data Source</h3>
+        <p><strong>Spreadsheet:</strong></p>
+        <code id="config-sheet-id"></code>
+        <p><strong>Sheet:</strong> Sheet1 (columns A–V)</p>
+        <p><strong>Rows loaded:</strong> <span id="config-row-count">—</span></p>
+      </div>
+      <div class="config-card">
+        <h3>Metric Definitions</h3>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr><th>Metric</th><th>Flow</th><th>Direction</th></tr>
+            </thead>
+            <tbody id="config-metrics-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div><!-- /#app -->
+
+<!-- Scripts (order matters) -->
+<script src="config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/sheets.js"></script>
+<script src="js/compute.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/ui.js"></script>
+<script>
+  // Bootstrap
+  window.addEventListener('load', () => {
+    auth.init();
+  });
+</script>
+</body>
+</html>
