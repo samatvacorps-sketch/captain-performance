@@ -686,10 +686,10 @@ const ui = (() => {
     const cardsEl = document.getElementById('flags-summary-cards');
     if (cardsEl) {
       cardsEl.innerHTML = `
-        <div class="flags-metric-card full-width accent-blue">
+        <div class="flags-metric-card accent-blue">
           <div class="flags-metric-label">Active Captains</div>
           <div class="flags-metric-row">
-            <span class="flags-metric-value color-blue">${totalActive}</span>
+            <span class="flags-metric-value small color-blue">${totalActive}</span>
             <span class="flags-metric-sub" style="color:#4edea3">▲ ${okCount} Stable</span>
           </div>
         </div>
