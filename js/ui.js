@@ -693,17 +693,17 @@ const ui = (() => {
             <span class="flags-metric-sub" style="color:#4edea3">▲ ${okCount} Stable</span>
           </div>
         </div>
-        <div class="flags-metric-card accent-red">
+        <div class="flags-metric-card accent-amber">
           <div class="flags-metric-label">Flagged</div>
           <div class="flags-metric-row">
-            <span class="flags-metric-value small color-red">${flaggedCount}</span>
+            <span class="flags-metric-value small color-amber">${flaggedCount}</span>
           </div>
           <div class="flags-metric-sub">${pickSlackers} picking · ${putSlackers} putting</div>
         </div>
-        <div class="flags-metric-card accent-amber">
+        <div class="flags-metric-card accent-red">
           <div class="flags-metric-label">Serial Slackers</div>
           <div class="flags-metric-row">
-            <span class="flags-metric-value small color-amber">${String(serialCount).padStart(2,'0')}</span>
+            <span class="flags-metric-value small color-red">${String(serialCount).padStart(2,'0')}</span>
           </div>
           <div class="flags-metric-sub">2+ flags today</div>
         </div>
