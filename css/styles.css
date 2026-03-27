@@ -478,7 +478,51 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
 
 /* ── Responsive ───────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .chart-grid { grid-template-columns: 1fr; }
-  .tab-content { padding: 16px; }
-  .section-header { flex-direction: column; align-items: flex-start; }
+  /* Header */
+  .app-header { padding: 0 12px; height: 52px; }
+  .header-title { font-size: 14px; }
+  .header-subtitle { display: none; }
+  .last-refreshed { display: none; }
+  .user-name { font-size: 12px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .header-right { gap: 8px; }
+
+  /* Tab nav — smooth horizontal scroll, no scrollbar visible */
+  .tab-nav { padding: 0 8px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tab-nav::-webkit-scrollbar { display: none; }
+  .tab-btn { padding: 12px 14px; font-size: 12px; }
+
+  /* Content */
+  .tab-content { padding: 12px; }
+  .section-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .section-header h2 { font-size: 17px; }
+
+  /* Controls — stack vertically, full width inputs */
+  .controls { flex-direction: column; align-items: flex-start; width: 100%; }
+  .controls select,
+  .controls input[type="date"] { width: 100%; font-size: 15px; padding: 9px 10px; }
+  .controls .btn { width: 100%; text-align: center; padding: 9px; }
+
+  /* Charts — single column, shorter height */
+  .chart-grid { grid-template-columns: 1fr; gap: 12px; }
+  .chart-card { padding: 14px; }
+  .chart-card canvas { max-height: 200px; }
+
+  /* Summary cards — 2 columns on mobile */
+  .summary-cards { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .summary-card { padding: 14px 10px; }
+  .summary-card .card-value { font-size: 26px; }
+
+  /* Tables — ensure horizontal scroll with touch */
+  .table-wrapper { -webkit-overflow-scrolling: touch; }
+  .data-table { font-size: 12px; }
+  .data-table th, .data-table td { padding: 8px 10px; }
+
+  /* Profile metric grid */
+  .profile-metric-grid { grid-template-columns: 1fr; gap: 12px; }
+
+  /* Config */
+  .config-grid { grid-template-columns: 1fr; }
+
+  /* Flow sections */
+  .flow-section-header { padding: 10px 14px; font-size: 13px; }
 }
