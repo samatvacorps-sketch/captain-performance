@@ -281,11 +281,59 @@ const charts = (() => {
     });
   }
 
+  // ── Chart 5: Putaway Qty (left) vs Putting Hours (right) ─────────────
+
+  function renderPutawayChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels      = aggregated.map(d => d.label || d.week_key || d.month_key);
+    const putawayQty  = aggregated.map(d => d.total_putaway_qty || 0);
+    const puttingHrs  = aggregated.map(d => +(d.total_putting_hours || 0).toFixed(1));
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Putaway Qty',
+            data: putawayQty,
+            borderColor: COLORS.teal,
+            backgroundColor: ALPHA(COLORS.teal, 0.1),
+            fill: true,
+            tension: 0.3,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Putting Hours',
+            data: puttingHrs,
+            borderColor: COLORS.purple,
+            backgroundColor: ALPHA(COLORS.purple, 0.1),
+            fill: true,
+            tension: 0.3,
+            yAxisID: 'y2',
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y:  { ...BASE_OPTS.scales.y, position: 'left',  title: { display: true, text: 'Qty' } },
+          y2: { ...BASE_OPTS.scales.y, position: 'right', title: { display: true, text: 'Hours' }, grid: { drawOnChartArea: false } },
+        },
+      },
+    });
+  }
+
   return {
     renderOrdersHoursChart,
     renderTimeMetricsChart,
     renderIPHChart,
     renderComplaintsChart,
+    renderPutawayChart,
     renderSparkline,
   };
 })();

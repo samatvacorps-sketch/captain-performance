@@ -297,6 +297,8 @@ const compute = (() => {
       label: group.week_start ? _weekLabel(group.week_start) : (group.month_key || group.week_key),
       total_orders_picked:    sum('checkout_orders'),
       total_picking_hours:    sum('picker_active_time') / 3600,
+      total_putting_hours:    sum('putter_active_time') / 3600,
+      total_audit_hours:      sum('auditor_active_time') / 3600,
       total_putaway_qty:      sum('putaway_qty'),
       total_racks_audited:    sum('racks_audited'),
       total_complaints:       sum('missing_complaints') + sum('wrong_complaints') + sum('other_complaints'),
@@ -304,6 +306,7 @@ const compute = (() => {
       wrong_complaints:       sum('wrong_complaints'),
       other_complaints:       sum('other_complaints'),
 
+      avg_ppi:                           avg('ppi', r => r.flows?.is_picking),
       avg_picking_time_per_order:        avg('picking_time_per_order', r => r.flows?.is_picking),
       avg_total_time_per_order:          avg('total_time_per_order', r => r.flows?.is_picking),
       avg_assigned_to_started:           avg('assigned_to_started_per_order', r => r.flows?.is_picking),

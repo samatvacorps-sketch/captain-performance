@@ -46,6 +46,7 @@ const ui = (() => {
     // Charts
     charts.renderOrdersHoursChart('chart-orders-hours', aggregated);
     charts.renderTimeMetricsChart('chart-time-metrics', aggregated);
+    charts.renderPutawayChart('chart-putaway-hours', aggregated);
     charts.renderIPHChart('chart-iph', aggregated);
     charts.renderComplaintsChart('chart-complaints', aggregated);
 
@@ -78,12 +79,15 @@ const ui = (() => {
       <th>${period === 'weekly' ? 'Week' : 'Month'}</th>
       <th>Captains</th>
       <th>Orders Picked</th>
+      <th>PPI</th>
       <th>Picking Hours</th>
-      <th>Avg Pick Time</th>
       <th>Avg Delay to Start</th>
+      <th>Avg Pick Time</th>
       <th>Avg Billing Time</th>
+      <th>Putting Hours</th>
       <th>Putaway Qty</th>
       <th>Avg IPH</th>
+      <th>Audit Hours</th>
       <th>Racks Audited</th>
       <th>Complaints</th>
     </tr>`;
@@ -92,12 +96,15 @@ const ui = (() => {
       <td>${d.label || d.week_key || d.month_key}</td>
       <td>${d.active_captains || 0}</td>
       <td>${_fmt(d.total_orders_picked)}</td>
+      <td>${compute.formatDuration(d.avg_ppi)}</td>
       <td>${_fmt(d.total_picking_hours, 1)} h</td>
-      <td>${compute.formatDuration(d.avg_picking_time_per_order)}</td>
       <td>${compute.formatDuration(d.avg_assigned_to_started)}</td>
+      <td>${compute.formatDuration(d.avg_picking_time_per_order)}</td>
       <td>${compute.formatDuration(d.avg_billing_time)}</td>
+      <td>${_fmt(d.total_putting_hours, 1)} h</td>
       <td>${_fmt(d.total_putaway_qty)}</td>
       <td>${_fmt(d.avg_iph, 1)}</td>
+      <td>${_fmt(d.total_audit_hours, 1)} h</td>
       <td>${_fmt(d.total_racks_audited)}</td>
       <td>${_fmt(d.total_complaints)}</td>
     </tr>`).join('');

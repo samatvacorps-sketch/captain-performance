@@ -817,8 +817,10 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   border-radius: 50%;
   flex-shrink: 0;
 }
-.legend-dot-blue  { background: #adc6ff; box-shadow: 0 0 6px rgba(173,198,255,0.5); }
-.legend-dot-green { background: #4edea3; box-shadow: 0 0 6px rgba(78,222,163,0.5); }
+.legend-dot-blue   { background: #adc6ff; box-shadow: 0 0 6px rgba(173,198,255,0.5); }
+.legend-dot-green  { background: #4edea3; box-shadow: 0 0 6px rgba(78,222,163,0.5); }
+.legend-dot-teal   { background: #4edea3; box-shadow: 0 0 6px rgba(78,222,163,0.5); }
+.legend-dot-purple { background: #c084fc; box-shadow: 0 0 6px rgba(192,132,252,0.5); }
 
 /* ── Captain Deep Dive ─────────────────────────────────────────────── */
 .dd-page-header {
