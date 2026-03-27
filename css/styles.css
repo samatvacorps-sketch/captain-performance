@@ -18,20 +18,20 @@
 
   --text:         #dde6f5;
   --text-muted:   #a2acba;
-  --bg:           #0b0e12;
-  --card-bg:      #0f1419;
-  --border:       rgba(63, 73, 85, 0.35);
-  --border-subtle: rgba(63, 73, 85, 0.15);
+  --bg:           #141d28;   /* content area — noticeably lighter than header */
+  --card-bg:      #1a2535;   /* cards/tables — medium dark, good flag contrast */
+  --border:       rgba(63, 73, 85, 0.4);
+  --border-subtle: rgba(63, 73, 85, 0.22);
 
-  /* Status colours — calibrated for dark theme */
+  /* Status colours — boosted opacity so flags pop on lighter bg */
   --dark-red:   #ff9993;
   --red:        #ee7d77;
   --yellow:     #ffd54f;
   --green:      #81c784;
-  --red-bg:     rgba(238, 125, 119, 0.1);
-  --dark-red-bg: rgba(255, 153, 147, 0.13);
-  --yellow-bg:  rgba(255, 213, 79, 0.08);
-  --green-bg:   rgba(129, 199, 132, 0.09);
+  --red-bg:     rgba(238, 125, 119, 0.22);
+  --dark-red-bg: rgba(255, 153, 147, 0.28);
+  --yellow-bg:  rgba(255, 213, 79, 0.18);
+  --green-bg:   rgba(129, 199, 132, 0.16);
 }
 
 body {
@@ -432,9 +432,9 @@ body {
   color: var(--text);
 }
 
-.data-table tr:nth-child(even) td { background: rgba(15, 20, 25, 0.6); }
+.data-table tr:nth-child(even) td { background: rgba(255,255,255,0.025); }
 .data-table tr:last-child td { border-bottom: none; }
-.data-table tr:hover td { background: rgba(25, 32, 41, 0.9); }
+.data-table tr:hover td { background: rgba(255,255,255,0.05); }
 
 /* ── Conditional Formatting Classes ──────────────────────────────── */
 .cell-dark-red { background: var(--dark-red-bg) !important; color: var(--dark-red); font-weight: 600; }
