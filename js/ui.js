@@ -10,6 +10,15 @@ const ui = (() => {
   // ── Sort State (persists across re-renders) ───────────────────────────
   let _sortState = { col: null, dir: 'desc' };
 
+  // ── Deep Dive Captain Filter ───────────────────────────────────────────
+  // 'all' | 'flagged' | 'ok'
+  let _ddFilter = 'all';
+
+  function setDDFilter(val) {
+    _ddFilter = (_ddFilter === val) ? 'all' : val;   // toggle off if already active
+    renderDeepDive();
+  }
+
   // ── Tab Switching ─────────────────────────────────────────────────────
 
   function switchTab(tabId) {
@@ -165,11 +174,13 @@ const ui = (() => {
       document.getElementById('deep-dive-start').value = _isoDateStr(dates[0]);
       document.getElementById('deep-dive-end').value   = _isoDateStr(dates[dates.length - 1]);
     }
+    _ddFilter = 'all';   // reset captain filter on preset change
     renderDeepDive();
   }
 
   function onDeepDiveDateChange() {
     _deepDiveDateMode = true;
+    _ddFilter = 'all';   // reset captain filter on period change
     renderDeepDive();
   }
 
@@ -219,6 +230,14 @@ const ui = (() => {
 
     // Aggregate per captain for this period
     const byCaptain = _groupByCaptain(filtered, periodType, periodStoreStats);
+
+    // Apply captain filter (set by clicking summary cards)
+    const visibleCaptains = _ddFilter === 'flagged'
+      ? byCaptain.filter(c => c.composite_slacker_score >= 0.5)
+      : _ddFilter === 'ok'
+        ? byCaptain.filter(c => c.composite_slacker_score < 0.5)
+        : byCaptain;
+
     // Populate DD summary cards
     const ddCards = document.getElementById('dd-summary-cards');
     if (ddCards) {
@@ -226,18 +245,26 @@ const ui = (() => {
       const flagged = byCaptain.filter(c => c.composite_slacker_score >= 0.5).length;
       const ok = total - flagged;
       const totalOrders = byCaptain.reduce((s,c) => s + (c.total_orders_picked||0), 0);
-      ddCards.innerHTML = [
-        { icon: ICONS.person,       label:'Active Captains', val: total.toLocaleString(),       cls:'stat-icon-blue' },
-        { icon: ICONS.flag,         label:'Flagged',         val: flagged,  valCss: flagged > 0 ? 'color:#ee7d77' : '', cls:'stat-icon-red' },
-        { icon: ICONS.check,        label:'At / Above Avg',  val: ok,       valCss:'color:#4edea3', cls:'stat-icon-green' },
-        { icon: ICONS.box,          label:'Total Orders',    val: totalOrders.toLocaleString(), cls:'stat-icon-teal' },
-      ].map(c => `<div class="stat-card">
-        <div class="stat-icon ${c.cls}">${c.icon}</div>
-        <div>
-          <p class="stat-label">${c.label}</p>
-          <p class="stat-value" ${c.valCss ? `style="${c.valCss}"` : ''}>${c.val}</p>
-        </div>
-      </div>`).join('');
+      const ddCardDefs = [
+        { filter:'all',     icon: ICONS.person, label:'Active Captains', val: total.toLocaleString(),       cls:'stat-icon-blue',  valCss: '' },
+        { filter:'flagged', icon: ICONS.flag,   label:'Flagged',         val: flagged,                      cls:'stat-icon-red',   valCss: flagged > 0 ? 'color:#ff5c5c' : '' },
+        { filter:'ok',      icon: ICONS.check,  label:'At / Above Avg',  val: ok,                           cls:'stat-icon-green', valCss: 'color:#4edea3' },
+        { filter:null,      icon: ICONS.box,    label:'Total Orders',    val: totalOrders.toLocaleString(), cls:'stat-icon-teal',  valCss: '' },
+      ];
+      ddCards.innerHTML = ddCardDefs.map(c => {
+        const clickable = c.filter !== null;
+        const isActive  = clickable && _ddFilter === c.filter;
+        const onclick   = clickable ? `onclick="ui.setDDFilter('${c.filter}')"` : '';
+        const activeCls = isActive  ? ' filter-active' : '';
+        const cursorStl = clickable ? 'cursor:pointer;' : '';
+        return `<div class="stat-card${activeCls}" ${onclick} style="${cursorStl}">
+          <div class="stat-icon ${c.cls}">${c.icon}</div>
+          <div>
+            <p class="stat-label">${c.label}${isActive ? ' <span class="dd-filter-badge">filtered</span>' : ''}</p>
+            <p class="stat-value" ${c.valCss ? `style="${c.valCss}"` : ''}>${c.val}</p>
+          </div>
+        </div>`;
+      }).join('');
     }
 
     container.innerHTML = '';
@@ -255,7 +282,7 @@ const ui = (() => {
 
     for (const flow of flows) {
       const meta = flowMeta[flow];
-      const captains = byCaptain.filter(c => c[`has_${flow}`]);
+      const captains = visibleCaptains.filter(c => c[`has_${flow}`]);
       if (captains.length === 0) continue;
 
       const section = document.createElement('div');
@@ -268,7 +295,10 @@ const ui = (() => {
     }
 
     if (container.innerHTML === '') {
-      container.innerHTML = '<p class="placeholder-text">No active captains in the selected period/flow.</p>';
+      const msg = _ddFilter !== 'all'
+        ? `No captains match the <strong>${_ddFilter === 'flagged' ? 'Flagged' : 'At / Above Avg'}</strong> filter for this period. <a href="#" onclick="ui.setDDFilter('all');return false;" style="color:#adc6ff">Clear filter</a>`
+        : 'No active captains in the selected period/flow.';
+      container.innerHTML = `<p class="placeholder-text">${msg}</p>`;
     }
 
     // Attach sort click listeners
@@ -1261,6 +1291,7 @@ const ui = (() => {
     setOverviewPeriod,
     initDeepDivePeriods,
     renderDeepDive,
+    setDDFilter,
     onDeepDivePresetChange,
     onDeepDiveDateChange,
     initTiersView,

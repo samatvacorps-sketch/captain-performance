@@ -679,6 +679,28 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   transition: border-color 0.2s;
 }
 .stat-card:hover { border-color: rgba(173,198,255,0.2); }
+.stat-card.filter-active {
+  border-color: rgba(173,198,255,0.45);
+  background: rgba(173,198,255,0.06);
+  box-shadow: 0 0 0 1px rgba(173,198,255,0.2);
+}
+.stat-card.filter-active:hover { border-color: rgba(173,198,255,0.6); }
+
+/* "filtered" badge shown inside active card label */
+.dd-filter-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #adc6ff;
+  background: rgba(173,198,255,0.15);
+  border: 1px solid rgba(173,198,255,0.3);
+  border-radius: 4px;
+  padding: 1px 5px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
 
 .stat-icon {
   width: 48px;
