@@ -305,6 +305,7 @@ const compute = (() => {
       other_complaints:       sum('other_complaints'),
 
       avg_picking_time_per_order:        avg('picking_time_per_order', r => r.flows?.is_picking),
+      avg_total_time_per_order:          avg('total_time_per_order', r => r.flows?.is_picking),
       avg_assigned_to_started:           avg('assigned_to_started_per_order', r => r.flows?.is_picking),
       avg_billing_time:                  avg('billing_time_per_order', r => r.flows?.is_picking),
       avg_iph:                           avg('iph', r => r.flows?.is_putting),

@@ -52,8 +52,8 @@ const ui = (() => {
     // Stat cards
     const totalOrders = aggregated.reduce((s,d) => s + (d.total_orders_picked||0), 0);
     const totalComplaints = aggregated.reduce((s,d) => s + (d.total_complaints||0), 0);
-    const validPick = aggregated.filter(d => d.avg_picking_time_per_order > 0);
-    const avgPick = validPick.length ? validPick.reduce((s,d) => s + d.avg_picking_time_per_order, 0) / validPick.length : 0;
+    const validPick = aggregated.filter(d => d.avg_total_time_per_order > 0);
+    const avgPick = validPick.length ? validPick.reduce((s,d) => s + d.avg_total_time_per_order, 0) / validPick.length : 0;
     const validIPH = aggregated.filter(d => d.avg_iph > 0);
     const avgIPH = validIPH.length ? validIPH.reduce((s,d) => s + d.avg_iph, 0) / validIPH.length : 0;
     const _set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
