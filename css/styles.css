@@ -8,9 +8,9 @@
   /* Samatva Intelligence Design System */
   --navy:         #090d12;
   --navy-light:   #0f1419;
-  --navy-mid:     #141a21;
-  --surface-high: #192029;
-  --surface-bright: #1d2631;
+  --navy-mid:     #1a2535;
+  --surface-high: #223040;
+  --surface-bright: #2a3a50;
 
   --accent:       #c6c6ca;
   --accent-dim:   #b8b8bc;
@@ -18,10 +18,10 @@
 
   --text:         #dde6f5;
   --text-muted:   #a2acba;
-  --bg:           #141d28;   /* content area — noticeably lighter than header */
-  --card-bg:      #1a2535;   /* cards/tables — medium dark, good flag contrast */
-  --border:       rgba(63, 73, 85, 0.4);
-  --border-subtle: rgba(63, 73, 85, 0.22);
+  --bg:           #1e2d40;   /* content area — much lighter */
+  --card-bg:      #263347;   /* cards/tables — clearly visible mid-tone */
+  --border:       rgba(80, 100, 120, 0.45);
+  --border-subtle: rgba(80, 100, 120, 0.28);
 
   /* Status colours — boosted opacity so flags pop on lighter bg */
   --dark-red:   #ff9993;
