@@ -803,12 +803,18 @@ const ui = (() => {
     const container = document.getElementById('tiers-content');
     if (!data || data.length === 0 || !container) return;
 
-    // Compute each captain's TOTAL active days across all data
+    // Determine period start to count active days UP TO (not including) that date
+    const startVal = document.getElementById('tiers-start')?.value;
+    const periodStartMs = startVal ? new Date(startVal).setHours(0,0,0,0) : Infinity;
+
+    // Count each captain's active days strictly before the selected period start
     const activeDayMap = {};
     for (const row of data) {
       if (!row.employee_id || !row.dateStr) continue;
-      if (!activeDayMap[row.employee_id]) activeDayMap[row.employee_id] = new Set();
-      activeDayMap[row.employee_id].add(String(row.dateStr));
+      if (row.date && row.date < periodStartMs) {
+        if (!activeDayMap[row.employee_id]) activeDayMap[row.employee_id] = new Set();
+        activeDayMap[row.employee_id].add(String(row.dateStr));
+      }
     }
     const activeDayCounts = {};
     for (const [id, days] of Object.entries(activeDayMap)) {
