@@ -1192,13 +1192,29 @@ const ui = (() => {
     const flaggedDays = captainRows.filter(r => r.composite_slacker_score > 0).length;
     const isFiltered  = shownDays < totalDays;
 
+    const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
     container.innerHTML = `
-      <div style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
-        <strong style="font-size:16px;">${_esc(name)}</strong>
-        <span style="color:#6c7a89;">ID: ${_esc(captainId)}</span>
-        <span style="color:#6c7a89;">${totalDays} total active days</span>
-        ${isFiltered ? `<span style="color:#4fc3f7;">Showing ${shownDays} days in range</span>` : ''}
-        <span style="color:#e53935;">${flaggedDays} flagged days</span>
+      <div class="profile-hero">
+        <div class="profile-avatar">${initials}</div>
+        <div class="profile-hero-info">
+          <h3 class="profile-hero-name">${_esc(name)}</h3>
+          <p class="profile-hero-id">${_esc(captainId)}</p>
+        </div>
+        <div class="profile-hero-stats">
+          <div class="profile-stat">
+            <span class="profile-stat-value">${totalDays}</span>
+            <span class="profile-stat-label">Total Days</span>
+          </div>
+          ${isFiltered ? `<div class="profile-stat">
+            <span class="profile-stat-value" style="color:#adc6ff">${shownDays}</span>
+            <span class="profile-stat-label">In Range</span>
+          </div>` : ''}
+          <div class="profile-stat">
+            <span class="profile-stat-value" style="color:${flaggedDays > 0 ? '#ff5c5c' : '#4edea3'}">${flaggedDays}</span>
+            <span class="profile-stat-label">Flagged Days</span>
+          </div>
+        </div>
       </div>
       <div class="profile-metric-grid" id="profile-metric-grid"></div>
     `;
@@ -1246,25 +1262,64 @@ const ui = (() => {
   // ── Config Panel ───────────────────────────────────────────────────────
 
   function renderConfigPanel() {
-    const sheetEl = document.getElementById('config-sheet-id');
-    if (sheetEl) sheetEl.textContent = CONFIG.SPREADSHEET_ID;
+    const container = document.getElementById('config-content');
+    if (!container) return;
 
-    const countEl = document.getElementById('config-row-count');
-    if (countEl) countEl.textContent = sheets.getCached().length.toLocaleString();
+    const rowCount = sheets.getCached().length.toLocaleString();
 
-    const tbody = document.getElementById('config-metrics-body');
-    if (tbody) {
-      tbody.innerHTML = CONFIG.METRICS.map(m => `<tr>
-        <td>${m.label}</td>
-        <td>${m.flow.charAt(0).toUpperCase() + m.flow.slice(1)}</td>
-        <td>${m.direction === 'HIGH'
-          ? `${ICONS.arrowUp} <span style="vertical-align:middle">High = Bad</span>`
-          : `${ICONS.arrowDown} <span style="vertical-align:middle">Low = Bad</span>`}</td>
-      </tr>`).join('');
-    }
+    const metricsRows = CONFIG.METRICS.map(m => `<tr>
+      <td>${m.label}</td>
+      <td><span class="config-flow-tag">${m.flow.charAt(0).toUpperCase() + m.flow.slice(1)}</span></td>
+      <td>${m.direction === 'HIGH'
+        ? `${ICONS.arrowUp} <span style="vertical-align:middle">High = Bad</span>`
+        : `${ICONS.arrowDown} <span style="vertical-align:middle">Low = Bad</span>`}</td>
+    </tr>`).join('');
 
-    const thresholdInput = document.getElementById('threshold-input');
-    if (thresholdInput) thresholdInput.value = CONFIG.THRESHOLD;
+    container.innerHTML = `
+      <div class="config-card">
+        <div class="config-card-header">
+          <div class="config-card-icon stat-icon-blue">${ICONS.sliders}</div>
+          <h3>Flagging Threshold</h3>
+        </div>
+        <p class="config-desc">Standard deviations worse than store average required to flag a captain.</p>
+        <div class="config-row">
+          <span class="dd-control-label">Multiplier</span>
+          <input type="number" id="threshold-input" min="0.5" max="3" step="0.1" value="${CONFIG.THRESHOLD}"
+                 onchange="app.updateThreshold(this.value)" />
+        </div>
+        <p class="config-hint">Default: 1.0 (= 1 SD). Higher = stricter (fewer flags).</p>
+      </div>
+      <div class="config-card">
+        <div class="config-card-header">
+          <div class="config-card-icon stat-icon-teal">${ICONS.layers}</div>
+          <h3>Data Source</h3>
+        </div>
+        <div class="config-detail-row">
+          <span class="dd-control-label">Spreadsheet</span>
+          <code class="config-code">${CONFIG.SPREADSHEET_ID}</code>
+        </div>
+        <div class="config-detail-row">
+          <span class="dd-control-label">Sheet</span>
+          <span class="config-detail-value">Sheet1 (columns A–V)</span>
+        </div>
+        <div class="config-detail-row">
+          <span class="dd-control-label">Rows loaded</span>
+          <span class="config-detail-value">${rowCount}</span>
+        </div>
+      </div>
+      <div class="config-card config-card-wide">
+        <div class="config-card-header">
+          <div class="config-card-icon stat-icon-green">${ICONS.barChart}</div>
+          <h3>Metric Definitions</h3>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table config-table">
+            <thead><tr><th>Metric</th><th>Flow</th><th>Direction</th></tr></thead>
+            <tbody>${metricsRows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
   }
 
   // ── Utility ────────────────────────────────────────────────────────────

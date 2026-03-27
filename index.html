@@ -270,22 +270,26 @@
 
   <!-- ── CAPTAIN PROFILE ─────────────────────────────────────────────── -->
   <section id="tab-captain-profile" class="tab-content hidden">
-    <div class="section-header">
-      <h2>Captain Profile</h2>
-      <div class="controls" style="flex-wrap:wrap;gap:10px;">
-        <div class="control-group">
-          <label>Captain:</label>
-          <select id="profile-captain" onchange="ui.renderCaptainProfile()">
-            <option value="">— Select Captain —</option>
-          </select>
-        </div>
-        <div class="control-group" style="display:flex;align-items:center;gap:6px;">
-          <label>From:</label>
-          <input type="date" id="profile-start" onchange="ui.renderCaptainProfile()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
-          <label>To:</label>
-          <input type="date" id="profile-end" onchange="ui.renderCaptainProfile()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
-          <button onclick="ui.resetProfileDates()" style="background:#333;color:#aaa;border:1px solid #444;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;">All time</button>
-        </div>
+
+    <!-- Header — matches unified layout -->
+    <div class="flags-page-header">
+      <div>
+        <p class="flags-fleet-label">Individual Intelligence</p>
+        <h2 class="flags-title">Captain Profile</h2>
+      </div>
+      <div class="flags-date-strip">
+        <span class="dd-control-label">Captain</span>
+        <select id="profile-captain" onchange="ui.renderCaptainProfile()">
+          <option value="">— Select Captain —</option>
+        </select>
+        <span class="strip-divider"></span>
+        <span class="dd-control-label">From</span>
+        <input type="date" id="profile-start" onchange="ui.renderCaptainProfile()">
+        <span class="dd-control-sep">—</span>
+        <span class="dd-control-label">To</span>
+        <input type="date" id="profile-end" onchange="ui.renderCaptainProfile()">
+        <span class="strip-divider"></span>
+        <button class="btn btn-secondary" onclick="ui.resetProfileDates()">All time</button>
       </div>
     </div>
 
@@ -320,39 +324,16 @@
 
   <!-- ── CONFIG PANEL ────────────────────────────────────────────────── -->
   <section id="tab-config-panel" class="tab-content hidden">
-    <div class="section-header">
-      <h2>Configuration</h2>
-    </div>
-    <div class="config-grid">
-      <div class="config-card">
-        <h3>Flagging Threshold</h3>
-        <p>Number of standard deviations worse than store average to flag a captain.</p>
-        <div class="config-row">
-          <label>Multiplier:</label>
-          <input type="number" id="threshold-input" min="0.5" max="3" step="0.1" value="1.0"
-                 onchange="app.updateThreshold(this.value)" />
-        </div>
-        <p class="config-hint">Default: 1.0 (= 1 SD). Higher = stricter (fewer flags).</p>
-      </div>
-      <div class="config-card">
-        <h3>Data Source</h3>
-        <p><strong>Spreadsheet:</strong></p>
-        <code id="config-sheet-id"></code>
-        <p><strong>Sheet:</strong> Sheet1 (columns A–V)</p>
-        <p><strong>Rows loaded:</strong> <span id="config-row-count">—</span></p>
-      </div>
-      <div class="config-card">
-        <h3>Metric Definitions</h3>
-        <div class="table-wrapper">
-          <table class="data-table">
-            <thead>
-              <tr><th>Metric</th><th>Flow</th><th>Direction</th></tr>
-            </thead>
-            <tbody id="config-metrics-body"></tbody>
-          </table>
-        </div>
+
+    <!-- Header — matches unified layout -->
+    <div class="flags-page-header">
+      <div>
+        <p class="flags-fleet-label">System Settings</p>
+        <h2 class="flags-title">Configuration</h2>
       </div>
     </div>
+
+    <div id="config-content" class="config-grid"></div>
   </section>
 
 </div><!-- /#app -->

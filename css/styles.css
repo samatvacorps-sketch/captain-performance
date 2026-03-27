@@ -508,18 +508,97 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
 }
 
 /* ── Captain Profile ──────────────────────────────────────────────── */
+
+/* Hero card — captain identity + quick stats */
+.profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.profile-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(173, 198, 255, 0.12);
+  color: #adc6ff;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.profile-hero-info { flex: 1; min-width: 140px; }
+
+.profile-hero-name {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.profile-hero-id {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.profile-hero-stats {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.profile-stat { text-align: center; }
+
+.profile-stat-value {
+  display: block;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.profile-stat-label {
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Metric sparkline cards */
 .profile-metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 16px;
-  margin-top: 20px;
+  margin-top: 4px;
 }
 
 .profile-metric-card {
   background: var(--card-bg);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 12px;
+  padding: 18px;
+  transition: border-color 0.2s;
+}
+
+.profile-metric-card:hover {
+  border-color: rgba(173, 198, 255, 0.2);
 }
 
 .profile-metric-card h4 {
@@ -535,68 +614,126 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
 /* ── Config Panel ─────────────────────────────────────────────────── */
 .config-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
 }
 
 .config-card {
   background: var(--card-bg);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 20px;
+  border-radius: 14px;
+  padding: 22px;
+  transition: border-color 0.2s;
+}
+
+.config-card:hover { border-color: rgba(173, 198, 255, 0.18); }
+
+.config-card-wide { grid-column: 1 / -1; }
+
+.config-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.config-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .config-card h3 {
   font-family: 'Space Grotesk', sans-serif;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.2px;
   color: var(--text);
-  margin-bottom: 12px;
+  margin: 0;
 }
 
-.config-card p { color: var(--text-muted); font-size: 13px; margin-bottom: 10px; }
+.config-desc {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
 
-.config-card code {
+.config-code {
   display: block;
   background: var(--surface-high);
-  padding: 8px 10px;
-  border-radius: 4px;
-  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 11px;
   word-break: break-all;
-  margin-bottom: 10px;
   border: 1px solid var(--border);
-  color: var(--accent);
+  color: #adc6ff;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.config-detail-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.config-detail-row:last-child { border-bottom: none; }
+
+.config-detail-value {
+  font-size: 13px;
+  color: var(--text);
+  font-family: 'Manrope', sans-serif;
 }
 
 .config-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 8px;
-}
-
-.config-row label {
-  font-family: 'Manrope', sans-serif;
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--text-muted);
+  margin-bottom: 10px;
 }
 
 .config-row input[type="number"] {
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 10px;
+  border-radius: 8px;
+  padding: 7px 12px;
   font-size: 14px;
   width: 80px;
-  outline: none;
+  font-family: 'Manrope', sans-serif;
   background: var(--surface-high);
   color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
 }
 
-.config-row input:focus { border-color: var(--accent); }
+.config-row input:focus { border-color: rgba(173, 198, 255, 0.45); }
 
-.config-hint { font-size: 12px !important; color: var(--text-muted) !important; }
+.config-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  margin: 0;
+}
+
+.config-flow-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(173, 198, 255, 0.08);
+  color: #adc6ff;
+}
+
+.config-table th { font-size: 10px; }
+.config-table td { font-size: 12px; }
 
 /* ── Placeholder Text ─────────────────────────────────────────────── */
 .placeholder-text {
@@ -1634,6 +1771,7 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
 
   /* Config */
   .config-grid { grid-template-columns: 1fr; }
+  .config-card-wide { grid-column: auto; }
 
   /* Flow sections */
   .flow-section-header { padding: 10px 14px; font-size: 9px; }
