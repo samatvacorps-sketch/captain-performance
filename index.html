@@ -293,21 +293,31 @@
 
   <!-- ── TIER ANALYSIS ───────────────────────────────────────────────── -->
   <section id="tab-tier-analysis" class="tab-content hidden">
-    <div class="section-header">
-      <h2>Tier Analysis</h2>
-      <div class="controls" style="flex-wrap:wrap;gap:10px;">
-        <div class="control-group">
-          <label>Quick select:</label>
-          <select id="tiers-period" onchange="ui.onTierPresetChange()"></select>
-        </div>
-        <div class="control-group" style="display:flex;align-items:center;gap:6px;">
-          <label>From:</label>
-          <input type="date" id="tiers-start" onchange="ui.onTierDateChange()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
-          <label>To:</label>
-          <input type="date" id="tiers-end" onchange="ui.onTierDateChange()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
-        </div>
+
+    <!-- Page Header -->
+    <div class="flags-page-header">
+      <div>
+        <p class="tiers-op-label">Operational Intelligence</p>
+        <h2 class="flags-title">Tier Analysis</h2>
       </div>
     </div>
+
+    <!-- Controls Strip (reuses Deep Dive styles) -->
+    <div class="dd-controls-strip">
+      <div class="dd-control-group">
+        <span class="dd-control-label">Quick select</span>
+        <select id="tiers-period" onchange="ui.onTierPresetChange()"></select>
+      </div>
+      <div class="dd-control-divider"></div>
+      <div class="dd-control-group">
+        <span class="dd-control-label">From</span>
+        <input type="date" id="tiers-start" onchange="ui.onTierDateChange()">
+        <span class="dd-control-sep">—</span>
+        <span class="dd-control-label">To</span>
+        <input type="date" id="tiers-end" onchange="ui.onTierDateChange()">
+      </div>
+    </div>
+
     <div id="tiers-content"></div>
   </section>
 

@@ -946,104 +946,196 @@ const ui = (() => {
 
   function _buildTiersHTML(stats, activeDayCounts) {
     const tiers = [
-      { key: 'new',        label: '🟢 New',           sub: '< 30 active days',         color: '#4caf50' },
-      { key: 'experienced',label: '🟡 Experienced',   sub: '30 – 120 active days',     color: '#ff9800' },
-      { key: 'senior',     label: '🔵 Senior',        sub: '> 120 active days',        color: '#2196f3' },
-      { key: 'blinkit',    label: '🟠 Blinkit Caps',  sub: 'GCEB (excl. GCEBOD)',      color: '#f97316' },
-      { key: 'od',         label: '🔴 ODs',           sub: 'ID starts with GCEBOD',    color: '#e53935' },
+      { key: 'new',         label: 'New',          sub: '< 30 active days',      color: '#4edea3' },
+      { key: 'experienced', label: 'Experienced',  sub: '30–120 active days',    color: '#adc6ff' },
+      { key: 'senior',      label: 'Senior',       sub: '> 120 active days',     color: '#c084fc' },
+      { key: 'blinkit',     label: 'Blinkit Caps', sub: 'GCEB (excl. GCEBOD)',   color: '#fb923c' },
+      { key: 'od',          label: 'ODs',          sub: 'ID starts with GCEBOD', color: '#ff6b6b', isOD: true },
     ];
-
-    // Summary cards
-    const cards = tiers.map(t => {
-      const s = stats[t.key];
-      return `<div class="summary-card" style="border-top:3px solid ${t.color};min-width:180px;">
-        <div class="card-value" style="color:${t.color}">${s.captainCount}</div>
-        <div class="card-label" style="font-size:15px;font-weight:600;">${t.label}</div>
-        <div class="card-label" style="opacity:0.7;font-size:11px;">${t.sub}</div>
-      </div>`;
-    }).join('');
-
-    // Helper: color-code a row of 3 values
-    const colorCode = (vals, direction) => {
-      const valid = vals.filter(v => v !== null);
-      if (valid.length < 2) return ['', '', ''];
-      const best  = direction === 'HIGH' ? Math.min(...valid) : Math.max(...valid);
-      const worst = direction === 'HIGH' ? Math.max(...valid) : Math.min(...valid);
-      return vals.map(v => {
-        if (v === null) return '';
-        if (v === best)  return 'cell-green';
-        if (v === worst) return 'cell-red';
-        return 'cell-yellow';
-      });
-    };
 
     const fmtDur = v => v !== null ? compute.formatDuration(v) : '—';
     const fmtNum = (v, d=1) => v !== null ? _fmt(v, d) : '—';
-
-    const buildRow = (label, vals, direction, fmtFn) => {
-      const cls = colorCode(vals, direction);
-      return `<tr>
-        <td style="font-weight:500">${label}</td>
-        ${vals.map((v, i) => `<td class="${cls[i]}">${fmtFn(v)}</td>`).join('')}
-      </tr>`;
-    };
-
     const s = key => stats[key];
 
-    // Ratio helper — shows "12,632 (29.4%)" for share-of-total metrics
-    const withPct = (vals) => {
-      const total = vals.reduce((a, v) => a + (v || 0), 0);
-      return vals.map(v => v !== null && total > 0
-        ? `${_fmt(v, 0)} <span style="opacity:0.65;font-size:11px;">(${((v/total)*100).toFixed(1)}%)</span>`
-        : '—');
+    // Color-code values across tiers
+    const colorCode = (vals, direction) => {
+      const valid = vals.filter(v => v !== null && v > 0);
+      if (valid.length < 2) return vals.map(() => '');
+      const best  = direction === 'HIGH' ? Math.min(...valid) : Math.max(...valid);
+      const worst = direction === 'HIGH' ? Math.max(...valid) : Math.min(...valid);
+      return vals.map(v => {
+        if (v === null || v === 0) return 'tiers-cell-muted';
+        if (v === best)  return 'tiers-cell-best';
+        if (v === worst) return 'tiers-cell-worst';
+        return 'tiers-cell-mid';
+      });
     };
 
-    const buildRatioRow = (label, vals, direction) => {
-      const cls      = colorCode(vals, direction);
-      const fmtVals  = withPct(vals);
-      return `<tr>
-        <td style="font-weight:500">${label}</td>
-        ${vals.map((v, i) => `<td class="${cls[i]}">${fmtVals[i]}</td>`).join('')}
-      </tr>`;
-    };
+    // ── 1. Tier overview cards (2-col bento) ──────────────────────────
+    const topTiers = tiers.filter(t => !t.isOD);
+    const odTier   = tiers.find(t => t.isOD);
+    const st       = k => stats[k];
 
-    const pickingRows = [
-      buildRatioRow('Total Orders Picked', [s('new').totalOrders,   s('experienced').totalOrders,   s('senior').totalOrders,   s('blinkit').totalOrders,   s('od').totalOrders],  'LOW'),
-      buildRow('Avg Picking Time/Order',[s('new').avgPickTime,      s('experienced').avgPickTime,      s('senior').avgPickTime,      s('blinkit').avgPickTime,      s('od').avgPickTime],      'HIGH', fmtDur),
-      buildRow('Avg Delay to Start',    [s('new').avgDelayToStart,  s('experienced').avgDelayToStart,  s('senior').avgDelayToStart,  s('blinkit').avgDelayToStart,  s('od').avgDelayToStart],  'HIGH', fmtDur),
-      buildRow('Avg Billing Time/Order',[s('new').avgBillingTime,   s('experienced').avgBillingTime,   s('senior').avgBillingTime,   s('blinkit').avgBillingTime,   s('od').avgBillingTime],   'HIGH', fmtDur),
-      buildRow('Avg Total Time/Order',  [s('new').avgTotalTime,     s('experienced').avgTotalTime,     s('senior').avgTotalTime,     s('blinkit').avgTotalTime,     s('od').avgTotalTime],     'HIGH', fmtDur),
-      buildRow('Avg PPI (sec/item)',     [s('new').avgPPI,           s('experienced').avgPPI,           s('senior').avgPPI,           s('blinkit').avgPPI,           s('od').avgPPI],           'HIGH', v => fmtNum(v, 2)),
-    ].join('');
+    const topCards = topTiers.map(t => {
+      const has = st(t.key).captainCount > 0;
+      return `
+        <div class="tier-metric-card" style="border-left-color:${t.color}">
+          <p class="tier-card-label">${t.label}</p>
+          <div class="tier-card-row">
+            <span class="tier-card-value" style="color:${t.color}">${st(t.key).captainCount}</span>
+            ${has ? `<span class="tier-card-badge" style="color:${t.color};background:${t.color}18">Active</span>` : ''}
+          </div>
+          ${has
+            ? `<p class="tier-card-hint">Avg score: ${fmtNum(st(t.key).avgScore, 2)}</p>`
+            : `<p class="tier-card-hint inactive">${t.sub}</p>`}
+        </div>`;
+    }).join('');
 
-    const puttingRows = [
-      buildRatioRow('Total Putaway Qty', [s('new').totalPutawayQty, s('experienced').totalPutawayQty, s('senior').totalPutawayQty, s('blinkit').totalPutawayQty, s('od').totalPutawayQty], 'LOW'),
-      buildRow('Avg Items Put Away/Hr', [s('new').avgIPH,           s('experienced').avgIPH,           s('senior').avgIPH,           s('blinkit').avgIPH,           s('od').avgIPH],           'LOW',  v => fmtNum(v, 1)),
-    ].join('');
-
-    const overallRows = [
-      buildRow('Avg Slacker Score',     [s('new').avgScore,         s('experienced').avgScore,         s('senior').avgScore,         s('blinkit').avgScore,         s('od').avgScore],         'HIGH', v => fmtNum(v, 2)),
-    ].join('');
-
-    const tableHead = `<thead><tr>
-      <th>Metric</th>
-      ${tiers.map(t => `<th style="color:${t.color}">${t.label}</th>`).join('')}
-    </tr></thead>`;
-
-    const section = (title, icon, rows) => `
-      <div class="table-section" style="margin-bottom:24px;">
-        <h3>${icon} ${title}</h3>
-        <div class="table-wrapper"><table class="data-table">
-          ${tableHead}<tbody>${rows}</tbody>
-        </table></div>
+    const odCard = `
+      <div class="tier-metric-card tier-od-card" style="border-left-color:${odTier.color}">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <p class="tier-card-label" style="color:${odTier.color}">${odTier.label} — Anomaly Watch</p>
+            <div class="tier-card-row" style="margin-top:4px;">
+              <span class="tier-card-value" style="color:${odTier.color}">${st('od').captainCount}</span>
+              ${st('od').captainCount > 0
+                ? `<span class="tier-card-badge" style="color:${odTier.color};background:${odTier.color}18">Active</span>`
+                : `<span class="tier-card-badge">Standby</span>`}
+            </div>
+          </div>
+          <span style="font-size:28px;opacity:0.25;">⚠</span>
+        </div>
+        <p class="tier-card-hint" style="${st('od').captainCount > 0 ? `color:${odTier.color};opacity:0.8` : ''}">
+          ${st('od').captainCount > 0
+            ? `Avg slacker score: ${fmtNum(st('od').avgScore, 2)}`
+            : odTier.sub}
+        </p>
       </div>`;
 
-    return `
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px;">${cards}</div>
-      ${section('Picking Flow', '📦', pickingRows)}
-      ${section('Putting Flow', '📥', puttingRows)}
-      ${section('Overall Performance', '📊', overallRows)}
-    `;
+    const bentoGrid = `
+      <div class="tiers-bento-grid">
+        ${topCards}
+        ${odCard}
+      </div>`;
+
+    // ── 2. Picking Flow Analysis ──────────────────────────────────────
+    const pickVals = {
+      orders:  tiers.map(t => st(t.key).totalOrders),
+      pick:    tiers.map(t => st(t.key).avgPickTime),
+      delay:   tiers.map(t => st(t.key).avgDelayToStart),
+      billing: tiers.map(t => st(t.key).avgBillingTime),
+      score:   tiers.map(t => st(t.key).avgScore),
+    };
+    const totalOrders = pickVals.orders.reduce((a, v) => a + (v || 0), 0);
+
+    const pickRows = tiers.map((t, i) => {
+      const has = st(t.key).captainCount > 0;
+      const orderPct = totalOrders > 0 && pickVals.orders[i]
+        ? `<span class="tiers-pct">${((pickVals.orders[i]/totalOrders)*100).toFixed(1)}%</span>` : '';
+      const clsPick   = colorCode(pickVals.pick,    'HIGH');
+      const clsDelay  = colorCode(pickVals.delay,   'HIGH');
+      const clsBill   = colorCode(pickVals.billing, 'HIGH');
+      const clsScore  = colorCode(pickVals.score,   'HIGH');
+      return `
+        <tr class="${has ? '' : 'tiers-row-empty'}">
+          <td class="tiers-tier-name" style="color:${t.color}">${t.label}</td>
+          <td>${has ? `${_fmt(pickVals.orders[i], 0)} ${orderPct}` : '—'}</td>
+          <td class="${clsPick[i]}">${fmtDur(pickVals.pick[i])}</td>
+          <td class="${clsDelay[i]}">${fmtDur(pickVals.delay[i])}</td>
+          <td class="${clsBill[i]}">${fmtDur(pickVals.billing[i])}</td>
+          <td class="${clsScore[i]}">${fmtNum(pickVals.score[i], 2)}</td>
+        </tr>`;
+    }).join('');
+
+    const pickSection = `
+      <div class="tiers-flow-section">
+        <div class="tiers-section-header">
+          <div class="tiers-section-pip" style="background:#adc6ff"></div>
+          <h3 class="tiers-section-title">Picking Flow Analysis</h3>
+        </div>
+        <div class="table-wrapper" style="border-radius:12px;">
+          <table class="tiers-table">
+            <thead>
+              <tr>
+                <th>Tier</th>
+                <th>Total Picked</th>
+                <th>Avg Pick Time</th>
+                <th>Avg Delay</th>
+                <th>Billing Time</th>
+                <th>Avg Score</th>
+              </tr>
+            </thead>
+            <tbody>${pickRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    // ── 3. Putting Flow Bento ─────────────────────────────────────────
+    const totalPutaway = tiers.reduce((a, t) => a + (st(t.key).totalPutawayQty || 0), 0);
+    const activePut    = tiers.filter(t => st(t.key).totalPutawayQty > 0);
+    const clsIPH       = colorCode(tiers.map(t => st(t.key).avgIPH), 'LOW');
+
+    const iph_mini_cards = tiers.map((t, i) => {
+      const iph = st(t.key).avgIPH;
+      const qty = st(t.key).totalPutawayQty;
+      if (!qty) return '';
+      const pct = totalPutaway > 0 ? (qty / totalPutaway) * 100 : 0;
+      return `
+        <div class="tier-iph-card ${clsIPH[i]}">
+          <p class="tier-card-label" style="color:${t.color}">${t.label}</p>
+          <p class="tier-iph-value">${fmtNum(iph, 1)}</p>
+          <div class="tier-iph-bar-bg">
+            <div class="tier-iph-bar-fill" style="width:${pct.toFixed(1)}%;background:${t.color}"></div>
+          </div>
+          <p class="tier-card-hint">${_fmt(qty, 0)} items · ${pct.toFixed(1)}%</p>
+        </div>`;
+    }).filter(Boolean).join('');
+
+    const putSection = `
+      <div class="tiers-flow-section">
+        <div class="tiers-section-header">
+          <div class="tiers-section-pip" style="background:#4d8eff"></div>
+          <h3 class="tiers-section-title">Putting Flow Analysis</h3>
+        </div>
+        <div class="tiers-putting-bento">
+          <div class="tiers-putting-hero">
+            <p class="tier-card-label">Total Putaway Qty</p>
+            <p class="tiers-hero-value">${_fmt(totalPutaway, 0)}</p>
+            <p class="tier-card-hint">${activePut.length} tier${activePut.length !== 1 ? 's' : ''} active this period</p>
+          </div>
+          <div class="tiers-iph-grid">${iph_mini_cards || '<p class="tier-card-hint inactive" style="padding:16px">No putting data for period</p>'}</div>
+        </div>
+      </div>`;
+
+    // ── 4. OD Anomaly section (only if ODs active) ────────────────────
+    const odStats = st('od');
+    const anomalySection = odStats.captainCount > 0 ? `
+      <div class="tiers-anomaly-section">
+        <div class="tiers-anomaly-header">
+          <span style="font-size:16px;">⚠</span>
+          <h3 class="tiers-anomaly-title">Anomalies Detected — ODs</h3>
+        </div>
+        <div class="tiers-anomaly-grid">
+          <div class="tiers-anomaly-stat">
+            <p class="tier-card-label">Active ODs</p>
+            <p class="tiers-anomaly-value">${odStats.captainCount}</p>
+          </div>
+          <div class="tiers-anomaly-stat">
+            <p class="tier-card-label">Avg Slacker Score</p>
+            <p class="tiers-anomaly-value">${fmtNum(odStats.avgScore, 2)}</p>
+          </div>
+          <div class="tiers-anomaly-stat">
+            <p class="tier-card-label">Total Orders</p>
+            <p class="tiers-anomaly-value">${_fmt(odStats.totalOrders, 0)}</p>
+          </div>
+          <div class="tiers-anomaly-stat">
+            <p class="tier-card-label">Avg Pick Time</p>
+            <p class="tiers-anomaly-value">${fmtDur(odStats.avgPickTime)}</p>
+          </div>
+        </div>
+      </div>` : '';
+
+    return `${bentoGrid}${pickSection}${putSection}${anomalySection}`;
   }
 
   // ── Captain Profile ────────────────────────────────────────────────────

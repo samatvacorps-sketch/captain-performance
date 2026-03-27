@@ -845,6 +845,291 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   border-color: rgba(173, 198, 255, 0.45);
 }
 
+/* ── Tier Analysis Redesign ────────────────────────────────────────────── */
+
+.tiers-op-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+/* Tier bento overview grid */
+.tiers-bento-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.tier-metric-card {
+  background: rgba(29, 31, 38, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 16px 18px;
+  border-left: 3px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 110px;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+
+.tier-od-card {
+  grid-column: span 2;
+  flex-direction: column;
+  min-height: auto;
+  background: rgba(255, 107, 107, 0.04);
+}
+
+.tier-card-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.tier-card-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.tier-card-value {
+  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.tier-card-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.06);
+  color: var(--text-muted);
+}
+
+.tier-card-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.tier-card-hint.inactive {
+  font-style: italic;
+  opacity: 0.5;
+}
+
+/* Flow section headers */
+.tiers-flow-section {
+  margin-bottom: 24px;
+}
+
+.tiers-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tiers-section-pip {
+  width: 4px;
+  height: 18px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.tiers-section-title {
+  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+  margin: 0;
+}
+
+/* Compact tiers table */
+.tiers-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 3px;
+  font-size: 12px;
+  padding: 0 10px 10px;
+}
+
+.tiers-table thead tr th {
+  padding: 12px 10px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tiers-table tbody tr {
+  transition: background 0.12s;
+}
+
+.tiers-table tbody tr td {
+  padding: 10px 10px;
+  background: rgba(255,255,255,0.02);
+  vertical-align: middle;
+}
+
+.tiers-table tbody tr td:first-child { border-radius: 8px 0 0 8px; }
+.tiers-table tbody tr td:last-child  { border-radius: 0 8px 8px 0; }
+.tiers-table tbody tr:hover td { background: rgba(255,255,255,0.04); }
+
+.tiers-tier-name {
+  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.tiers-row-empty td {
+  opacity: 0.35;
+}
+
+.tiers-pct {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-left: 3px;
+}
+
+/* Cell color classes for tiers table */
+.tiers-cell-best  { color: #4edea3; }
+.tiers-cell-worst { color: #ff6b6b; }
+.tiers-cell-mid   { color: #ffca28; }
+.tiers-cell-muted { opacity: 0.35; }
+
+/* Putting bento */
+.tiers-putting-bento {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.tiers-putting-hero {
+  background: rgba(29, 31, 38, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 20px;
+  border-left: 3px solid #4d8eff;
+}
+
+.tiers-hero-value {
+  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #adc6ff;
+  margin: 6px 0 4px;
+}
+
+.tiers-iph-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.tier-iph-card {
+  background: rgba(29, 31, 38, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.tier-iph-value {
+  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 4px 0;
+}
+
+.tier-iph-bar-bg {
+  height: 3px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 6px 0 4px;
+}
+
+.tier-iph-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* OD Anomaly section */
+.tiers-anomaly-section {
+  background: rgba(255, 107, 107, 0.04);
+  border: 1px solid rgba(255, 107, 107, 0.15);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.tiers-anomaly-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.tiers-anomaly-title {
+  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ff6b6b;
+  margin: 0;
+}
+
+.tiers-anomaly-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.tiers-anomaly-stat {
+  background: rgba(255, 107, 107, 0.06);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.tiers-anomaly-value {
+  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: #ff6b6b;
+  margin: 4px 0 0;
+}
+
+@media (max-width: 768px) {
+  .tiers-bento-grid { grid-template-columns: 1fr; }
+  .tier-od-card { grid-column: span 1; }
+  .tiers-putting-bento { grid-template-columns: 1fr; }
+  .tiers-anomaly-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ── Daily Flags Redesign ──────────────────────────────────────────────── */
 
 .flags-page-header {
