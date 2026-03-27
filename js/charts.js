@@ -11,14 +11,15 @@ const charts = (() => {
   // ── Colour Palette ────────────────────────────────────────────────────
 
   const COLORS = {
-    navy:   '#1a2332',
-    accent: '#4a90d9',
-    teal:   '#26a69a',
-    amber:  '#ffa726',
-    red:    '#e53935',
-    green:  '#43a047',
-    purple: '#7e57c2',
-    pink:   '#ec407a',
+    navy:   '#0f1419',
+    accent: '#7eb8f7',   /* soft blue — readable on dark */
+    teal:   '#4db6ac',
+    amber:  '#ffca28',
+    red:    '#ee7d77',
+    green:  '#81c784',
+    purple: '#b39ddb',
+    pink:   '#f48fb1',
+    silver: '#c6c6ca',
   };
 
   const ALPHA = (hex, a) => {
@@ -30,21 +31,36 @@ const charts = (() => {
 
   // ── Common Chart Defaults ─────────────────────────────────────────────
 
+  const GRID_COLOR  = 'rgba(63,73,85,0.25)';
+  const TICK_COLOR  = '#a2acba';
+  const LABEL_COLOR = '#dde6f5';
+
   const BASE_OPTS = {
     responsive: true,
     maintainAspectRatio: true,
     plugins: {
-      legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12 } },
-      tooltip: { mode: 'index', intersect: false },
+      legend: {
+        position: 'bottom',
+        labels: { font: { size: 11, family: 'Manrope' }, color: TICK_COLOR, padding: 14 },
+      },
+      tooltip: {
+        mode: 'index',
+        intersect: false,
+        backgroundColor: 'rgba(15,20,25,0.95)',
+        borderColor: 'rgba(63,73,85,0.4)',
+        borderWidth: 1,
+        titleColor: LABEL_COLOR,
+        bodyColor: TICK_COLOR,
+      },
     },
     scales: {
       x: {
-        grid: { color: 'rgba(0,0,0,0.04)' },
-        ticks: { font: { size: 11 }, maxRotation: 45 },
+        grid: { color: GRID_COLOR },
+        ticks: { font: { size: 11, family: 'Manrope' }, color: TICK_COLOR, maxRotation: 45 },
       },
       y: {
-        grid: { color: 'rgba(0,0,0,0.06)' },
-        ticks: { font: { size: 11 } },
+        grid: { color: GRID_COLOR },
+        ticks: { font: { size: 11, family: 'Manrope' }, color: TICK_COLOR },
         beginAtZero: true,
       },
     },
