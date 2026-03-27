@@ -773,6 +773,10 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
 .legend-dot-green { background: #4edea3; box-shadow: 0 0 6px rgba(78,222,163,0.5); }
 
 /* ── Captain Deep Dive ─────────────────────────────────────────────── */
+.dd-page-header {
+  margin-bottom: 18px;
+}
+
 .dd-subtitle {
   font-size: 13px;
   color: var(--text-muted);
@@ -780,22 +784,65 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   font-weight: 400;
 }
 
-.dd-filter-bar {
+/* Unified filter strip — horizontal glass card */
+.dd-controls-strip {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: flex-end;
+  align-items: center;
+  gap: 6px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 10px 20px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
 
-.dd-filter-bar select,
-.dd-filter-bar input[type="date"] {
+.dd-control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dd-control-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.dd-control-sep {
+  color: var(--text-muted);
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+.dd-control-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border-subtle);
+  margin: 0 10px;
+  flex-shrink: 0;
+}
+
+.dd-controls-strip select,
+.dd-controls-strip input[type="date"] {
+  background: var(--surface-high);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: 8px;
+  padding: 6px 12px;
   font-size: 13px;
   color: var(--text);
-  background: var(--surface-high);
+  font-family: inherit;
   outline: none;
+  transition: border-color 0.15s;
+}
+
+.dd-controls-strip select:focus,
+.dd-controls-strip input[type="date"]:focus {
+  border-color: rgba(173, 198, 255, 0.45);
 }
 
 /* Captain avatar initials */
