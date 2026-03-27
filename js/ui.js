@@ -762,6 +762,7 @@ const ui = (() => {
   }
 
   function _classifyCaptain(activeDayMap, empId) {
+    if (String(empId).toUpperCase().startsWith('GCEB')) return 'blinkit';
     const days = activeDayMap[empId] || 0;
     if (days < 30)  return 'new';
     if (days < 120) return 'experienced';
@@ -819,16 +820,17 @@ const ui = (() => {
     }
 
     // Split filtered rows by tier
-    const tierRows = { new: [], experienced: [], senior: [] };
+    const tierRows = { new: [], experienced: [], senior: [], blinkit: [] };
     for (const row of filtered) {
       const tier = _classifyCaptain(activeDayCounts, row.employee_id);
       tierRows[tier].push(row);
     }
 
     const stats = {
-      new:    _tierMetrics(tierRows.new),
+      new:        _tierMetrics(tierRows.new),
       experienced: _tierMetrics(tierRows.experienced),
-      senior: _tierMetrics(tierRows.senior),
+      senior:     _tierMetrics(tierRows.senior),
+      blinkit:    _tierMetrics(tierRows.blinkit),
     };
 
     container.innerHTML = _buildTiersHTML(stats, activeDayCounts);
@@ -836,9 +838,10 @@ const ui = (() => {
 
   function _buildTiersHTML(stats, activeDayCounts) {
     const tiers = [
-      { key: 'new',    label: '🟢 New',    sub: '< 30 active days',       color: '#4caf50' },
-      { key: 'experienced', label: '🟡 Experienced', sub: '30 – 120 active days', color: '#ff9800' },
-      { key: 'senior', label: '🔵 Senior', sub: '> 120 active days',      color: '#2196f3' },
+      { key: 'new',        label: '🟢 New',           sub: '< 30 active days',       color: '#4caf50' },
+      { key: 'experienced',label: '🟡 Experienced',   sub: '30 – 120 active days',   color: '#ff9800' },
+      { key: 'senior',     label: '🔵 Senior',        sub: '> 120 active days',      color: '#2196f3' },
+      { key: 'blinkit',    label: '🟠 Blinkit Caps',  sub: 'ID starts with GCEB',    color: '#f97316' },
     ];
 
     // Summary cards
@@ -896,21 +899,21 @@ const ui = (() => {
     };
 
     const pickingRows = [
-      buildRatioRow('Total Orders Picked', [s('new').totalOrders, s('experienced').totalOrders, s('senior').totalOrders], 'LOW'),
-      buildRow('Avg Picking Time/Order',[s('new').avgPickTime,      s('experienced').avgPickTime,      s('senior').avgPickTime],      'HIGH', fmtDur),
-      buildRow('Avg Delay to Start',    [s('new').avgDelayToStart,  s('experienced').avgDelayToStart,  s('senior').avgDelayToStart],  'HIGH', fmtDur),
-      buildRow('Avg Billing Time/Order',[s('new').avgBillingTime,   s('experienced').avgBillingTime,   s('senior').avgBillingTime],   'HIGH', fmtDur),
-      buildRow('Avg Total Time/Order',  [s('new').avgTotalTime,     s('experienced').avgTotalTime,     s('senior').avgTotalTime],     'HIGH', fmtDur),
-      buildRow('Avg PPI (sec/item)',     [s('new').avgPPI,           s('experienced').avgPPI,           s('senior').avgPPI],           'HIGH', v => fmtNum(v, 2)),
+      buildRatioRow('Total Orders Picked', [s('new').totalOrders,   s('experienced').totalOrders,   s('senior').totalOrders,   s('blinkit').totalOrders],  'LOW'),
+      buildRow('Avg Picking Time/Order',[s('new').avgPickTime,      s('experienced').avgPickTime,      s('senior').avgPickTime,      s('blinkit').avgPickTime],      'HIGH', fmtDur),
+      buildRow('Avg Delay to Start',    [s('new').avgDelayToStart,  s('experienced').avgDelayToStart,  s('senior').avgDelayToStart,  s('blinkit').avgDelayToStart],  'HIGH', fmtDur),
+      buildRow('Avg Billing Time/Order',[s('new').avgBillingTime,   s('experienced').avgBillingTime,   s('senior').avgBillingTime,   s('blinkit').avgBillingTime],   'HIGH', fmtDur),
+      buildRow('Avg Total Time/Order',  [s('new').avgTotalTime,     s('experienced').avgTotalTime,     s('senior').avgTotalTime,     s('blinkit').avgTotalTime],     'HIGH', fmtDur),
+      buildRow('Avg PPI (sec/item)',     [s('new').avgPPI,           s('experienced').avgPPI,           s('senior').avgPPI,           s('blinkit').avgPPI],           'HIGH', v => fmtNum(v, 2)),
     ].join('');
 
     const puttingRows = [
-      buildRatioRow('Total Putaway Qty', [s('new').totalPutawayQty, s('experienced').totalPutawayQty, s('senior').totalPutawayQty], 'LOW'),
-      buildRow('Avg Items Put Away/Hr', [s('new').avgIPH,           s('experienced').avgIPH,           s('senior').avgIPH],           'LOW',  v => fmtNum(v, 1)),
+      buildRatioRow('Total Putaway Qty', [s('new').totalPutawayQty, s('experienced').totalPutawayQty, s('senior').totalPutawayQty, s('blinkit').totalPutawayQty], 'LOW'),
+      buildRow('Avg Items Put Away/Hr', [s('new').avgIPH,           s('experienced').avgIPH,           s('senior').avgIPH,           s('blinkit').avgIPH],           'LOW',  v => fmtNum(v, 1)),
     ].join('');
 
     const overallRows = [
-      buildRow('Avg Slacker Score',     [s('new').avgScore,         s('experienced').avgScore,         s('senior').avgScore],         'HIGH', v => fmtNum(v, 2)),
+      buildRow('Avg Slacker Score',     [s('new').avgScore,         s('experienced').avgScore,         s('senior').avgScore,         s('blinkit').avgScore],         'HIGH', v => fmtNum(v, 2)),
     ].join('');
 
     const tableHead = `<thead><tr>
