@@ -527,8 +527,7 @@ const ui = (() => {
 
     const headers = `
       ${_thSort('Captain', 'name', 'picking')}
-      ${_thSort('ID', 'id', 'picking')}
-      ${_thSort('Score<br/><small style="font-weight:400;opacity:0.8">avg daily</small>', 'score', 'picking')}
+      ${_thSort('Score<br/><small style="font-weight:400;opacity:0.8">composite</small>', 'score', 'picking')}
       ${_thSort('Total Orders', 'total_orders', 'picking')}
       ${_thSort('PPI<br/><small style="font-weight:400;opacity:0.8">sec/item</small>', 'avg_ppi', 'picking')}
       ${orderedMetrics.map(m =>
