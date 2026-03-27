@@ -856,10 +856,10 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   margin-bottom: 4px;
 }
 
-/* Tier bento overview grid */
+/* Tier bento overview grid — 5 equal columns */
 .tiers-bento-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
   margin-bottom: 24px;
 }
@@ -874,17 +874,10 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-height: 110px;
-  justify-content: space-between;
+  min-height: 130px;
+  justify-content: flex-start;
   position: relative;
   overflow: hidden;
-}
-
-.tier-od-card {
-  grid-column: span 2;
-  flex-direction: column;
-  min-height: auto;
-  background: rgba(255, 107, 107, 0.04);
 }
 
 .tier-card-label {
@@ -921,6 +914,14 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   color: var(--text-muted);
 }
 
+.tier-card-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.65;
+  margin: 2px 0 4px;
+  font-style: italic;
+}
+
 .tier-card-hint {
   font-size: 10px;
   color: var(--text-muted);
@@ -929,7 +930,7 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
 
 .tier-card-hint.inactive {
   font-style: italic;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 /* Flow section headers */
@@ -1077,57 +1078,13 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   transition: width 0.4s ease;
 }
 
-/* OD Anomaly section */
-.tiers-anomaly-section {
-  background: rgba(255, 107, 107, 0.04);
-  border: 1px solid rgba(255, 107, 107, 0.15);
-  border-radius: 14px;
-  padding: 20px;
-  margin-bottom: 24px;
+@media (max-width: 1024px) {
+  .tiers-bento-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
-.tiers-anomaly-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.tiers-anomaly-title {
-  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #ff6b6b;
-  margin: 0;
-}
-
-.tiers-anomaly-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-
-.tiers-anomaly-stat {
-  background: rgba(255, 107, 107, 0.06);
-  border-radius: 10px;
-  padding: 12px;
-}
-
-.tiers-anomaly-value {
-  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
-  font-size: 20px;
-  font-weight: 800;
-  color: #ff6b6b;
-  margin: 4px 0 0;
-}
-
-@media (max-width: 768px) {
-  .tiers-bento-grid { grid-template-columns: 1fr; }
-  .tier-od-card { grid-column: span 1; }
+@media (max-width: 700px) {
+  .tiers-bento-grid { grid-template-columns: repeat(2, 1fr); }
   .tiers-putting-bento { grid-template-columns: 1fr; }
-  .tiers-anomaly-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ── Daily Flags Redesign ──────────────────────────────────────────────── */

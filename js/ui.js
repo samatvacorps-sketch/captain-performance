@@ -950,12 +950,12 @@ const ui = (() => {
       { key: 'experienced', label: 'Experienced',  sub: '30–120 active days',    color: '#adc6ff' },
       { key: 'senior',      label: 'Senior',       sub: '> 120 active days',     color: '#c084fc' },
       { key: 'blinkit',     label: 'Blinkit Caps', sub: 'GCEB (excl. GCEBOD)',   color: '#fb923c' },
-      { key: 'od',          label: 'ODs',          sub: 'ID starts with GCEBOD', color: '#ff6b6b', isOD: true },
+      { key: 'od',          label: 'ODs',          sub: 'ID starts with GCEBOD', color: '#fbbf24' },
     ];
 
     const fmtDur = v => v !== null ? compute.formatDuration(v) : '—';
     const fmtNum = (v, d=1) => v !== null ? _fmt(v, d) : '—';
-    const s = key => stats[key];
+    const st = k => stats[k];
 
     // Color-code values across tiers
     const colorCode = (vals, direction) => {
@@ -971,12 +971,8 @@ const ui = (() => {
       });
     };
 
-    // ── 1. Tier overview cards (2-col bento) ──────────────────────────
-    const topTiers = tiers.filter(t => !t.isOD);
-    const odTier   = tiers.find(t => t.isOD);
-    const st       = k => stats[k];
-
-    const topCards = topTiers.map(t => {
+    // ── 1. Tier overview cards (5-column equal grid) ───────────────────
+    const allCards = tiers.map(t => {
       const has = st(t.key).captainCount > 0;
       return `
         <div class="tier-metric-card" style="border-left-color:${t.color}">
@@ -985,37 +981,15 @@ const ui = (() => {
             <span class="tier-card-value" style="color:${t.color}">${st(t.key).captainCount}</span>
             ${has ? `<span class="tier-card-badge" style="color:${t.color};background:${t.color}18">Active</span>` : ''}
           </div>
-          ${has
-            ? `<p class="tier-card-hint">Avg score: ${fmtNum(st(t.key).avgScore, 2)}</p>`
-            : `<p class="tier-card-hint inactive">${t.sub}</p>`}
+          <p class="tier-card-sub">${t.sub}</p>
+          ${has ? `<p class="tier-card-hint">Avg score: ${fmtNum(st(t.key).avgScore, 2)}</p>`
+                : `<p class="tier-card-hint inactive">No data</p>`}
         </div>`;
     }).join('');
 
-    const odCard = `
-      <div class="tier-metric-card tier-od-card" style="border-left-color:${odTier.color}">
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <div>
-            <p class="tier-card-label" style="color:${odTier.color}">${odTier.label} — Anomaly Watch</p>
-            <div class="tier-card-row" style="margin-top:4px;">
-              <span class="tier-card-value" style="color:${odTier.color}">${st('od').captainCount}</span>
-              ${st('od').captainCount > 0
-                ? `<span class="tier-card-badge" style="color:${odTier.color};background:${odTier.color}18">Active</span>`
-                : `<span class="tier-card-badge">Standby</span>`}
-            </div>
-          </div>
-          <span style="font-size:28px;opacity:0.25;">⚠</span>
-        </div>
-        <p class="tier-card-hint" style="${st('od').captainCount > 0 ? `color:${odTier.color};opacity:0.8` : ''}">
-          ${st('od').captainCount > 0
-            ? `Avg slacker score: ${fmtNum(st('od').avgScore, 2)}`
-            : odTier.sub}
-        </p>
-      </div>`;
-
     const bentoGrid = `
       <div class="tiers-bento-grid">
-        ${topCards}
-        ${odCard}
+        ${allCards}
       </div>`;
 
     // ── 2. Picking Flow Analysis ──────────────────────────────────────
@@ -1107,35 +1081,7 @@ const ui = (() => {
         </div>
       </div>`;
 
-    // ── 4. OD Anomaly section (only if ODs active) ────────────────────
-    const odStats = st('od');
-    const anomalySection = odStats.captainCount > 0 ? `
-      <div class="tiers-anomaly-section">
-        <div class="tiers-anomaly-header">
-          <span style="font-size:16px;">⚠</span>
-          <h3 class="tiers-anomaly-title">Anomalies Detected — ODs</h3>
-        </div>
-        <div class="tiers-anomaly-grid">
-          <div class="tiers-anomaly-stat">
-            <p class="tier-card-label">Active ODs</p>
-            <p class="tiers-anomaly-value">${odStats.captainCount}</p>
-          </div>
-          <div class="tiers-anomaly-stat">
-            <p class="tier-card-label">Avg Slacker Score</p>
-            <p class="tiers-anomaly-value">${fmtNum(odStats.avgScore, 2)}</p>
-          </div>
-          <div class="tiers-anomaly-stat">
-            <p class="tier-card-label">Total Orders</p>
-            <p class="tiers-anomaly-value">${_fmt(odStats.totalOrders, 0)}</p>
-          </div>
-          <div class="tiers-anomaly-stat">
-            <p class="tier-card-label">Avg Pick Time</p>
-            <p class="tiers-anomaly-value">${fmtDur(odStats.avgPickTime)}</p>
-          </div>
-        </div>
-      </div>` : '';
-
-    return `${bentoGrid}${pickSection}${putSection}${anomalySection}`;
+    return `${bentoGrid}${pickSection}${putSection}`;
   }
 
   // ── Captain Profile ────────────────────────────────────────────────────
