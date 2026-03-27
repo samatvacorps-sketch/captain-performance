@@ -84,6 +84,7 @@ const ui = (() => {
       <th>Avg Delay to Start</th>
       <th>Avg Pick Time</th>
       <th>Avg Billing Time</th>
+      <th>Total Time / Order</th>
       <th>Putting Hours</th>
       <th>Putaway Qty</th>
       <th>Avg IPH</th>
@@ -101,6 +102,7 @@ const ui = (() => {
       <td>${compute.formatDuration(d.avg_assigned_to_started)}</td>
       <td>${compute.formatDuration(d.avg_picking_time_per_order)}</td>
       <td>${compute.formatDuration(d.avg_billing_time)}</td>
+      <td>${compute.formatDuration(d.avg_total_time_per_order)}</td>
       <td>${_fmt(d.total_putting_hours, 1)} h</td>
       <td>${_fmt(d.total_putaway_qty)}</td>
       <td>${_fmt(d.avg_iph, 1)}</td>
