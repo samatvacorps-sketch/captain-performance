@@ -227,10 +227,10 @@ const ui = (() => {
       const ok = total - flagged;
       const totalOrders = byCaptain.reduce((s,c) => s + (c.total_orders_picked||0), 0);
       ddCards.innerHTML = [
-        { icon:'👤', label:'Active Captains', val: total.toLocaleString(),       cls:'stat-icon-blue' },
-        { icon:'🚩', label:'Flagged',         val: flagged,  valCss: flagged > 0 ? 'color:#ee7d77' : '', cls:'stat-icon-red' },
-        { icon:'✅', label:'At / Above Avg',  val: ok,       valCss:'color:#4edea3', cls:'stat-icon-green' },
-        { icon:'📦', label:'Total Orders',    val: totalOrders.toLocaleString(), cls:'stat-icon-teal' },
+        { icon: ICONS.person,       label:'Active Captains', val: total.toLocaleString(),       cls:'stat-icon-blue' },
+        { icon: ICONS.flag,         label:'Flagged',         val: flagged,  valCss: flagged > 0 ? 'color:#ee7d77' : '', cls:'stat-icon-red' },
+        { icon: ICONS.check,        label:'At / Above Avg',  val: ok,       valCss:'color:#4edea3', cls:'stat-icon-green' },
+        { icon: ICONS.box,          label:'Total Orders',    val: totalOrders.toLocaleString(), cls:'stat-icon-teal' },
       ].map(c => `<div class="stat-card">
         <div class="stat-icon ${c.cls}">${c.icon}</div>
         <div>
@@ -247,10 +247,10 @@ const ui = (() => {
       : [flowFilter];
 
     const flowMeta = {
-      picking: { label: 'Picking Flow', icon: '📦', metrics: CONFIG.METRICS.filter(m => m.flow === 'picking') },
-      putting: { label: 'Putting Flow', icon: '📥', metrics: CONFIG.METRICS.filter(m => m.flow === 'putting') },
-      audit:   { label: 'Audit Flow',   icon: '🔍', metrics: CONFIG.METRICS.filter(m => m.flow === 'audit') },
-      fnv:     { label: 'FNV Audit Flow', icon: '🥦', metrics: CONFIG.METRICS.filter(m => m.flow === 'fnv') },
+      picking: { label: 'Picking Flow',   icon: ICONS.flowPicking, metrics: CONFIG.METRICS.filter(m => m.flow === 'picking') },
+      putting: { label: 'Putting Flow',   icon: ICONS.flowPutting, metrics: CONFIG.METRICS.filter(m => m.flow === 'putting') },
+      audit:   { label: 'Audit Flow',     icon: ICONS.flowAudit,   metrics: CONFIG.METRICS.filter(m => m.flow === 'audit') },
+      fnv:     { label: 'FNV Audit Flow', icon: ICONS.flowFNV,     metrics: CONFIG.METRICS.filter(m => m.flow === 'fnv') },
     };
 
     for (const flow of flows) {
@@ -546,8 +546,8 @@ const ui = (() => {
         const storeAvg    = periodStoreStats?.get(metric.key)?.avg ?? null;
         const fmt = v => (v === null || v === undefined) ? '—'
           : metric.isDuration ? compute.formatDuration(v) : _fmt(v, 1);
-        return `<td class="${cls}" title="${flagged ? '🚩 Flagged' : ''}">
-          ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ' 🚩' : ''}
+        return `<td class="${cls}" title="${flagged ? 'Flagged' : ''}">
+          ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ` <span style="opacity:0.7;vertical-align:middle">${ICONS.flagSm}</span>` : ''}
         </td>`;
       }).join('');
 
@@ -1218,7 +1218,9 @@ const ui = (() => {
       tbody.innerHTML = CONFIG.METRICS.map(m => `<tr>
         <td>${m.label}</td>
         <td>${m.flow.charAt(0).toUpperCase() + m.flow.slice(1)}</td>
-        <td>${m.direction === 'HIGH' ? '⬆ High = Bad' : '⬇ Low = Bad'}</td>
+        <td>${m.direction === 'HIGH'
+          ? `${ICONS.arrowUp} <span style="vertical-align:middle">High = Bad</span>`
+          : `${ICONS.arrowDown} <span style="vertical-align:middle">Low = Bad</span>`}</td>
       </tr>`).join('');
     }
 

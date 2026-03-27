@@ -679,10 +679,19 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   font-size: 20px;
   flex-shrink: 0;
 }
-.stat-icon-blue  { background: rgba(173, 198, 255, 0.1); }
-.stat-icon-green { background: rgba(78,  222, 163, 0.1); }
-.stat-icon-teal  { background: rgba(77,  182, 172, 0.1); }
-.stat-icon-red   { background: rgba(255, 180, 171, 0.1); }
+.stat-icon-blue  { background: rgba(173, 198, 255, 0.1); color: #adc6ff; }
+.stat-icon-green { background: rgba(78,  222, 163, 0.1); color: #4edea3; }
+.stat-icon-teal  { background: rgba(77,  182, 172, 0.1); color: #4db6ac; }
+.stat-icon-red   { background: rgba(255, 180, 171, 0.1); color: #ffb4ab; }
+
+/* Ensure SVG icons align correctly in all contexts */
+.tab-btn svg,
+.stat-icon svg,
+.flow-section-header svg {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
 
 .stat-label {
   font-family: 'Manrope', sans-serif;

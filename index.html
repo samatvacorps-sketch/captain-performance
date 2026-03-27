@@ -38,7 +38,7 @@
     </div>
     <div class="header-right">
       <span id="last-refreshed" class="last-refreshed"></span>
-      <button id="refresh-btn" class="btn btn-secondary" onclick="app.refresh()">⟳ Refresh</button>
+      <button id="refresh-btn" class="btn btn-secondary" onclick="app.refresh()"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M13.5 8A5.5 5.5 0 112.5 8"/><polyline points="13.5,3.5 13.5,8 9,8"/></svg>Refresh</button>
       <span id="user-name" class="user-name"></span>
       <button class="btn btn-ghost" onclick="auth.signOut()">Sign out</button>
     </div>
@@ -47,22 +47,22 @@
   <!-- Tab Navigation -->
   <nav class="tab-nav">
     <button class="tab-btn active" data-tab="store-overview" onclick="app.switchTab('store-overview')">
-      📈 Store Overview
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,12 5,7 9,10 15,4"/><polyline points="11,4 15,4 15,8"/></svg> Store Overview
     </button>
     <button class="tab-btn" data-tab="captain-deep-dive" onclick="app.switchTab('captain-deep-dive')">
-      🔍 Captain Deep Dive
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14.5" y2="14.5"/></svg> Captain Deep Dive
     </button>
     <button class="tab-btn" data-tab="daily-flags" onclick="app.switchTab('daily-flags')">
-      🚩 Daily Flags
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="1" x2="4" y2="15"/><path d="M4 2h8l-3 4 3 4H4"/></svg> Daily Flags
     </button>
     <button class="tab-btn" data-tab="captain-profile" onclick="app.switchTab('captain-profile')">
-      👤 Captain Profile
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2.5"/><path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg> Captain Profile
     </button>
     <button class="tab-btn" data-tab="tier-analysis" onclick="app.switchTab('tier-analysis')">
-      🏅 Tier Analysis
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="8,2 15,5.5 8,9 1,5.5"/><polyline points="1,10 8,13.5 15,10"/></svg> Tier Analysis
     </button>
     <button class="tab-btn" data-tab="config-panel" onclick="app.switchTab('config-panel')">
-      ⚙️ Config
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="2" x2="4" y2="14"/><circle cx="4" cy="9" r="2"/><line x1="12" y1="2" x2="12" y2="14"/><circle cx="12" cy="5" r="2"/></svg> Config
     </button>
   </nav>
 
@@ -101,28 +101,28 @@
     <!-- Stat Cards -->
     <div class="stat-cards-row">
       <div class="stat-card">
-        <div class="stat-icon stat-icon-blue">📦</div>
+        <div class="stat-icon stat-icon-blue"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5L8 2l6 3.5v6L8 14 2 11.5z"/><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="5.5" x2="14" y2="5.5"/></svg></div>
         <div>
           <p class="stat-label">Total Orders Picked</p>
           <p class="stat-value" id="stat-total-orders">—</p>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon stat-icon-green">⏱</div>
+        <div class="stat-icon stat-icon-green"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><polyline points="8,5 8,8 10.5,10"/></svg></div>
         <div>
           <p class="stat-label">Avg Pick Time</p>
           <p class="stat-value" id="stat-avg-pick-time">—</p>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon stat-icon-teal">📊</div>
+        <div class="stat-icon stat-icon-teal"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="9" width="3" height="6" rx="0.5"/><rect x="6.5" y="5" width="3" height="10" rx="0.5"/><rect x="11.5" y="2" width="3" height="13" rx="0.5"/></svg></div>
         <div>
           <p class="stat-label">Avg IPH</p>
           <p class="stat-value" id="stat-avg-iph">—</p>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon stat-icon-red">⚠️</div>
+        <div class="stat-icon stat-icon-red"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5L1.5 13.5h13z"/><line x1="8" y1="6" x2="8" y2="9.5"/><circle cx="8" cy="11.5" r="0.5" fill="currentColor"/></svg></div>
         <div>
           <p class="stat-label">Total Complaints</p>
           <p class="stat-value" id="stat-total-complaints">—</p>
@@ -361,6 +361,7 @@
 </div><!-- /#app -->
 
 <!-- Scripts (order matters) -->
+<script src="js/icons.js"></script>
 <script src="config.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/sheets.js"></script>
