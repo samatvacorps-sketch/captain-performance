@@ -242,35 +242,26 @@
 
   <!-- ── DAILY FLAGS ─────────────────────────────────────────────────── -->
   <section id="tab-daily-flags" class="tab-content hidden">
-    <div class="section-header">
-      <h2>Daily Flags</h2>
-      <div class="controls">
-        <label>Date:</label>
+
+    <!-- Page Header -->
+    <div class="flags-page-header">
+      <div>
+        <p class="flags-fleet-label">Fleet Intelligence</p>
+        <h2 class="flags-title">Daily Flags</h2>
+      </div>
+      <div class="flags-date-strip">
+        <span class="dd-control-label">Date</span>
         <input type="date" id="flags-date" onchange="ui.renderDailyFlags()" />
       </div>
     </div>
 
-    <!-- Summary Cards -->
-    <div class="summary-cards" id="flags-summary-cards"></div>
+    <!-- Bento Metrics Grid -->
+    <div id="flags-summary-cards" class="flags-bento-grid"></div>
 
-    <!-- Drill-down Table -->
-    <div class="table-section">
-      <h3>Flagged Captains</h3>
-      <div class="table-wrapper">
-        <table id="flags-table" class="data-table">
-          <thead>
-            <tr>
-              <th>Captain</th>
-              <th>ID</th>
-              <th>Active Flows</th>
-              <th>Flagged Metrics</th>
-              <th>Worst Dev.</th>
-              <th>Slacker Score</th>
-            </tr>
-          </thead>
-          <tbody id="flags-table-body"></tbody>
-        </table>
-      </div>
+    <!-- Operational Alerts -->
+    <div class="flags-alerts-section">
+      <h3 class="flags-alerts-title">Operational Alerts</h3>
+      <div id="flags-table-body" class="flags-alert-list"></div>
     </div>
   </section>
 

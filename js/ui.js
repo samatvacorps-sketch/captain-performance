@@ -672,32 +672,45 @@ const ui = (() => {
 
     const dayRows = data.filter(r => r.date && _isoDateStr(r.date) === selectedDate);
 
-    // Summary cards
-    const totalActive = new Set(dayRows.map(r => r.employee_id)).size;
-    const flaggedRows  = dayRows.filter(r => r.composite_slacker_score > 0);
-    const flaggedCount = new Set(flaggedRows.map(r => r.employee_id)).size;
+    // ── Bento metric counts ────────────────────────────────────────────
+    const totalActive  = new Set(dayRows.map(r => r.employee_id)).size;
+    const flaggedCount = new Set(dayRows.filter(r => r.composite_slacker_score > 0).map(r => r.employee_id)).size;
     const serialCount  = new Set(dayRows.filter(r => r.composite_slacker_score >= 2).map(r => r.employee_id)).size;
-
-    const pickSlackers = new Set(dayRows.filter(r => r.flags?.get('picking_time_per_order') || r.flags?.get('assigned_to_started_per_order') || r.flags?.get('billing_time_per_order') || r.flags?.get('ppi')).map(r => r.employee_id)).size;
+    const pickSlackers = new Set(dayRows.filter(r =>
+      r.flags?.get('picking_time_per_order') || r.flags?.get('assigned_to_started_per_order') ||
+      r.flags?.get('billing_time_per_order') || r.flags?.get('ppi')
+    ).map(r => r.employee_id)).size;
     const putSlackers  = new Set(dayRows.filter(r => r.flags?.get('iph')).map(r => r.employee_id)).size;
+    const okCount      = totalActive - flaggedCount;
 
     const cardsEl = document.getElementById('flags-summary-cards');
     if (cardsEl) {
-      cardsEl.innerHTML = [
-        { label: 'Active Captains', value: totalActive, cls: '' },
-        { label: 'Flagged Captains', value: flaggedCount, cls: 'flagged' },
-        { label: 'Serial Slackers (2+)', value: serialCount, cls: 'serial' },
-        { label: '📦 Picking Slackers', value: pickSlackers, cls: '' },
-        { label: '📥 Putting Slackers', value: putSlackers, cls: '' },
-      ].map(card => `
-        <div class="summary-card ${card.cls}">
-          <div class="card-value">${card.value}</div>
-          <div class="card-label">${card.label}</div>
+      cardsEl.innerHTML = `
+        <div class="flags-metric-card full-width accent-blue">
+          <div class="flags-metric-label">Active Captains</div>
+          <div class="flags-metric-row">
+            <span class="flags-metric-value color-blue">${totalActive}</span>
+            <span class="flags-metric-sub" style="color:#4edea3">▲ ${okCount} Stable</span>
+          </div>
         </div>
-      `).join('');
+        <div class="flags-metric-card accent-red">
+          <div class="flags-metric-label">Flagged</div>
+          <div class="flags-metric-row">
+            <span class="flags-metric-value small color-red">${flaggedCount}</span>
+          </div>
+          <div class="flags-metric-sub">${pickSlackers} picking · ${putSlackers} putting</div>
+        </div>
+        <div class="flags-metric-card accent-amber">
+          <div class="flags-metric-label">Serial Slackers</div>
+          <div class="flags-metric-row">
+            <span class="flags-metric-value small color-amber">${String(serialCount).padStart(2,'0')}</span>
+          </div>
+          <div class="flags-metric-sub">2+ flags today</div>
+        </div>
+      `;
     }
 
-    // Drill-down table — one row per flagged captain
+    // ── Flagged captain cards ──────────────────────────────────────────
     const byCaptain = {};
     for (const row of dayRows) {
       if (row.composite_slacker_score === 0) continue;
@@ -710,29 +723,52 @@ const ui = (() => {
     const sortedFlagged = Object.values(byCaptain)
       .sort((a, b) => b.composite_slacker_score - a.composite_slacker_score);
 
-    const tbody = document.getElementById('flags-table-body');
-    if (!tbody) return;
+    const listEl = document.getElementById('flags-table-body');
+    if (!listEl) return;
 
     if (sortedFlagged.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:#888;">
-        No flagged captains on ${selectedDate}.
-      </td></tr>`;
+      listEl.innerHTML = `<p class="placeholder-text">No flagged captains on ${selectedDate}.</p>`;
       return;
     }
 
-    tbody.innerHTML = sortedFlagged.map(row => {
-      const score = row.composite_slacker_score;
-      const rowCls = score >= 2 ? 'row-serial' : 'row-flagged';
-      const worstDev = row.worst_deviation !== null ? row.worst_deviation.toFixed(2) + ' SD' : '—';
+    listEl.innerHTML = sortedFlagged.map(row => {
+      const score    = row.composite_slacker_score;
+      const isCrit   = score >= 2;
+      const severity = isCrit ? 'severity-critical' : 'severity-flagged';
+      const avCls    = isCrit ? 'critical' : '';
+      const worstDev = row.worst_deviation !== null ? row.worst_deviation.toFixed(1) + ' SD' : '—';
 
-      return `<tr class="${rowCls}">
-        <td><strong>${_esc(row.employee_name)}</strong></td>
-        <td>${_esc(row.employee_id)}</td>
-        <td>${_esc(row.active_flows || '—')}</td>
-        <td>${_esc(row.flagged_metrics_list || '—')}</td>
-        <td>${worstDev}</td>
-        <td><strong>${score}</strong></td>
-      </tr>`;
+      // Active flows as small tags
+      const flows = (row.active_flows || '').split(',').map(f => f.trim()).filter(Boolean);
+      const flowTags = flows.map(f => `<span class="flags-tag flow">${_esc(f)}</span>`).join('');
+
+      // Flagged metrics as alert tags
+      const flaggedMetrics = (row.flagged_metrics_list || '').split(',').map(m => m.trim()).filter(Boolean);
+      const metricTags = flaggedMetrics.map(m =>
+        `<span class="flags-tag ${isCrit ? 'alert' : 'warn'}">${_esc(m)}</span>`
+      ).join('');
+
+      return `
+        <div class="flags-captain-card ${severity}">
+          <div class="flags-captain-avatar ${avCls}">${_initials(row.employee_name)}</div>
+          <div class="flags-captain-body">
+            <div class="flags-captain-top">
+              <div>
+                <div class="flags-captain-name">${_esc(row.employee_name)}</div>
+                <div class="flags-captain-meta">${_esc(row.employee_id)} · ${flows.length || 0} flow${flows.length !== 1 ? 's' : ''}</div>
+              </div>
+              ${_statusBadge(score)}
+            </div>
+            <div class="flags-tag-row">
+              ${flowTags}
+              ${metricTags || `<span class="flags-tag warn">No metric detail</span>`}
+            </div>
+          </div>
+          <div class="flags-score-col">
+            ${_scoreBadge(score)}
+            <div class="flags-dev-label">${worstDev}</div>
+          </div>
+        </div>`;
     }).join('');
   }
 
