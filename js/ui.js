@@ -219,6 +219,27 @@ const ui = (() => {
 
     // Aggregate per captain for this period
     const byCaptain = _groupByCaptain(filtered, periodType, periodStoreStats);
+    // Populate DD summary cards
+    const ddCards = document.getElementById('dd-summary-cards');
+    if (ddCards) {
+      const total = byCaptain.length;
+      const flagged = byCaptain.filter(c => c.composite_slacker_score >= 0.5).length;
+      const ok = total - flagged;
+      const totalOrders = byCaptain.reduce((s,c) => s + (c.total_orders_picked||0), 0);
+      ddCards.innerHTML = [
+        { icon:'👤', label:'Active Captains', val: total.toLocaleString(),       cls:'stat-icon-blue' },
+        { icon:'🚩', label:'Flagged',         val: flagged,  valCss: flagged > 0 ? 'color:#ee7d77' : '', cls:'stat-icon-red' },
+        { icon:'✅', label:'At / Above Avg',  val: ok,       valCss:'color:#4edea3', cls:'stat-icon-green' },
+        { icon:'📦', label:'Total Orders',    val: totalOrders.toLocaleString(), cls:'stat-icon-teal' },
+      ].map(c => `<div class="stat-card">
+        <div class="stat-icon ${c.cls}">${c.icon}</div>
+        <div>
+          <p class="stat-label">${c.label}</p>
+          <p class="stat-value" ${c.valCss ? `style="${c.valCss}"` : ''}>${c.val}</p>
+        </div>
+      </div>`).join('');
+    }
+
     container.innerHTML = '';
 
     const flows = flowFilter === 'all'
@@ -448,8 +469,36 @@ const ui = (() => {
 
   function _thSort(label, col, flow) {
     const indicator = _applySortIndicator(col, _sortState.col, _sortState.dir);
-    const active = col === _sortState.col ? 'style="color:#4fc3f7"' : '';
-    return `<th data-sort="${col}" data-flow="${flow}" ${active} style="cursor:pointer;user-select:none">${label}${indicator}</th>`;
+    const active = col === _sortState.col ? 'style="color:#adc6ff"' : '';
+    return `<th data-sort="${col}" data-flow="${flow}" ${active}>${label}${indicator}</th>`;
+  }
+
+  function _initials(name) {
+    return (name || '?').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  }
+
+  function _captainCell(name, id) {
+    return `<td>
+      <div class="captain-cell">
+        <div class="captain-avatar">${_initials(name)}</div>
+        <div>
+          <div class="captain-name">${_esc(name)}</div>
+          <div class="captain-id">${_esc(id)}</div>
+        </div>
+      </div>
+    </td>`;
+  }
+
+  function _scoreBadge(score) {
+    if (score >= 1.5) return `<span class="score-badge score-badge-critical">${score}</span>`;
+    if (score >= 0.5) return `<span class="score-badge score-badge-warn">${score}</span>`;
+    return `<span class="score-badge score-badge-ok">${score}</span>`;
+  }
+
+  function _statusBadge(score) {
+    if (score >= 1.5) return `<span class="status-badge status-critical">Critical</span>`;
+    if (score >= 0.5) return `<span class="status-badge status-flagged">Flagged</span>`;
+    return `<span class="status-badge status-ok">Stable</span>`;
   }
 
   function _buildDeepDiveTable(captains, metrics, flow, periodStoreStats) {
@@ -489,9 +538,6 @@ const ui = (() => {
 
     const sorted = _sortedCaptains(captains, _sortState.col);
     const rows = sorted.map(captain => {
-      const scoreCls = captain.composite_slacker_score >= 1.5 ? 'cell-dark-red'
-                      : captain.composite_slacker_score >= 0.5 ? 'cell-red' : '';
-
       const metricCells = orderedMetrics.map(metric => {
         const dev     = captain.deviations.get(metric.key);
         const cls     = compute.deviationClass(dev);
@@ -507,17 +553,17 @@ const ui = (() => {
       }).join('');
 
       return `<tr>
-        <td><strong>${_esc(captain.employee_name)}</strong></td>
-        <td>${_esc(captain.employee_id)}</td>
-        <td class="${scoreCls}">${captain.composite_slacker_score}</td>
+        ${_captainCell(captain.employee_name, captain.employee_id)}
+        <td>${_scoreBadge(captain.composite_slacker_score)}</td>
         <td>${_fmt(captain.total_orders_picked)}</td>
         <td>${captain.avg_ppi !== null ? _fmt(captain.avg_ppi, 2) : '—'}</td>
         ${metricCells}
+        <td>${_statusBadge(captain.composite_slacker_score)}</td>
       </tr>`;
     }).join('');
 
-    return `<div class="table-wrapper"><table class="data-table">
-      <thead><tr>${headers}</tr></thead>
+    return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
+      <thead><tr>${headers}<th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   }
@@ -537,23 +583,23 @@ const ui = (() => {
       const fmt = v => (v === null || v === undefined) ? '—' : _fmt(v, 1);
 
       return `<tr>
-        <td><strong>${_esc(captain.employee_name)}</strong></td>
-        <td>${_esc(captain.employee_id)}</td>
-        <td class="${scoreCls}">${captain.composite_slacker_score}</td>
+        ${_captainCell(captain.employee_name, captain.employee_id)}
+        <td>${_scoreBadge(captain.composite_slacker_score)}</td>
         <td>${_fmt(captain.total_putaway_qty)}</td>
         <td class="${cls}" title="${flagged ? '🚩 Flagged' : ''}">
           ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ' 🚩' : ''}
         </td>
+        <td>${_statusBadge(captain.composite_slacker_score)}</td>
       </tr>`;
     }).join('');
 
-    return `<div class="table-wrapper"><table class="data-table">
+    return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>
         ${_thSort('Captain', 'name', 'putting')}
-        ${_thSort('ID', 'id', 'putting')}
-        ${_thSort('Score<br/><small style="font-weight:400;opacity:0.8">avg daily</small>', 'score', 'putting')}
+        ${_thSort('Score', 'score', 'putting')}
         ${_thSort('Putaway Qty', 'putaway_qty', 'putting')}
-        ${_thSort('Items Put Away/Hr<br/><small style="font-weight:400;opacity:0.8">actual | personal | store</small>', 'iph', 'putting')}
+        ${_thSort('Items Put Away/Hr<br/><small style="font-weight:400;opacity:0.7">actual | personal | store</small>', 'iph', 'putting')}
+        <th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -562,16 +608,14 @@ const ui = (() => {
   function _buildAuditTable(captains) {
     const sorted = _sortedCaptains(captains, _sortState.col);
     const rows = sorted.map(captain => `<tr>
-      <td><strong>${_esc(captain.employee_name)}</strong></td>
-      <td>${_esc(captain.employee_id)}</td>
+      ${_captainCell(captain.employee_name, captain.employee_id)}
       <td>${_fmt(captain.total_racks_audited)}</td>
       <td>${_fmt(captain.total_auditor_hours, 1)} h</td>
     </tr>`).join('');
 
-    return `<div class="table-wrapper"><table class="data-table">
+    return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>
         ${_thSort('Captain', 'name', 'audit')}
-        ${_thSort('ID', 'id', 'audit')}
         ${_thSort('Racks Audited', 'racks', 'audit')}
         ${_thSort('Auditor Hours', 'audit_hours', 'audit')}
       </tr></thead>
@@ -582,16 +626,14 @@ const ui = (() => {
   function _buildFNVTable(captains) {
     const sorted = _sortedCaptains(captains, _sortState.col);
     const rows = sorted.map(captain => `<tr>
-      <td><strong>${_esc(captain.employee_name)}</strong></td>
-      <td>${_esc(captain.employee_id)}</td>
+      ${_captainCell(captain.employee_name, captain.employee_id)}
       <td>${captain.avg_fnv_rate !== null ? _fmt(captain.avg_fnv_rate, 1) : '—'}</td>
       <td>${_fmt(captain.total_fnv_hours, 1)} h</td>
     </tr>`).join('');
 
-    return `<div class="table-wrapper"><table class="data-table">
+    return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>
         ${_thSort('Captain', 'name', 'fnv')}
-        ${_thSort('ID', 'id', 'fnv')}
         ${_thSort('FNV Audit Rate (avg)', 'fnv_rate', 'fnv')}
         ${_thSort('FNV Hours', 'fnv_hours', 'fnv')}
       </tr></thead>

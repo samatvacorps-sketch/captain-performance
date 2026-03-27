@@ -188,21 +188,30 @@
 
   <!-- ── CAPTAIN DEEP DIVE ───────────────────────────────────────────── -->
   <section id="tab-captain-deep-dive" class="tab-content hidden">
-    <div class="section-header">
-      <h2>Captain Deep Dive</h2>
-      <div class="controls" style="flex-wrap:wrap;gap:10px;">
-        <div class="control-group" id="deep-dive-preset-group">
-          <label>Quick select:</label>
+
+    <!-- Header -->
+    <div class="overview-header" style="align-items:flex-start;">
+      <div>
+        <nav class="overview-breadcrumb">
+          <span>Performance</span><span>›</span>
+          <span class="overview-breadcrumb-active">Captain Analysis</span>
+        </nav>
+        <h2 class="overview-title">Captain Performance</h2>
+        <p class="dd-subtitle">Real-time operational analysis and workflow efficiency mapping.</p>
+      </div>
+      <div class="dd-filter-bar">
+        <div style="display:flex;align-items:center;gap:6px;" id="deep-dive-preset-group">
+          <label class="controls label">Quick select:</label>
           <select id="deep-dive-period" onchange="ui.onDeepDivePresetChange()"></select>
         </div>
-        <div class="control-group" style="display:flex;align-items:center;gap:6px;">
-          <label>From:</label>
-          <input type="date" id="deep-dive-start" onchange="ui.onDeepDiveDateChange()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
-          <label>To:</label>
-          <input type="date" id="deep-dive-end" onchange="ui.onDeepDiveDateChange()" style="background:#2a2a3e;color:#e0e0e0;border:1px solid #444;border-radius:6px;padding:6px 10px;font-size:13px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label class="controls label">From:</label>
+          <input type="date" id="deep-dive-start" onchange="ui.onDeepDiveDateChange()">
+          <label class="controls label">To:</label>
+          <input type="date" id="deep-dive-end" onchange="ui.onDeepDiveDateChange()">
         </div>
-        <div class="control-group">
-          <label>Flow:</label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label class="controls label">Flow:</label>
           <select id="deep-dive-flow" onchange="ui.renderDeepDive()">
             <option value="all">All Flows</option>
             <option value="picking">Picking</option>
@@ -214,6 +223,10 @@
       </div>
     </div>
 
+    <!-- Summary Cards -->
+    <div id="dd-summary-cards" class="stat-cards-row" style="margin-bottom:16px;"></div>
+
+    <!-- Legend -->
     <div class="legend">
       <span class="badge badge-dark-red">■</span> &gt;2 SD worse
       <span class="badge badge-red">■</span> &gt;1 SD worse (flagged)

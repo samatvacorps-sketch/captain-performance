@@ -772,6 +772,183 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
 .legend-dot-blue  { background: #adc6ff; box-shadow: 0 0 6px rgba(173,198,255,0.5); }
 .legend-dot-green { background: #4edea3; box-shadow: 0 0 6px rgba(78,222,163,0.5); }
 
+/* ── Captain Deep Dive ─────────────────────────────────────────────── */
+.dd-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-weight: 400;
+}
+
+.dd-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.dd-filter-bar select,
+.dd-filter-bar input[type="date"] {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-high);
+  outline: none;
+}
+
+/* Captain avatar initials */
+.captain-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(173, 198, 255, 0.1);
+  border: 1px solid rgba(173, 198, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  color: #adc6ff;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.captain-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.captain-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
+  letter-spacing: -0.1px;
+}
+
+.captain-id {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: 'Manrope', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+/* Score badges */
+.score-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-family: 'Plus Jakarta Sans', 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.score-badge-ok {
+  background: rgba(78, 222, 163, 0.1);
+  border: 1px solid rgba(78, 222, 163, 0.25);
+  color: #4edea3;
+}
+
+.score-badge-warn {
+  background: rgba(255, 213, 79, 0.1);
+  border: 1px solid rgba(255, 213, 79, 0.25);
+  color: #ffd54f;
+}
+
+.score-badge-critical {
+  background: rgba(238, 125, 119, 0.12);
+  border: 1px solid rgba(238, 125, 119, 0.3);
+  color: #ee7d77;
+}
+
+/* Status badges */
+.status-badge {
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.status-ok       { background: rgba(78, 222, 163, 0.1); color: #4edea3; }
+.status-warn     { background: rgba(255, 213, 79, 0.1); color: #ffd54f; }
+.status-flagged  { background: rgba(238, 125, 119, 0.1); color: #ee7d77; }
+.status-critical { background: rgba(255, 100, 100, 0.12); color: #ff6b6b; }
+
+/* DD spaced-row table */
+.dd-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 4px;
+  font-size: 13px;
+  padding: 0 12px 12px;
+}
+
+.dd-table th {
+  background: transparent;
+  color: var(--text-muted);
+  padding: 10px 12px;
+  text-align: left;
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dd-table th:hover { color: var(--text); }
+
+.dd-table td {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.025);
+  white-space: nowrap;
+  color: var(--text);
+  border: none;
+  transition: background 0.15s;
+}
+
+.dd-table td:first-child { border-radius: 8px 0 0 8px; }
+.dd-table td:last-child  { border-radius: 0 8px 8px 0; }
+
+.dd-table tr:hover td { background: rgba(255, 255, 255, 0.05); }
+
+/* Flag overrides for dd-table */
+.dd-table .cell-dark-red { background: var(--dark-red-bg) !important; color: var(--dark-red); font-weight: 600; }
+.dd-table .cell-red      { background: var(--red-bg) !important;      color: var(--red);      font-weight: 600; }
+.dd-table .cell-yellow   { background: var(--yellow-bg) !important;   color: var(--yellow); }
+.dd-table .cell-green    { background: var(--green-bg) !important;    color: var(--green); }
+
+/* Flow section glass header */
+.flow-section-header {
+  background: rgba(29, 31, 38, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text-muted);
+  padding: 14px 20px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
 /* ── Scrollbar ────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
