@@ -13,8 +13,8 @@ const CONFIG = {
 
   // ── Google Sheets ────────────────────────────────────────────────────
   SPREADSHEET_ID: '1HrznjUpDFBErTI6AzMmj3ygo6f6h3jJCbZosiPkJGIc',
-  SHEET_NAME: 'Sheet1',
-  DATA_RANGE: 'Sheet1!A:V',
+  SHEET_NAME: 'Daily Metrics',
+  DATA_RANGE: 'Daily Metrics!A:V',
 
   // ── Flagging ─────────────────────────────────────────────────────────
   // How many SDs worse than the store average before flagging.
