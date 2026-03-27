@@ -202,40 +202,40 @@
   <!-- ── CAPTAIN DEEP DIVE ───────────────────────────────────────────── -->
   <section id="tab-captain-deep-dive" class="tab-content hidden">
 
-    <!-- Header -->
-    <div class="dd-page-header">
-      <nav class="overview-breadcrumb">
-        <span>Performance</span><span>›</span>
-        <span class="overview-breadcrumb-active">Captain Analysis</span>
-      </nav>
-      <h2 class="overview-title">Captain Performance</h2>
-      <p class="dd-subtitle">Real-time operational analysis and workflow efficiency mapping.</p>
-    </div>
-
-    <!-- Filter Strip -->
-    <div class="dd-controls-strip">
-      <div class="dd-control-group" id="deep-dive-preset-group">
-        <span class="dd-control-label">Quick select</span>
-        <select id="deep-dive-period" onchange="ui.onDeepDivePresetChange()"></select>
+    <!-- Header with controls top-right -->
+    <div class="page-header-row">
+      <div>
+        <nav class="overview-breadcrumb">
+          <span>Performance</span><span>›</span>
+          <span class="overview-breadcrumb-active">Captain Analysis</span>
+        </nav>
+        <h2 class="overview-title">Captain Performance</h2>
+        <p class="dd-subtitle">Real-time operational analysis and workflow efficiency mapping.</p>
       </div>
-      <div class="dd-control-divider"></div>
-      <div class="dd-control-group">
-        <span class="dd-control-label">From</span>
-        <input type="date" id="deep-dive-start" onchange="ui.onDeepDiveDateChange()">
-        <span class="dd-control-sep">—</span>
-        <span class="dd-control-label">To</span>
-        <input type="date" id="deep-dive-end" onchange="ui.onDeepDiveDateChange()">
-      </div>
-      <div class="dd-control-divider"></div>
-      <div class="dd-control-group">
-        <span class="dd-control-label">Flow</span>
-        <select id="deep-dive-flow" onchange="ui.renderDeepDive()">
-          <option value="all">All Flows</option>
-          <option value="picking">Picking</option>
-          <option value="putting">Putting</option>
-          <option value="audit">Audit</option>
-          <option value="fnv">FNV Audit</option>
-        </select>
+      <div class="header-controls">
+        <div class="dd-control-group" id="deep-dive-preset-group">
+          <span class="dd-control-label">Quick select</span>
+          <select id="deep-dive-period" onchange="ui.onDeepDivePresetChange()"></select>
+        </div>
+        <div class="dd-control-divider"></div>
+        <div class="dd-control-group">
+          <span class="dd-control-label">From</span>
+          <input type="date" id="deep-dive-start" onchange="ui.onDeepDiveDateChange()">
+          <span class="dd-control-sep">—</span>
+          <span class="dd-control-label">To</span>
+          <input type="date" id="deep-dive-end" onchange="ui.onDeepDiveDateChange()">
+        </div>
+        <div class="dd-control-divider"></div>
+        <div class="dd-control-group">
+          <span class="dd-control-label">Flow</span>
+          <select id="deep-dive-flow" onchange="ui.renderDeepDive()">
+            <option value="all">All Flows</option>
+            <option value="picking">Picking</option>
+            <option value="putting">Putting</option>
+            <option value="audit">Audit</option>
+            <option value="fnv">FNV Audit</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -307,27 +307,29 @@
   <!-- ── TIER ANALYSIS ───────────────────────────────────────────────── -->
   <section id="tab-tier-analysis" class="tab-content hidden">
 
-    <!-- Page Header -->
-    <div class="flags-page-header">
+    <!-- Header with controls top-right -->
+    <div class="page-header-row">
       <div>
-        <p class="tiers-op-label">Operational Intelligence</p>
-        <h2 class="flags-title">Tier Analysis</h2>
+        <nav class="overview-breadcrumb">
+          <span>Performance</span><span>›</span>
+          <span class="overview-breadcrumb-active">Tier Analysis</span>
+        </nav>
+        <h2 class="overview-title">Tier Analysis</h2>
+        <p class="dd-subtitle">Operational intelligence by captain tenure and type.</p>
       </div>
-    </div>
-
-    <!-- Controls Strip (reuses Deep Dive styles) -->
-    <div class="dd-controls-strip">
-      <div class="dd-control-group">
-        <span class="dd-control-label">Quick select</span>
-        <select id="tiers-period" onchange="ui.onTierPresetChange()"></select>
-      </div>
-      <div class="dd-control-divider"></div>
-      <div class="dd-control-group">
-        <span class="dd-control-label">From</span>
-        <input type="date" id="tiers-start" onchange="ui.onTierDateChange()">
-        <span class="dd-control-sep">—</span>
-        <span class="dd-control-label">To</span>
-        <input type="date" id="tiers-end" onchange="ui.onTierDateChange()">
+      <div class="header-controls">
+        <div class="dd-control-group">
+          <span class="dd-control-label">Quick select</span>
+          <select id="tiers-period" onchange="ui.onTierPresetChange()"></select>
+        </div>
+        <div class="dd-control-divider"></div>
+        <div class="dd-control-group">
+          <span class="dd-control-label">From</span>
+          <input type="date" id="tiers-start" onchange="ui.onTierDateChange()">
+          <span class="dd-control-sep">—</span>
+          <span class="dd-control-label">To</span>
+          <input type="date" id="tiers-end" onchange="ui.onTierDateChange()">
+        </div>
       </div>
     </div>
 
