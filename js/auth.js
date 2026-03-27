@@ -104,13 +104,6 @@ const auth = (() => {
       shape: 'rectangular',
     });
 
-    // Also add a fallback manual button for token flow
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-secondary';
-    btn.style.cssText = 'margin-top:12px;background:#4285f4;color:white;padding:10px 20px;border-radius:6px;font-size:14px;width:100%;';
-    btn.textContent = 'Sign in with Google';
-    btn.onclick = () => tokenClient && tokenClient.requestAccessToken({ prompt: 'consent' });
-    container.appendChild(btn);
   }
 
   function _handleCredential(response) {
