@@ -23,15 +23,15 @@
   --border:       rgba(80, 100, 120, 0.45);
   --border-subtle: rgba(80, 100, 120, 0.28);
 
-  /* Status colours — boosted opacity so flags pop on lighter bg */
-  --dark-red:   #ff9993;
-  --red:        #ee7d77;
-  --yellow:     #ffd54f;
-  --green:      #81c784;
-  --red-bg:     rgba(238, 125, 119, 0.22);
-  --dark-red-bg: rgba(255, 153, 147, 0.28);
-  --yellow-bg:  rgba(255, 213, 79, 0.18);
-  --green-bg:   rgba(129, 199, 132, 0.16);
+  /* Status colours — 4-level traffic-light: green → yellow → orange → red */
+  --dark-red:    #ff5c5c;           /* >2 SD  — pure red, critical        */
+  --red:         #ff9a3c;           /* >1 SD  — orange, flagged (caution) */
+  --yellow:      #ffd54f;           /* 0.5–1 SD — amber, borderline       */
+  --green:       #81c784;           /* at/above avg — green               */
+  --dark-red-bg: rgba(255, 80, 80,  0.18);
+  --red-bg:      rgba(255,154, 60,  0.18);
+  --yellow-bg:   rgba(255, 213, 79, 0.15);
+  --green-bg:    rgba(129, 199, 132, 0.13);
 }
 
 body {
@@ -437,10 +437,21 @@ body {
 .data-table tr:hover td { background: rgba(255,255,255,0.05); }
 
 /* ── Conditional Formatting Classes ──────────────────────────────── */
-.cell-dark-red { background: var(--dark-red-bg) !important; color: var(--dark-red); font-weight: 600; }
-.cell-red      { background: var(--red-bg) !important;      color: var(--red);      font-weight: 600; }
-.cell-yellow   { background: var(--yellow-bg) !important;   color: var(--yellow);   }
-.cell-green    { background: var(--green-bg) !important;    color: var(--green);    }
+/* >2 SD — critical: red bg + left accent bar + bold */
+.cell-dark-red {
+  background: var(--dark-red-bg) !important;
+  color: var(--dark-red);
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--dark-red);
+}
+/* >1 SD — flagged: orange (clearly different hue from red) */
+.cell-red {
+  background: var(--red-bg) !important;
+  color: var(--red);
+  font-weight: 600;
+}
+.cell-yellow { background: var(--yellow-bg) !important; color: var(--yellow); }
+.cell-green  { background: var(--green-bg)  !important; color: var(--green);  }
 
 /* Row-level highlight for daily flags */
 tr.row-flagged td { background: var(--red-bg) !important; }
@@ -1479,10 +1490,15 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
 .dd-table tr:hover td { background: rgba(255, 255, 255, 0.05); }
 
 /* Flag overrides for dd-table */
-.dd-table .cell-dark-red { background: var(--dark-red-bg) !important; color: var(--dark-red); font-weight: 600; }
-.dd-table .cell-red      { background: var(--red-bg) !important;      color: var(--red);      font-weight: 600; }
-.dd-table .cell-yellow   { background: var(--yellow-bg) !important;   color: var(--yellow); }
-.dd-table .cell-green    { background: var(--green-bg) !important;    color: var(--green); }
+.dd-table .cell-dark-red {
+  background: var(--dark-red-bg) !important;
+  color: var(--dark-red);
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--dark-red);
+}
+.dd-table .cell-red    { background: var(--red-bg)    !important; color: var(--red);    font-weight: 600; }
+.dd-table .cell-yellow { background: var(--yellow-bg) !important; color: var(--yellow); }
+.dd-table .cell-green  { background: var(--green-bg)  !important; color: var(--green);  }
 
 /* Flow section glass header */
 .flow-section-header {
