@@ -12,13 +12,13 @@ const charts = (() => {
 
   const COLORS = {
     navy:   '#0f1419',
-    accent: '#7eb8f7',   /* soft blue — readable on dark */
-    teal:   '#4db6ac',
+    accent: '#adc6ff',   /* blue primary — matches Samatva bento design */
+    teal:   '#4edea3',   /* green secondary */
     amber:  '#ffca28',
-    red:    '#ee7d77',
-    green:  '#81c784',
-    purple: '#b39ddb',
-    pink:   '#f48fb1',
+    red:    '#ff6b6b',
+    green:  '#4edea3',
+    purple: '#c084fc',
+    pink:   '#f9a8d4',
     silver: '#c6c6ca',
   };
 

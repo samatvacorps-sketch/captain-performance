@@ -40,6 +40,19 @@ const ui = (() => {
     charts.renderIPHChart('chart-iph', aggregated);
     charts.renderComplaintsChart('chart-complaints', aggregated);
 
+    // Stat cards
+    const totalOrders = aggregated.reduce((s,d) => s + (d.total_orders_picked||0), 0);
+    const totalComplaints = aggregated.reduce((s,d) => s + (d.total_complaints||0), 0);
+    const validPick = aggregated.filter(d => d.avg_picking_time_per_order > 0);
+    const avgPick = validPick.length ? validPick.reduce((s,d) => s + d.avg_picking_time_per_order, 0) / validPick.length : 0;
+    const validIPH = aggregated.filter(d => d.avg_iph > 0);
+    const avgIPH = validIPH.length ? validIPH.reduce((s,d) => s + d.avg_iph, 0) / validIPH.length : 0;
+    const _set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    _set('stat-total-orders', totalOrders.toLocaleString());
+    _set('stat-avg-pick-time', compute.formatDuration(avgPick));
+    _set('stat-avg-iph', avgIPH.toFixed(1));
+    _set('stat-total-complaints', totalComplaints.toLocaleString());
+
     // Table
     const title = document.getElementById('overview-table-title');
     if (title) title.textContent = period === 'weekly' ? 'Weekly Summary' : 'Monthly Summary';
@@ -79,6 +92,15 @@ const ui = (() => {
       <td>${_fmt(d.total_racks_audited)}</td>
       <td>${_fmt(d.total_complaints)}</td>
     </tr>`).join('');
+  }
+
+  function setOverviewPeriod(val) {
+    const sel = document.getElementById('overview-period');
+    if (sel) sel.value = val;
+    document.querySelectorAll('.period-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.period === val);
+    });
+    renderStoreOverview();
   }
 
   // ── Captain Deep Dive ──────────────────────────────────────────────────
@@ -1119,6 +1141,7 @@ const ui = (() => {
   return {
     switchTab,
     renderStoreOverview,
+    setOverviewPeriod,
     initDeepDivePeriods,
     renderDeepDive,
     onDeepDivePresetChange,

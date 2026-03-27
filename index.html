@@ -74,38 +74,107 @@
 
   <!-- ── STORE OVERVIEW ──────────────────────────────────────────────── -->
   <section id="tab-store-overview" class="tab-content active">
-    <div class="section-header">
-      <h2>Store Overview</h2>
-      <div class="controls">
-        <label>View:</label>
-        <select id="overview-period" onchange="ui.renderStoreOverview()">
+
+    <!-- Header -->
+    <div class="overview-header">
+      <div>
+        <nav class="overview-breadcrumb">
+          <span>Performance</span>
+          <span>›</span>
+          <span class="overview-breadcrumb-active">Operations</span>
+        </nav>
+        <h2 class="overview-title">Store Overview</h2>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="period-toggle">
+          <button class="period-btn active" data-period="weekly" onclick="ui.setOverviewPeriod('weekly')">Weekly</button>
+          <button class="period-btn" data-period="monthly" onclick="ui.setOverviewPeriod('monthly')">Monthly</button>
+        </div>
+        <!-- hidden select keeps JS working unchanged -->
+        <select id="overview-period" style="display:none">
           <option value="weekly">Weekly</option>
           <option value="monthly">Monthly</option>
         </select>
       </div>
     </div>
 
-    <!-- Chart Grid -->
-    <div class="chart-grid">
-      <div class="chart-card">
-        <h3>Orders Picked vs Picking Hours</h3>
+    <!-- Stat Cards -->
+    <div class="stat-cards-row">
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-blue">📦</div>
+        <div>
+          <p class="stat-label">Total Orders Picked</p>
+          <p class="stat-value" id="stat-total-orders">—</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-green">⏱</div>
+        <div>
+          <p class="stat-label">Avg Pick Time</p>
+          <p class="stat-value" id="stat-avg-pick-time">—</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-teal">📊</div>
+        <div>
+          <p class="stat-label">Avg IPH</p>
+          <p class="stat-value" id="stat-avg-iph">—</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stat-icon-red">⚠️</div>
+        <div>
+          <p class="stat-label">Total Complaints</p>
+          <p class="stat-value" id="stat-total-complaints">—</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bento Chart Grid -->
+    <div class="bento-grid">
+      <div class="bento-card bento-large">
+        <div class="bento-card-header">
+          <div>
+            <h3 class="bento-card-title">Orders Picked vs Picking Hours</h3>
+            <p class="bento-card-subtitle">Correlation analysis for operational efficiency</p>
+          </div>
+          <div class="bento-chart-legend">
+            <span class="legend-item"><span class="legend-dot legend-dot-blue"></span>Orders Picked</span>
+            <span class="legend-item"><span class="legend-dot legend-dot-green"></span>Picking Hours</span>
+          </div>
+        </div>
         <canvas id="chart-orders-hours"></canvas>
       </div>
-      <div class="chart-card">
-        <h3>Avg Time Metrics (mm:ss)</h3>
+      <div class="bento-card bento-small">
+        <div class="bento-card-header">
+          <div>
+            <h3 class="bento-card-title">Avg Time Metrics</h3>
+            <p class="bento-card-subtitle">mm:ss cycle distribution</p>
+          </div>
+        </div>
         <canvas id="chart-time-metrics"></canvas>
       </div>
-      <div class="chart-card">
-        <h3>Avg Items Put Away/Hr (IPH)</h3>
+      <div class="bento-card bento-half">
+        <div class="bento-card-header">
+          <div>
+            <h3 class="bento-card-title">Put Away Velocity (IPH)</h3>
+            <p class="bento-card-subtitle">Items processed per hour</p>
+          </div>
+        </div>
         <canvas id="chart-iph"></canvas>
       </div>
-      <div class="chart-card">
-        <h3>Complaints by Type</h3>
+      <div class="bento-card bento-half">
+        <div class="bento-card-header">
+          <div>
+            <h3 class="bento-card-title">Quality Assurance</h3>
+            <p class="bento-card-subtitle">Service complaints by category</p>
+          </div>
+        </div>
         <canvas id="chart-complaints"></canvas>
       </div>
     </div>
 
-    <!-- Summary Tables -->
+    <!-- Summary Table -->
     <div class="table-section">
       <h3 id="overview-table-title">Weekly Summary</h3>
       <div class="table-wrapper">
