@@ -822,29 +822,6 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
 .legend-dot-teal   { background: #4edea3; box-shadow: 0 0 6px rgba(78,222,163,0.5); }
 .legend-dot-purple { background: #c084fc; box-shadow: 0 0 6px rgba(192,132,252,0.5); }
 
-/* ── Unified page header — title left, controls top-right ─────────── */
-.page-header-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.header-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--card-bg);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 10px 18px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  margin-top: 6px;   /* optically align with title baseline */
-}
-
 /* ── Captain Deep Dive ─────────────────────────────────────────────── */
 .dd-page-header {
   margin-bottom: 18px;
@@ -1201,7 +1178,8 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   padding: 8px 16px;
 }
 
-.flags-date-strip input[type="date"] {
+.flags-date-strip input[type="date"],
+.flags-date-strip select {
   background: var(--surface-high);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1211,10 +1189,28 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s;
+  cursor: pointer;
 }
 
-.flags-date-strip input[type="date"]:focus {
+.flags-date-strip input[type="date"]:focus,
+.flags-date-strip select:focus {
   border-color: rgba(173, 198, 255, 0.45);
+}
+
+/* Thin vertical separator inside the strip */
+.strip-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-subtle);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+/* Dash separator between From / To */
+.dd-control-sep {
+  color: var(--text-muted);
+  opacity: 0.5;
+  font-size: 13px;
 }
 
 /* Bento metrics grid — 3 equal columns */
@@ -1598,9 +1594,8 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   .section-header { flex-direction: column; align-items: flex-start; gap: 8px; }
   .section-header h2 { font-size: 17px; }
 
-  /* Unified page header stacks on mobile */
-  .page-header-row { flex-direction: column; align-items: stretch; }
-  .header-controls { margin-top: 0; }
+  /* Date strip wraps on mobile */
+  .flags-date-strip { flex-wrap: wrap; }
 
   /* Controls */
   .controls { flex-direction: column; align-items: flex-start; width: 100%; }
