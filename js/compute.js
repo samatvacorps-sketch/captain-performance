@@ -401,6 +401,182 @@ const compute = (() => {
     return '';
   }
 
+  // ── 8. Audit Aggregations ────────────────────────────────────────────
+
+  /**
+   * Computes audit-specific aggregations from the Audits sub-sheet,
+   * joined with Daily Metrics data for auditor active hours.
+   *
+   * @param {Array} auditData  - parsed audit rows (from sheets.fetchAuditData)
+   * @param {Array} dailyData  - parsed daily metrics rows (from sheets.fetchData)
+   * @returns {{ volume, captainPerf, rackIntel }}
+   */
+  function computeAuditAggregations(auditData, dailyData) {
+    if (!auditData || auditData.length === 0) return null;
+
+    // Build lookup: (employee_id, YYYY-MM-DD) → daily metrics row
+    const dailyLookup = new Map();
+    for (const row of dailyData) {
+      if (!row.date) continue;
+      const key = `${row.employee_id}_${_dateKey(row.date)}`;
+      dailyLookup.set(key, row);
+    }
+
+    // ── Volume aggregation ──────────────────────────────────────────
+    const dailyMap = new Map();
+    for (const row of auditData) {
+      let entry = dailyMap.get(row.dateStr);
+      if (!entry) {
+        entry = { date: row.date, totalRacks: 0, captains: new Set(), codes: new Set() };
+        dailyMap.set(row.dateStr, entry);
+      }
+      entry.totalRacks += row.audit_codes.length;
+      entry.captains.add(row.employee_id);
+      for (const c of row.audit_codes) entry.codes.add(c);
+    }
+
+    // Convert sets to counts for daily
+    const daily = new Map();
+    for (const [ds, v] of dailyMap) {
+      daily.set(ds, { date: v.date, totalRacks: v.totalRacks, totalCaptains: v.captains.size, uniqueCodes: v.codes.size });
+    }
+
+    // Weekly
+    const weekBuckets = {};
+    for (const [, v] of dailyMap) {
+      const wk = _isoWeekKey(v.date);
+      if (!weekBuckets[wk]) weekBuckets[wk] = { weekKey: wk, weekStart: _weekStart(v.date), totalRacks: 0, captains: new Set(), codes: new Set(), days: 0 };
+      const b = weekBuckets[wk];
+      b.totalRacks += v.totalRacks;
+      for (const c of v.captains) b.captains.add(c);
+      for (const c of v.codes) b.codes.add(c);
+      b.days++;
+    }
+    const weekly = Object.values(weekBuckets)
+      .sort((a, b) => a.weekStart - b.weekStart)
+      .map(b => ({
+        weekKey: b.weekKey, label: _weekLabel(b.weekStart),
+        totalRacks: b.totalRacks, totalCaptains: b.captains.size, uniqueCodes: b.codes.size,
+        avgRacksPerDay: b.days > 0 ? +(b.totalRacks / b.days).toFixed(1) : 0,
+      }));
+
+    // Monthly
+    const monthBuckets = {};
+    for (const [, v] of dailyMap) {
+      const mk = `${v.date.getFullYear()}-${String(v.date.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthBuckets[mk]) monthBuckets[mk] = { monthKey: mk, totalRacks: 0, captains: new Set(), codes: new Set(), days: 0 };
+      const b = monthBuckets[mk];
+      b.totalRacks += v.totalRacks;
+      for (const c of v.captains) b.captains.add(c);
+      for (const c of v.codes) b.codes.add(c);
+      b.days++;
+    }
+    const monthly = Object.values(monthBuckets)
+      .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+      .map(b => ({
+        monthKey: b.monthKey, label: b.monthKey,
+        totalRacks: b.totalRacks, totalCaptains: b.captains.size, uniqueCodes: b.codes.size,
+        avgRacksPerDay: b.days > 0 ? +(b.totalRacks / b.days).toFixed(1) : 0,
+      }));
+
+    const volume = { daily, weekly, monthly };
+
+    // ── Captain audit performance ───────────────────────────────────
+    const captainMap = new Map();
+    for (const row of auditData) {
+      let cap = captainMap.get(row.employee_id);
+      if (!cap) {
+        cap = { employee_id: row.employee_id, employee_name: row.employee_name, days: [] };
+        captainMap.set(row.employee_id, cap);
+      }
+
+      const lookupKey = `${row.employee_id}_${row.dateStr}`;
+      const dailyRow = dailyLookup.get(lookupKey);
+      const auditSeconds = dailyRow ? dailyRow.auditor_active_time : 0;
+      const auditHours = auditSeconds / 3600;
+      const racksCount = row.audit_codes.length;
+
+      cap.days.push({
+        dateStr: row.dateStr,
+        date: row.date,
+        audit_codes: row.audit_codes,
+        racks: racksCount,
+        auditor_active_hours: +auditHours.toFixed(2),
+        racks_per_hour: auditHours > 0 ? +(racksCount / auditHours).toFixed(1) : null,
+      });
+    }
+
+    // Compute totals
+    for (const [, cap] of captainMap) {
+      const totalRacks = cap.days.reduce((s, d) => s + d.racks, 0);
+      const totalHours = cap.days.reduce((s, d) => s + d.auditor_active_hours, 0);
+      cap.totals = {
+        totalRacks,
+        totalHours: +totalHours.toFixed(2),
+        avgRacksPerHour: totalHours > 0 ? +(totalRacks / totalHours).toFixed(1) : null,
+        totalDays: cap.days.length,
+        avgRacksPerDay: +(totalRacks / cap.days.length).toFixed(1),
+      };
+    }
+
+    const captainPerf = captainMap;
+
+    // ── Rack intelligence ───────────────────────────────────────────
+    const rackFreq = new Map();
+    for (const row of auditData) {
+      for (const code of row.audit_codes) {
+        let entry = rackFreq.get(code);
+        if (!entry) {
+          entry = { count: 0, dates: new Set(), captains: new Set() };
+          rackFreq.set(code, entry);
+        }
+        entry.count++;
+        entry.dates.add(row.dateStr);
+        entry.captains.add(row.employee_id);
+      }
+    }
+
+    const sorted = [...rackFreq.entries()]
+      .map(([code, v]) => {
+        const parsed = _parseRackCode(code);
+        return {
+          rackCode: code, count: v.count,
+          uniqueDates: v.dates.size, uniqueCaptains: v.captains.size,
+          lastAudited: [...v.dates].sort().pop() || '',
+          floor: parsed.floor, aisle: parsed.aisle, position: parsed.position,
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+
+    // Floor-aisle heatmap
+    const floorAisleHeatmap = new Map();
+    for (const rack of sorted) {
+      if (!floorAisleHeatmap.has(rack.floor)) floorAisleHeatmap.set(rack.floor, new Map());
+      const aisleMap = floorAisleHeatmap.get(rack.floor);
+      aisleMap.set(rack.aisle, (aisleMap.get(rack.aisle) || 0) + rack.count);
+    }
+
+    const rackIntel = { rackFrequency: rackFreq, sorted, floorAisleHeatmap };
+
+    return { volume, captainPerf, rackIntel };
+  }
+
+  function _dateKey(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  function _parseRackCode(code) {
+    const parts = code.split('-');
+    return {
+      floor: parts[0] || '',
+      aisle: parts[1] || '',
+      position: parts.slice(2).join('-') || '',
+    };
+  }
+
   return {
     computeFlowFlags,
     computeFNVRate,
@@ -409,6 +585,7 @@ const compute = (() => {
     flagSlackers,
     aggregateWeekly,
     aggregateMonthly,
+    computeAuditAggregations,
     formatDuration,
     deviationClass,
   };

@@ -1349,6 +1349,386 @@ const ui = (() => {
       .replace(/"/g, '&quot;');
   }
 
+  // ── Inventory Health ────────────────────────────────────────────────
+
+  let _invCache = null;      // cached computeAuditAggregations result
+  let _invCacheKey = null;   // cache key to invalidate on data refresh
+
+  function initInventoryHealth() {
+    const auditData = sheets.getAuditCached();
+    const monthSel = document.getElementById('inv-month');
+    if (!monthSel || !auditData || auditData.length === 0) return;
+
+    // Collect unique months from audit data
+    const months = [...new Set(auditData.map(r => {
+      const y = r.date.getFullYear();
+      const m = String(r.date.getMonth() + 1).padStart(2, '0');
+      return `${y}-${m}`;
+    }))].sort();
+
+    monthSel.innerHTML = '<option value="all">All Months</option>' +
+      months.map(m => `<option value="${m}">${m}</option>`).join('');
+
+    _invCache = null;
+    _invCacheKey = null;
+  }
+
+  function onInvPeriodChange() {
+    renderInventoryHealth();
+  }
+
+  function renderInventoryHealth() {
+    const container = document.getElementById('inv-content');
+    if (!container) return;
+
+    const auditData = sheets.getAuditCached();
+    const dailyData = sheets.getCached();
+
+    if (!auditData || auditData.length === 0) {
+      container.innerHTML = '<p class="placeholder-text">No audit data available. Ensure the "Audits" sheet exists in the source spreadsheet.</p>';
+      return;
+    }
+
+    // Filter by month if selected
+    const monthFilter = document.getElementById('inv-month')?.value || 'all';
+    let filteredAudit = auditData;
+    let filteredDaily = dailyData;
+    if (monthFilter !== 'all') {
+      filteredAudit = auditData.filter(r => {
+        const mk = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}`;
+        return mk === monthFilter;
+      });
+      filteredDaily = dailyData.filter(r => {
+        if (!r.date) return false;
+        const mk = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}`;
+        return mk === monthFilter;
+      });
+    }
+
+    if (filteredAudit.length === 0) {
+      container.innerHTML = '<p class="placeholder-text">No audit data for the selected period.</p>';
+      return;
+    }
+
+    // Compute (or use cache)
+    const cacheKey = `${monthFilter}_${auditData.length}`;
+    if (_invCacheKey !== cacheKey) {
+      _invCache = compute.computeAuditAggregations(filteredAudit, filteredDaily);
+      _invCacheKey = cacheKey;
+    }
+    const agg = _invCache;
+    if (!agg) return;
+
+    const period = document.getElementById('inv-period')?.value || 'weekly';
+    const periodData = period === 'monthly' ? agg.volume.monthly : agg.volume.weekly;
+
+    // Totals for stat cards
+    const totalRacks = [...agg.volume.daily.values()].reduce((s, d) => s + d.totalRacks, 0);
+    const totalAuditors = new Set(filteredAudit.map(r => r.employee_id)).size;
+    const activeDays = agg.volume.daily.size;
+    const avgRacksPerDay = activeDays > 0 ? (totalRacks / activeDays).toFixed(1) : '0';
+    const uniqueCodes = new Set(filteredAudit.flatMap(r => r.audit_codes)).size;
+
+    // Build the full HTML
+    container.innerHTML = `
+      <!-- Stat Cards -->
+      <div class="stat-cards-row">
+        ${_invStatCard(ICONS.flowAudit, 'stat-icon-blue', 'Total Racks Audited', _fmt(totalRacks))}
+        ${_invStatCard(ICONS.person, 'stat-icon-green', 'Active Auditors', totalAuditors)}
+        ${_invStatCard(ICONS.barChart, 'stat-icon-teal', 'Avg Racks / Day', avgRacksPerDay)}
+        ${_invStatCard(ICONS.layers, 'stat-icon-purple', 'Unique Rack Codes', _fmt(uniqueCodes))}
+      </div>
+
+      <!-- Zone 1: Audit Volume -->
+      <div class="bento-grid" style="margin-bottom:20px;">
+        <div class="bento-card bento-large">
+          <div class="bento-card-header">
+            <div>
+              <h3 class="bento-card-title">Rack Audit Volume</h3>
+              <p class="bento-card-subtitle">Total racks audited vs active auditors over time</p>
+            </div>
+          </div>
+          <canvas id="chart-audit-volume" style="max-height:280px;"></canvas>
+        </div>
+        <div class="bento-card bento-small">
+          <div class="bento-card-header">
+            <div>
+              <h3 class="bento-card-title">Audit Coverage</h3>
+              <p class="bento-card-subtitle">Unique rack codes per ${period === 'monthly' ? 'month' : 'week'}</p>
+            </div>
+          </div>
+          <canvas id="chart-audit-coverage" style="max-height:280px;"></canvas>
+        </div>
+      </div>
+
+      <!-- Zone 2: Captain Performance -->
+      <div class="inv-section">
+        <div class="tiers-section-header" style="margin-bottom:14px;">
+          <div class="tiers-section-pip" style="background:#4edea3"></div>
+          <h3 class="tiers-section-title">Captain Audit Performance</h3>
+        </div>
+        <div class="bento-grid" style="margin-bottom:16px;">
+          <div class="bento-card bento-large">
+            <div class="bento-card-header">
+              <div>
+                <h3 class="bento-card-title">Efficiency: Hours vs Racks</h3>
+                <p class="bento-card-subtitle">Each dot = one captain · size = audit days · dashed = avg rate</p>
+              </div>
+            </div>
+            <canvas id="chart-captain-efficiency" style="max-height:300px;"></canvas>
+          </div>
+          <div class="bento-card bento-small">
+            <div class="bento-card-header">
+              <div>
+                <h3 class="bento-card-title">Racks / Hour Ranking</h3>
+                <p class="bento-card-subtitle">Captain efficiency leaderboard</p>
+              </div>
+            </div>
+            <div id="inv-captain-ranking" class="inv-ranking-list"></div>
+          </div>
+        </div>
+        <div id="inv-captain-table-container"></div>
+      </div>
+
+      <!-- Zone 3: Rack Intelligence -->
+      <div class="inv-section">
+        <div class="tiers-section-header" style="margin-bottom:14px;">
+          <div class="tiers-section-pip" style="background:#c084fc"></div>
+          <h3 class="tiers-section-title">Rack Intelligence</h3>
+        </div>
+        <div class="bento-grid" style="margin-bottom:16px;">
+          <div class="bento-card bento-large">
+            <div class="bento-card-header">
+              <div>
+                <h3 class="bento-card-title">Hot-Spot Heatmap</h3>
+                <p class="bento-card-subtitle">Audit frequency by floor and aisle</p>
+              </div>
+            </div>
+            <div id="inv-heatmap" style="overflow-x:auto;"></div>
+          </div>
+          <div class="bento-card bento-small">
+            <div class="bento-card-header">
+              <div>
+                <h3 class="bento-card-title">Most Audited Racks</h3>
+                <p class="bento-card-subtitle">Top repeat audit locations</p>
+              </div>
+            </div>
+            <div id="inv-top-racks" class="inv-rack-list"></div>
+          </div>
+        </div>
+        <div id="inv-rack-table-container"></div>
+      </div>
+    `;
+
+    // Render charts
+    setTimeout(() => {
+      charts.renderAuditVolumeChart('chart-audit-volume', periodData);
+      charts.renderAuditCoverageChart('chart-audit-coverage', periodData);
+
+      // Scatter chart
+      const captainArr = [...agg.captainPerf.values()].filter(c => c.totals.totalHours > 0);
+      charts.renderAuditScatterChart('chart-captain-efficiency', captainArr);
+
+      // Captain ranking
+      _renderCaptainRanking(captainArr);
+
+      // Captain table
+      _renderCaptainAuditTable(captainArr);
+
+      // Heatmap
+      _renderHeatmap(agg.rackIntel);
+
+      // Top racks
+      _renderTopRacks(agg.rackIntel.sorted);
+
+      // Rack table
+      _renderRackDetailTable(agg.rackIntel.sorted);
+    }, 0);
+  }
+
+  function _invStatCard(icon, colorClass, label, value) {
+    return `
+      <div class="stat-card">
+        <div class="stat-icon ${colorClass}">${icon}</div>
+        <div>
+          <p class="stat-card-label">${label}</p>
+          <p class="stat-card-value">${value}</p>
+        </div>
+      </div>`;
+  }
+
+  function _renderCaptainRanking(captains) {
+    const container = document.getElementById('inv-captain-ranking');
+    if (!container) return;
+
+    const sorted = [...captains]
+      .filter(c => c.totals.avgRacksPerHour !== null)
+      .sort((a, b) => (b.totals.avgRacksPerHour || 0) - (a.totals.avgRacksPerHour || 0));
+
+    const maxRPH = sorted.length > 0 ? sorted[0].totals.avgRacksPerHour : 1;
+    const top = sorted.slice(0, 10);
+
+    container.innerHTML = top.map((c, i) => {
+      const initials = c.employee_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+      const pct = maxRPH > 0 ? ((c.totals.avgRacksPerHour / maxRPH) * 100).toFixed(0) : 0;
+      return `
+        <div class="inv-ranking-item">
+          <span class="inv-ranking-rank">${i + 1}</span>
+          <div class="inv-ranking-avatar">${initials}</div>
+          <div class="inv-ranking-info">
+            <div class="inv-ranking-name">${_esc(c.employee_name)}</div>
+            <div class="inv-ranking-sub">${c.totals.totalDays} days · ${c.totals.totalRacks} racks</div>
+          </div>
+          <span class="inv-ranking-value">${c.totals.avgRacksPerHour}</span>
+          <div class="inv-ranking-bar"><div class="inv-ranking-bar-fill" style="width:${pct}%"></div></div>
+        </div>`;
+    }).join('');
+  }
+
+  function _renderCaptainAuditTable(captains) {
+    const container = document.getElementById('inv-captain-table-container');
+    if (!container) return;
+
+    const sorted = [...captains].sort((a, b) => (b.totals.avgRacksPerHour || 0) - (a.totals.avgRacksPerHour || 0));
+
+    const rows = sorted.map(c => `
+      <tr>
+        <td><strong>${_esc(c.employee_name)}</strong><br><span style="color:var(--text-muted);font-size:11px;">${_esc(c.employee_id)}</span></td>
+        <td>${c.totals.totalDays}</td>
+        <td>${_fmt(c.totals.totalRacks)}</td>
+        <td>${c.totals.totalHours.toFixed(1)}</td>
+        <td style="font-weight:700;color:#4edea3;">${c.totals.avgRacksPerHour ?? '—'}</td>
+        <td>${c.totals.avgRacksPerDay}</td>
+      </tr>
+    `).join('');
+
+    container.innerHTML = `
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Captain</th>
+              <th>Days Audited</th>
+              <th>Total Racks</th>
+              <th>Total Hours</th>
+              <th>Racks / Hr</th>
+              <th>Avg Racks / Day</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function _renderHeatmap(rackIntel) {
+    const container = document.getElementById('inv-heatmap');
+    if (!container) return;
+
+    const heatmap = rackIntel.floorAisleHeatmap;
+    if (!heatmap || heatmap.size === 0) {
+      container.innerHTML = '<p class="placeholder-text">No rack data to display.</p>';
+      return;
+    }
+
+    // Collect all unique aisles across all floors
+    const allAisles = new Set();
+    for (const [, aisleMap] of heatmap) {
+      for (const aisle of aisleMap.keys()) allAisles.add(aisle);
+    }
+    const aisles = [...allAisles].sort();
+    const floors = [...heatmap.keys()].sort();
+
+    // Find max for color scaling
+    let maxCount = 0;
+    for (const [, aisleMap] of heatmap) {
+      for (const [, count] of aisleMap) {
+        if (count > maxCount) maxCount = count;
+      }
+    }
+
+    const cols = aisles.length + 1; // +1 for row labels
+
+    // Header row
+    let html = `<div class="inv-heatmap-grid" style="grid-template-columns: 50px repeat(${aisles.length}, 1fr);">`;
+    html += '<div class="inv-heatmap-label inv-heatmap-corner"></div>';
+    for (const aisle of aisles) {
+      html += `<div class="inv-heatmap-label">${aisle}</div>`;
+    }
+
+    // Data rows
+    for (const floor of floors) {
+      html += `<div class="inv-heatmap-label">${floor}</div>`;
+      const aisleMap = heatmap.get(floor);
+      for (const aisle of aisles) {
+        const count = aisleMap?.get(aisle) || 0;
+        const intensity = maxCount > 0 ? count / maxCount : 0;
+        const bg = count === 0
+          ? 'var(--surface-high)'
+          : `rgba(78, 222, 163, ${(0.12 + intensity * 0.75).toFixed(2)})`;
+        const textColor = intensity > 0.5 ? '#0f1419' : 'var(--text)';
+        html += `<div class="inv-heatmap-cell" style="background:${bg};color:${textColor};" title="${floor}-${aisle}: ${count} audits">${count || ''}</div>`;
+      }
+    }
+    html += '</div>';
+
+    container.innerHTML = html;
+  }
+
+  function _renderTopRacks(sorted) {
+    const container = document.getElementById('inv-top-racks');
+    if (!container) return;
+
+    const top = sorted.slice(0, 20);
+    const maxCount = top.length > 0 ? top[0].count : 1;
+
+    container.innerHTML = top.map((r, i) => {
+      const pct = ((r.count / maxCount) * 100).toFixed(0);
+      return `
+        <div class="inv-rack-item">
+          <span class="inv-rack-rank">${i + 1}</span>
+          <span class="inv-rack-code">${_esc(r.rackCode)}</span>
+          <div class="inv-rack-bar"><div class="inv-rack-bar-fill" style="width:${pct}%"></div></div>
+          <span class="inv-rack-count">${r.count}</span>
+          <span class="inv-rack-meta">${r.uniqueCaptains} cap · ${r.uniqueDates} days</span>
+        </div>`;
+    }).join('');
+  }
+
+  function _renderRackDetailTable(sorted) {
+    const container = document.getElementById('inv-rack-table-container');
+    if (!container) return;
+
+    const rows = sorted.slice(0, 50).map(r => `
+      <tr>
+        <td style="font-family:'SF Mono','Fira Code',monospace;color:#c084fc;">${_esc(r.rackCode)}</td>
+        <td>${_esc(r.floor)}</td>
+        <td>${_esc(r.aisle)}</td>
+        <td style="font-weight:700;">${r.count}</td>
+        <td>${r.uniqueDates}</td>
+        <td>${r.uniqueCaptains}</td>
+        <td style="font-size:11px;color:var(--text-muted);">${r.lastAudited}</td>
+      </tr>
+    `).join('');
+
+    container.innerHTML = `
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Rack Code</th>
+              <th>Floor</th>
+              <th>Aisle</th>
+              <th>Audit Count</th>
+              <th>Unique Days</th>
+              <th>Unique Captains</th>
+              <th>Last Audited</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
   return {
     switchTab,
     renderStoreOverview,
@@ -1368,6 +1748,9 @@ const ui = (() => {
     renderCaptainProfile,
     resetProfileDates,
     renderConfigPanel,
+    initInventoryHealth,
+    onInvPeriodChange,
+    renderInventoryHealth,
   };
 })();
 
@@ -1391,6 +1774,7 @@ const app = (() => {
     _setLoading(true);
     try {
       const raw = await sheets.fetchData(true);
+      await sheets.fetchAuditData(true);
 
       // Compute stats pipeline
       _storeStats   = compute.computeStoreStats(raw);
@@ -1406,6 +1790,7 @@ const app = (() => {
       ui.initFlagsDate();
       ui.initCaptainDropdown();
       ui.initTiersView();
+      ui.initInventoryHealth();
 
       // Render active tab
       _renderCurrentTab();
@@ -1445,6 +1830,7 @@ const app = (() => {
       case 'daily-flags':       ui.renderDailyFlags(); break;
       case 'captain-profile':   ui.renderCaptainProfile(); break;
       case 'tier-analysis':     ui.renderTiersView(); break;
+      case 'inventory-health':  ui.renderInventoryHealth(); break;
       case 'config-panel':      ui.renderConfigPanel(); break;
     }
   }

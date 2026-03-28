@@ -9,6 +9,7 @@ const sheets = (() => {
   const BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
   let _cache = null;
   let _lastFetched = null;
+  let _auditCache = null;
 
   // ── Public API ──────────────────────────────────────────────────────
 
@@ -57,6 +58,73 @@ const sheets = (() => {
 
   /** Returns when data was last fetched. */
   function lastFetched() { return _lastFetched; }
+
+  // ── Audit Data ─────────────────────────────────────────────────────
+
+  async function fetchAuditData(force = false) {
+    if (_auditCache && !force) return _auditCache;
+
+    const token = await auth.getToken();
+    if (!token) throw new Error('Not authenticated');
+
+    const url = `${BASE_URL}/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(CONFIG.AUDIT_DATA_RANGE)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`;
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      // Audit sheet may not exist — fail gracefully
+      console.warn('Audits sheet fetch failed:', response.status);
+      _auditCache = [];
+      return _auditCache;
+    }
+
+    const json = await response.json();
+    const rows = json.values || [];
+
+    if (rows.length < 2) {
+      _auditCache = [];
+      return _auditCache;
+    }
+
+    _auditCache = rows.slice(1).map(_parseAuditRow).filter(Boolean);
+    return _auditCache;
+  }
+
+  function _parseAuditRow(raw) {
+    if (!raw || raw.length === 0) return null;
+
+    const c = CONFIG.AUDIT_COL;
+    const dateRaw = raw[c.date];
+    if (dateRaw === undefined || dateRaw === null || dateRaw === '') return null;
+
+    const date = _parseDate(dateRaw);
+    if (!date) return null;
+
+    // Build dateStr as YYYY-MM-DD for join key consistency
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
+
+    const codesRaw = raw[c.audit_codes];
+    const audit_codes = codesRaw
+      ? String(codesRaw).split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+
+    return {
+      employee_id:   _str(raw[c.employee_id]),
+      employee_name: _str(raw[c.employee_name]),
+      date,
+      dateStr,
+      month:         _str(raw[c.month]),
+      audit_codes,
+    };
+  }
+
+  function getAuditCached() { return _auditCache || []; }
+  function clearAuditCache() { _auditCache = null; }
 
   // ── Row Parsing ─────────────────────────────────────────────────────
 
@@ -153,5 +221,5 @@ const sheets = (() => {
     return val !== undefined && val !== null ? String(val).trim() : '';
   }
 
-  return { fetchData, getCached, clearCache, lastFetched };
+  return { fetchData, getCached, clearCache, lastFetched, fetchAuditData, getAuditCached, clearAuditCache };
 })();

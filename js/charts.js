@@ -328,6 +328,168 @@ const charts = (() => {
     });
   }
 
+  // ── Chart 6: Audit Volume (dual-axis bar + line) ────────────────────
+
+  function renderAuditVolumeChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels   = aggregated.map(d => d.label || d.weekKey || d.monthKey);
+    const racks    = aggregated.map(d => d.totalRacks || 0);
+    const auditors = aggregated.map(d => d.totalCaptains || 0);
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Racks Audited',
+            data: racks,
+            backgroundColor: ALPHA(COLORS.accent, 0.7),
+            borderColor: COLORS.accent,
+            borderWidth: 1,
+            borderRadius: 4,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Active Auditors',
+            data: auditors,
+            type: 'line',
+            borderColor: COLORS.teal,
+            backgroundColor: ALPHA(COLORS.teal, 0.1),
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            yAxisID: 'y2',
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y:  { ...BASE_OPTS.scales.y, position: 'left',  title: { display: true, text: 'Racks', color: TICK_COLOR } },
+          y2: { ...BASE_OPTS.scales.y, position: 'right', title: { display: true, text: 'Auditors', color: TICK_COLOR }, grid: { drawOnChartArea: false } },
+        },
+      },
+    });
+  }
+
+  // ── Chart 7: Audit Coverage (bar — unique rack codes) ──────────────
+
+  function renderAuditCoverageChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = aggregated.map(d => d.label || d.weekKey || d.monthKey);
+    const codes  = aggregated.map(d => d.uniqueCodes || 0);
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Unique Rack Codes',
+          data: codes,
+          backgroundColor: ALPHA(COLORS.purple, 0.7),
+          borderColor: COLORS.purple,
+          borderWidth: 1,
+          borderRadius: 4,
+        }],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Unique Codes', color: TICK_COLOR } },
+        },
+      },
+    });
+  }
+
+  // ── Chart 8: Captain Efficiency Scatter ─────────────────────────────
+
+  function renderAuditScatterChart(canvasId, captainData) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const data = captainData
+      .filter(c => c.totals.totalHours > 0)
+      .map(c => ({
+        x: c.totals.totalHours,
+        y: c.totals.totalRacks,
+        label: c.employee_name,
+        days: c.totals.totalDays,
+        rph: c.totals.avgRacksPerHour,
+      }));
+
+    // Average racks/hour line
+    const totalR = data.reduce((s, d) => s + d.y, 0);
+    const totalH = data.reduce((s, d) => s + d.x, 0);
+    const avgRPH = totalH > 0 ? totalR / totalH : 0;
+    const maxH = Math.max(...data.map(d => d.x), 1);
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [
+          {
+            label: 'Captains',
+            data,
+            backgroundColor: ALPHA(COLORS.teal, 0.6),
+            borderColor: COLORS.teal,
+            borderWidth: 1,
+            pointRadius: data.map(d => Math.max(5, Math.min(14, d.days * 1.2))),
+            pointHoverRadius: data.map(d => Math.max(7, Math.min(16, d.days * 1.2 + 2))),
+          },
+          {
+            label: `Avg (${avgRPH.toFixed(1)} racks/hr)`,
+            data: [{ x: 0, y: 0 }, { x: maxH, y: +(avgRPH * maxH).toFixed(0) }],
+            type: 'line',
+            borderColor: ALPHA(COLORS.silver, 0.5),
+            borderDash: [6, 4],
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        plugins: {
+          ...BASE_OPTS.plugins,
+          tooltip: {
+            ...BASE_OPTS.plugins.tooltip,
+            mode: 'nearest',
+            intersect: true,
+            callbacks: {
+              label: (ctx) => {
+                const d = ctx.raw;
+                if (!d.label) return '';
+                return [
+                  d.label,
+                  `Hours: ${d.x.toFixed(1)}`,
+                  `Racks: ${d.y}`,
+                  `Efficiency: ${d.rph} racks/hr`,
+                  `${d.days} audit days`,
+                ];
+              },
+            },
+          },
+        },
+        scales: {
+          ...BASE_OPTS.scales,
+          x: { ...BASE_OPTS.scales.x, title: { display: true, text: 'Audit Hours', color: TICK_COLOR } },
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Racks Audited', color: TICK_COLOR } },
+        },
+      },
+    });
+  }
+
   return {
     renderOrdersHoursChart,
     renderTimeMetricsChart,
@@ -335,5 +497,8 @@ const charts = (() => {
     renderComplaintsChart,
     renderPutawayChart,
     renderSparkline,
+    renderAuditVolumeChart,
+    renderAuditCoverageChart,
+    renderAuditScatterChart,
   };
 })();

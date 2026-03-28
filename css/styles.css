@@ -735,6 +735,214 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
 .config-table th { font-size: 10px; }
 .config-table td { font-size: 12px; }
 
+/* ── Inventory Health ─────────────────────────────────────────────── */
+
+.stat-icon-purple { background: rgba(192, 132, 252, 0.1); color: #c084fc; }
+
+.inv-section { margin-bottom: 28px; }
+
+/* Heatmap grid */
+.inv-heatmap-grid {
+  display: grid;
+  gap: 3px;
+}
+
+.inv-heatmap-cell {
+  border-radius: 5px;
+  padding: 6px 4px;
+  text-align: center;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 38px;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  transition: transform 0.15s, box-shadow 0.15s;
+  position: relative;
+}
+
+.inv-heatmap-cell:hover {
+  transform: scale(1.12);
+  z-index: 1;
+  box-shadow: 0 0 12px rgba(78, 222, 163, 0.25);
+}
+
+.inv-heatmap-label {
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inv-heatmap-corner { background: transparent; }
+
+/* Ranking list */
+.inv-ranking-list {
+  max-height: 420px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.inv-ranking-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface-high);
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  transition: border-color 0.15s;
+}
+
+.inv-ranking-item:hover { border-color: rgba(78, 222, 163, 0.25); }
+
+.inv-ranking-rank {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 22px;
+  text-align: center;
+}
+
+.inv-ranking-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(78, 222, 163, 0.1);
+  color: #4edea3;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.inv-ranking-info { flex: 1; min-width: 0; }
+
+.inv-ranking-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inv-ranking-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.inv-ranking-value {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #4edea3;
+  white-space: nowrap;
+}
+
+.inv-ranking-bar {
+  width: 60px;
+  height: 5px;
+  background: var(--border-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.inv-ranking-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #4edea3;
+  transition: width 0.4s ease;
+}
+
+/* Rack list */
+.inv-rack-list {
+  max-height: 480px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 4px;
+}
+
+.inv-rack-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  background: var(--surface-high);
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  transition: border-color 0.15s;
+}
+
+.inv-rack-item:hover { border-color: rgba(192, 132, 252, 0.25); }
+
+.inv-rack-rank {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 22px;
+  text-align: center;
+}
+
+.inv-rack-code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c084fc;
+  min-width: 90px;
+}
+
+.inv-rack-count {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 30px;
+  text-align: right;
+}
+
+.inv-rack-bar {
+  flex: 1;
+  height: 5px;
+  background: var(--border-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.inv-rack-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #c084fc;
+  transition: width 0.4s ease;
+}
+
+.inv-rack-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* ── Placeholder Text ─────────────────────────────────────────────── */
 .placeholder-text {
   text-align: center;
@@ -1772,6 +1980,9 @@ tr.row-serial td  { background: var(--dark-red-bg) !important; }
   /* Config */
   .config-grid { grid-template-columns: 1fr; }
   .config-card-wide { grid-column: auto; }
+
+  /* Inventory Health */
+  .inv-heatmap-grid { overflow-x: auto; }
 
   /* Flow sections */
   .flow-section-header { padding: 10px 14px; font-size: 9px; }

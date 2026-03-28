@@ -61,6 +61,9 @@
     <button class="tab-btn" data-tab="tier-analysis" onclick="app.switchTab('tier-analysis')">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="8,2 15,5.5 8,9 1,5.5"/><polyline points="1,10 8,13.5 15,10"/></svg> Tier Analysis
     </button>
+    <button class="tab-btn" data-tab="inventory-health" onclick="app.switchTab('inventory-health')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="10" height="12" rx="1.5"/><polyline points="6,8 7.5,9.5 10.5,6.5"/><line x1="5" y1="5" x2="11" y2="5"/></svg> Inventory Health
+    </button>
     <button class="tab-btn" data-tab="config-panel" onclick="app.switchTab('config-panel')">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="2" x2="4" y2="14"/><circle cx="4" cy="9" r="2"/><line x1="12" y1="2" x2="12" y2="14"/><circle cx="12" cy="5" r="2"/></svg> Config
     </button>
@@ -320,6 +323,34 @@
     </div>
 
     <div id="tiers-content"></div>
+  </section>
+
+  <!-- ── INVENTORY HEALTH ───────────────────────────────────────────── -->
+  <section id="tab-inventory-health" class="tab-content hidden">
+
+    <!-- Header -->
+    <div class="flags-page-header">
+      <div>
+        <p class="flags-fleet-label">Inventory Intelligence</p>
+        <h2 class="flags-title">Inventory Health</h2>
+      </div>
+      <div class="flags-date-strip">
+        <span class="dd-control-label">View</span>
+        <select id="inv-period" onchange="ui.onInvPeriodChange()">
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        <span class="strip-divider"></span>
+        <span class="dd-control-label">Month</span>
+        <select id="inv-month" onchange="ui.renderInventoryHealth()">
+          <option value="all">All Months</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="inv-content">
+      <p class="placeholder-text">Loading audit data…</p>
+    </div>
   </section>
 
   <!-- ── CONFIG PANEL ────────────────────────────────────────────────── -->

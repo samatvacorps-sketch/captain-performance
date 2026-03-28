@@ -16,6 +16,16 @@ const CONFIG = {
   SHEET_NAME: 'Daily Metrics',
   DATA_RANGE: 'Daily Metrics!A:V',
 
+  // ── Audits Sheet ───────────────────────────────────────────────────
+  AUDIT_DATA_RANGE: 'Audits!A:E',
+  AUDIT_COL: {
+    employee_id: 0,    // A
+    employee_name: 1,  // B
+    date: 2,           // C
+    month: 3,          // D
+    audit_codes: 4,    // E
+  },
+
   // ── Flagging ─────────────────────────────────────────────────────────
   // How many SDs worse than the store average before flagging.
   // Editable in the Config tab UI.
