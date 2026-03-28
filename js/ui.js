@@ -1577,7 +1577,7 @@ const ui = (() => {
           <div class="inv-ranking-avatar">${initials}</div>
           <div class="inv-ranking-info">
             <div class="inv-ranking-name">${_esc(c.employee_name)}</div>
-            <div class="inv-ranking-sub">${c.totals.totalDays} days · ${c.totals.totalRacks} racks</div>
+            <div class="inv-ranking-sub">${c.totals.totalHours}h · ${c.totals.totalRacks} racks</div>
           </div>
           <span class="inv-ranking-value">${c.totals.avgRacksPerHour}</span>
           <div class="inv-ranking-bar"><div class="inv-ranking-bar-fill" style="width:${pct}%"></div></div>
@@ -1594,9 +1594,9 @@ const ui = (() => {
     const rows = sorted.map(c => `
       <tr>
         <td><strong>${_esc(c.employee_name)}</strong><br><span style="color:var(--text-muted);font-size:11px;">${_esc(c.employee_id)}</span></td>
-        <td>${c.totals.totalDays}</td>
+        <td>${c.totals.totalDays}<span style="color:var(--text-muted);font-size:11px;"> (${c.totals.rackDays} w/racks)</span></td>
         <td>${_fmt(c.totals.totalRacks)}</td>
-        <td>${c.totals.totalHours.toFixed(1)}</td>
+        <td>${c.totals.totalHours}</td>
         <td style="font-weight:700;color:#4edea3;">${c.totals.avgRacksPerHour ?? '—'}</td>
         <td>${c.totals.avgRacksPerDay}</td>
       </tr>

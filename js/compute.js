@@ -507,6 +507,16 @@ const compute = (() => {
 
     const volume = { daily, weekly, monthly };
 
+    // ── Captain total audit hours from Daily Metrics (all audit days) ──
+    // Keyed by employee_id → total auditor_active_time seconds across ALL days
+    const captainAuditSeconds = new Map();
+    const captainAuditDays = new Map();
+    for (const row of dailyData) {
+      if (!row.auditor_active_time || row.auditor_active_time <= 0) continue;
+      captainAuditSeconds.set(row.employee_id, (captainAuditSeconds.get(row.employee_id) || 0) + row.auditor_active_time);
+      captainAuditDays.set(row.employee_id, (captainAuditDays.get(row.employee_id) || 0) + 1);
+    }
+
     // ── Captain audit performance ───────────────────────────────────
     const captainMap = new Map();
     for (const row of auditData) {
@@ -516,32 +526,28 @@ const compute = (() => {
         captainMap.set(row.employee_id, cap);
       }
 
-      const lookupKey = `${row.employee_id}_${row.dateStr}`;
-      const dailyRow = dailyLookup.get(lookupKey);
-      const auditSeconds = dailyRow ? dailyRow.auditor_active_time : 0;
-      const auditHours = auditSeconds / 3600;
       const racksCount = row.audit_codes.length;
-
       cap.days.push({
         dateStr: row.dateStr,
         date: row.date,
         audit_codes: row.audit_codes,
         racks: racksCount,
-        auditor_active_hours: +auditHours.toFixed(2),
-        racks_per_hour: auditHours > 0 ? +(racksCount / auditHours).toFixed(1) : null,
       });
     }
 
-    // Compute totals
-    for (const [, cap] of captainMap) {
+    // Compute totals — hours from Daily Metrics, racks from Audits sheet
+    for (const [empId, cap] of captainMap) {
       const totalRacks = cap.days.reduce((s, d) => s + d.racks, 0);
-      const totalHours = cap.days.reduce((s, d) => s + d.auditor_active_hours, 0);
+      const totalSeconds = captainAuditSeconds.get(empId) || 0;
+      const totalHours = totalSeconds / 3600;
+      const totalAuditDays = captainAuditDays.get(empId) || cap.days.length;
       cap.totals = {
         totalRacks,
-        totalHours: +totalHours.toFixed(2),
-        avgRacksPerHour: totalHours > 0 ? +(totalRacks / totalHours).toFixed(1) : null,
-        totalDays: cap.days.length,
-        avgRacksPerDay: +(totalRacks / cap.days.length).toFixed(1),
+        totalHours: +totalHours.toFixed(1),
+        avgRacksPerHour: totalHours > 0 ? +(totalRacks / totalHours).toFixed(2) : null,
+        totalDays: totalAuditDays,
+        rackDays: cap.days.length,
+        avgRacksPerDay: cap.days.length > 0 ? +(totalRacks / cap.days.length).toFixed(1) : 0,
       };
     }
 
