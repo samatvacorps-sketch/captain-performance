@@ -422,47 +422,59 @@ const compute = (() => {
       dailyLookup.set(key, row);
     }
 
-    // ── Volume aggregation ──────────────────────────────────────────
+    // ── Audit hours from Daily Metrics (all captains, not just Audits sheet) ──
+    // Keyed by YYYY-MM-DD date string → total seconds across all auditing captains
+    const dailyAuditSeconds = new Map();
+    for (const row of dailyData) {
+      if (!row.date || !row.auditor_active_time) continue;
+      const dk = _dateKey(row.date);
+      dailyAuditSeconds.set(dk, (dailyAuditSeconds.get(dk) || 0) + row.auditor_active_time);
+    }
+
+    // ── Volume aggregation (rack counts from Audits sheet) ──────────
     const dailyMap = new Map();
     for (const row of auditData) {
       let entry = dailyMap.get(row.dateStr);
       if (!entry) {
-        entry = { date: row.date, totalRacks: 0, captains: new Set(), codes: new Set(), auditSeconds: 0 };
+        entry = { date: row.date, totalRacks: 0, captains: new Set(), codes: new Set() };
         dailyMap.set(row.dateStr, entry);
       }
       entry.totalRacks += row.audit_codes.length;
       entry.captains.add(row.employee_id);
       for (const c of row.audit_codes) entry.codes.add(c);
-      // Accumulate auditor active time from daily metrics
-      const lookupKey = `${row.employee_id}_${row.dateStr}`;
-      const dailyRow = dailyLookup.get(lookupKey);
-      if (dailyRow) entry.auditSeconds += dailyRow.auditor_active_time || 0;
     }
 
-    // Convert sets to counts for daily
+    // Convert sets to counts for daily, pulling audit hours from Daily Metrics
     const daily = new Map();
     for (const [ds, v] of dailyMap) {
-      daily.set(ds, { date: v.date, totalRacks: v.totalRacks, totalCaptains: v.captains.size, uniqueCodes: v.codes.size, totalAuditHours: +(v.auditSeconds / 3600).toFixed(2) });
+      const auditSec = dailyAuditSeconds.get(ds) || 0;
+      daily.set(ds, { date: v.date, totalRacks: v.totalRacks, totalCaptains: v.captains.size, uniqueCodes: v.codes.size, totalAuditHours: +(auditSec / 3600).toFixed(2) });
     }
 
     // Weekly
     const weekBuckets = {};
-    for (const [, v] of dailyMap) {
+    for (const [ds, v] of dailyMap) {
       const wk = _isoWeekKey(v.date);
-      if (!weekBuckets[wk]) weekBuckets[wk] = { weekKey: wk, weekStart: _weekStart(v.date), totalRacks: 0, captains: new Set(), codes: new Set(), days: 0, auditSeconds: 0 };
+      if (!weekBuckets[wk]) weekBuckets[wk] = { weekKey: wk, weekStart: _weekStart(v.date), totalRacks: 0, captains: new Set(), codes: new Set(), days: 0 };
       const b = weekBuckets[wk];
       b.totalRacks += v.totalRacks;
       for (const c of v.captains) b.captains.add(c);
       for (const c of v.codes) b.codes.add(c);
-      b.auditSeconds += v.auditSeconds;
       b.days++;
+    }
+    // Pull audit hours for each week from Daily Metrics (iterate dailyData directly)
+    const weekAuditSeconds = {};
+    for (const row of dailyData) {
+      if (!row.date || !row.auditor_active_time) continue;
+      const wk = _isoWeekKey(row.date);
+      if (weekBuckets[wk]) weekAuditSeconds[wk] = (weekAuditSeconds[wk] || 0) + row.auditor_active_time;
     }
     const weekly = Object.values(weekBuckets)
       .sort((a, b) => a.weekStart - b.weekStart)
       .map(b => ({
         weekKey: b.weekKey, label: _weekLabel(b.weekStart),
         totalRacks: b.totalRacks, totalCaptains: b.captains.size, uniqueCodes: b.codes.size,
-        totalAuditHours: +(b.auditSeconds / 3600).toFixed(1),
+        totalAuditHours: +((weekAuditSeconds[b.weekKey] || 0) / 3600).toFixed(1),
         avgRacksPerDay: b.days > 0 ? +(b.totalRacks / b.days).toFixed(1) : 0,
       }));
 
@@ -470,20 +482,26 @@ const compute = (() => {
     const monthBuckets = {};
     for (const [, v] of dailyMap) {
       const mk = `${v.date.getFullYear()}-${String(v.date.getMonth() + 1).padStart(2, '0')}`;
-      if (!monthBuckets[mk]) monthBuckets[mk] = { monthKey: mk, totalRacks: 0, captains: new Set(), codes: new Set(), days: 0, auditSeconds: 0 };
+      if (!monthBuckets[mk]) monthBuckets[mk] = { monthKey: mk, totalRacks: 0, captains: new Set(), codes: new Set(), days: 0 };
       const b = monthBuckets[mk];
       b.totalRacks += v.totalRacks;
       for (const c of v.captains) b.captains.add(c);
       for (const c of v.codes) b.codes.add(c);
-      b.auditSeconds += v.auditSeconds;
       b.days++;
+    }
+    // Pull audit hours for each month from Daily Metrics
+    const monthAuditSeconds = {};
+    for (const row of dailyData) {
+      if (!row.date || !row.auditor_active_time) continue;
+      const mk = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}`;
+      if (monthBuckets[mk]) monthAuditSeconds[mk] = (monthAuditSeconds[mk] || 0) + row.auditor_active_time;
     }
     const monthly = Object.values(monthBuckets)
       .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
       .map(b => ({
         monthKey: b.monthKey, label: b.monthKey,
         totalRacks: b.totalRacks, totalCaptains: b.captains.size, uniqueCodes: b.codes.size,
-        totalAuditHours: +(b.auditSeconds / 3600).toFixed(1),
+        totalAuditHours: +((monthAuditSeconds[b.monthKey] || 0) / 3600).toFixed(1),
         avgRacksPerDay: b.days > 0 ? +(b.totalRacks / b.days).toFixed(1) : 0,
       }));
 
