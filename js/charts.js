@@ -335,9 +335,9 @@ const charts = (() => {
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return;
 
-    const labels   = aggregated.map(d => d.label || d.weekKey || d.monthKey);
-    const racks    = aggregated.map(d => d.totalRacks || 0);
-    const auditors = aggregated.map(d => d.totalCaptains || 0);
+    const labels = aggregated.map(d => d.label || d.weekKey || d.monthKey);
+    const racks  = aggregated.map(d => d.totalRacks || 0);
+    const hours  = aggregated.map(d => d.totalAuditHours || 0);
 
     _instances[canvasId] = new Chart(ctx, {
       type: 'bar',
@@ -354,8 +354,8 @@ const charts = (() => {
             yAxisID: 'y',
           },
           {
-            label: 'Active Auditors',
-            data: auditors,
+            label: 'Audit Hours',
+            data: hours,
             type: 'line',
             borderColor: COLORS.teal,
             backgroundColor: ALPHA(COLORS.teal, 0.1),
@@ -371,7 +371,7 @@ const charts = (() => {
         scales: {
           ...BASE_OPTS.scales,
           y:  { ...BASE_OPTS.scales.y, position: 'left',  title: { display: true, text: 'Racks', color: TICK_COLOR } },
-          y2: { ...BASE_OPTS.scales.y, position: 'right', title: { display: true, text: 'Auditors', color: TICK_COLOR }, grid: { drawOnChartArea: false } },
+          y2: { ...BASE_OPTS.scales.y, position: 'right', title: { display: true, text: 'Hours', color: TICK_COLOR }, grid: { drawOnChartArea: false } },
         },
       },
     });

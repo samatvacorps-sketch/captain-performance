@@ -427,29 +427,34 @@ const compute = (() => {
     for (const row of auditData) {
       let entry = dailyMap.get(row.dateStr);
       if (!entry) {
-        entry = { date: row.date, totalRacks: 0, captains: new Set(), codes: new Set() };
+        entry = { date: row.date, totalRacks: 0, captains: new Set(), codes: new Set(), auditSeconds: 0 };
         dailyMap.set(row.dateStr, entry);
       }
       entry.totalRacks += row.audit_codes.length;
       entry.captains.add(row.employee_id);
       for (const c of row.audit_codes) entry.codes.add(c);
+      // Accumulate auditor active time from daily metrics
+      const lookupKey = `${row.employee_id}_${row.dateStr}`;
+      const dailyRow = dailyLookup.get(lookupKey);
+      if (dailyRow) entry.auditSeconds += dailyRow.auditor_active_time || 0;
     }
 
     // Convert sets to counts for daily
     const daily = new Map();
     for (const [ds, v] of dailyMap) {
-      daily.set(ds, { date: v.date, totalRacks: v.totalRacks, totalCaptains: v.captains.size, uniqueCodes: v.codes.size });
+      daily.set(ds, { date: v.date, totalRacks: v.totalRacks, totalCaptains: v.captains.size, uniqueCodes: v.codes.size, totalAuditHours: +(v.auditSeconds / 3600).toFixed(2) });
     }
 
     // Weekly
     const weekBuckets = {};
     for (const [, v] of dailyMap) {
       const wk = _isoWeekKey(v.date);
-      if (!weekBuckets[wk]) weekBuckets[wk] = { weekKey: wk, weekStart: _weekStart(v.date), totalRacks: 0, captains: new Set(), codes: new Set(), days: 0 };
+      if (!weekBuckets[wk]) weekBuckets[wk] = { weekKey: wk, weekStart: _weekStart(v.date), totalRacks: 0, captains: new Set(), codes: new Set(), days: 0, auditSeconds: 0 };
       const b = weekBuckets[wk];
       b.totalRacks += v.totalRacks;
       for (const c of v.captains) b.captains.add(c);
       for (const c of v.codes) b.codes.add(c);
+      b.auditSeconds += v.auditSeconds;
       b.days++;
     }
     const weekly = Object.values(weekBuckets)
@@ -457,6 +462,7 @@ const compute = (() => {
       .map(b => ({
         weekKey: b.weekKey, label: _weekLabel(b.weekStart),
         totalRacks: b.totalRacks, totalCaptains: b.captains.size, uniqueCodes: b.codes.size,
+        totalAuditHours: +(b.auditSeconds / 3600).toFixed(1),
         avgRacksPerDay: b.days > 0 ? +(b.totalRacks / b.days).toFixed(1) : 0,
       }));
 
@@ -464,11 +470,12 @@ const compute = (() => {
     const monthBuckets = {};
     for (const [, v] of dailyMap) {
       const mk = `${v.date.getFullYear()}-${String(v.date.getMonth() + 1).padStart(2, '0')}`;
-      if (!monthBuckets[mk]) monthBuckets[mk] = { monthKey: mk, totalRacks: 0, captains: new Set(), codes: new Set(), days: 0 };
+      if (!monthBuckets[mk]) monthBuckets[mk] = { monthKey: mk, totalRacks: 0, captains: new Set(), codes: new Set(), days: 0, auditSeconds: 0 };
       const b = monthBuckets[mk];
       b.totalRacks += v.totalRacks;
       for (const c of v.captains) b.captains.add(c);
       for (const c of v.codes) b.codes.add(c);
+      b.auditSeconds += v.auditSeconds;
       b.days++;
     }
     const monthly = Object.values(monthBuckets)
@@ -476,6 +483,7 @@ const compute = (() => {
       .map(b => ({
         monthKey: b.monthKey, label: b.monthKey,
         totalRacks: b.totalRacks, totalCaptains: b.captains.size, uniqueCodes: b.codes.size,
+        totalAuditHours: +(b.auditSeconds / 3600).toFixed(1),
         avgRacksPerDay: b.days > 0 ? +(b.totalRacks / b.days).toFixed(1) : 0,
       }));
 
