@@ -1880,26 +1880,80 @@ const ui = (() => {
   let _complCache = null;
   let _complCacheKey = null;
   let _complIncludeQNG = true;
+  let _complDateMode = false;
 
   function initComplaintsDeepDive() {
     const complData = sheets.getComplaintsCached();
-    const monthSel = document.getElementById('compl-month');
-    if (!monthSel || !complData || complData.length === 0) return;
+    const sel = document.getElementById('compl-preset');
+    if (!sel || !complData || complData.length === 0) return;
 
-    const months = [...new Set(complData.map(r => {
-      const y = r.date.getFullYear();
-      const m = String(r.date.getMonth() + 1).padStart(2, '0');
-      return `${y}-${m}`;
-    }))].sort();
+    const weekly  = compute.aggregateWeekly(complData.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id })));
+    const monthly = compute.aggregateMonthly(complData.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id })));
 
-    monthSel.innerHTML = '<option value="all">All Months</option>' +
-      months.map(m => `<option value="${m}">${m}</option>`).join('');
+    sel.innerHTML = [
+      '<option value="all">All Time</option>',
+      '<optgroup label="Weekly">',
+      ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
+      '</optgroup>',
+      '<optgroup label="Monthly">',
+      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${d.label || d.month_key}</option>`),
+      '</optgroup>',
+    ].join('');
 
+    // Default: full span of complaints data
+    const sortedDates = complData.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+    if (sortedDates.length > 0) {
+      document.getElementById('compl-start').value = _isoDateStr(sortedDates[0]);
+      document.getElementById('compl-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
+    }
+
+    _complDateMode = false;
     _complCache = null;
     _complCacheKey = null;
   }
 
   function onComplPeriodChange() {
+    renderComplaintsDeepDive();
+  }
+
+  function onComplPresetChange() {
+    _complDateMode = false;
+    const complData = sheets.getComplaintsCached();
+    if (!complData) return;
+    const periodVal = document.getElementById('compl-preset')?.value;
+    if (!periodVal) return;
+
+    if (periodVal === 'all') {
+      const sortedDates = complData.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+      if (sortedDates.length > 0) {
+        document.getElementById('compl-start').value = _isoDateStr(sortedDates[0]);
+        document.getElementById('compl-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
+      }
+    } else {
+      const colonIdx   = periodVal.indexOf(':');
+      const periodType = periodVal.slice(0, colonIdx);
+      const periodKey  = periodVal.slice(colonIdx + 1);
+      const rows = complData.filter(row => {
+        if (!row.date) return false;
+        if (periodType === 'W') return compute.aggregateWeekly([{ date: row.date, dateStr: row.dateStr, employee_id: row.employee_id }]).some(w => w.week_key === periodKey);
+        const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
+        return ym === periodKey;
+      });
+      if (rows.length > 0) {
+        const dates = rows.map(r => r.date).sort((a, b) => a - b);
+        document.getElementById('compl-start').value = _isoDateStr(dates[0]);
+        document.getElementById('compl-end').value   = _isoDateStr(dates[dates.length - 1]);
+      }
+    }
+    _complCache = null;
+    _complCacheKey = null;
+    renderComplaintsDeepDive();
+  }
+
+  function onComplDateChange() {
+    _complDateMode = true;
+    _complCache = null;
+    _complCacheKey = null;
     renderComplaintsDeepDive();
   }
 
@@ -1927,21 +1981,13 @@ const ui = (() => {
       return;
     }
 
-    // Filter by month
-    const monthFilter = document.getElementById('compl-month')?.value || 'all';
-    let filteredCompl = complData;
-    let filteredDaily = dailyData;
-    if (monthFilter !== 'all') {
-      filteredCompl = complData.filter(r => {
-        const mk = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}`;
-        return mk === monthFilter;
-      });
-      filteredDaily = dailyData.filter(r => {
-        if (!r.date) return false;
-        const mk = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}`;
-        return mk === monthFilter;
-      });
-    }
+    // Filter by date range
+    const startVal = document.getElementById('compl-start')?.value;
+    const endVal   = document.getElementById('compl-end')?.value;
+    const startMs  = startVal ? new Date(startVal).setHours(0,0,0,0)     : -Infinity;
+    const endMs    = endVal   ? new Date(endVal).setHours(23,59,59,999)   : Infinity;
+    let filteredCompl = complData.filter(r => r.date && r.date >= startMs && r.date <= endMs);
+    let filteredDaily = dailyData.filter(r => r.date && r.date >= startMs && r.date <= endMs);
 
     // Exclude QNG if toggled off
     if (!_complIncludeQNG) {
@@ -1954,7 +2000,7 @@ const ui = (() => {
     }
 
     // Compute (or use cache)
-    const cacheKey = `${monthFilter}_${complData.length}_qng${_complIncludeQNG ? 1 : 0}`;
+    const cacheKey = `${startVal}_${endVal}_${complData.length}_qng${_complIncludeQNG ? 1 : 0}`;
     if (_complCacheKey !== cacheKey) {
       _complCache = compute.computeComplaintAggregations(filteredCompl, filteredDaily);
       _complCacheKey = cacheKey;
@@ -2202,6 +2248,8 @@ const ui = (() => {
     renderInventoryHealth,
     initComplaintsDeepDive,
     onComplPeriodChange,
+    onComplPresetChange,
+    onComplDateChange,
     renderComplaintsDeepDive,
     toggleComplQNG,
   };

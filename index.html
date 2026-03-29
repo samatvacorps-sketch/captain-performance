@@ -376,10 +376,14 @@
           <option value="monthly">Monthly</option>
         </select>
         <span class="strip-divider"></span>
-        <span class="dd-control-label">Month</span>
-        <select id="compl-month" onchange="ui.renderComplaintsDeepDive()">
-          <option value="all">All Months</option>
-        </select>
+        <span class="dd-control-label">Quick select</span>
+        <select id="compl-preset" onchange="ui.onComplPresetChange()"></select>
+        <span class="strip-divider"></span>
+        <span class="dd-control-label">From</span>
+        <input type="date" id="compl-start" onchange="ui.onComplDateChange()">
+        <span class="dd-control-sep">—</span>
+        <span class="dd-control-label">To</span>
+        <input type="date" id="compl-end" onchange="ui.onComplDateChange()">
         <span class="strip-divider"></span>
         <button id="compl-qng-toggle" class="btn btn-secondary compl-qng-btn active" onclick="ui.toggleComplQNG()">QNG Included</button>
       </div>
