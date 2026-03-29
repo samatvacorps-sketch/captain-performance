@@ -82,7 +82,7 @@
   <section id="tab-store-overview" class="tab-content active">
 
     <!-- Header -->
-    <div class="overview-header">
+    <div class="flags-page-header">
       <div>
         <nav class="overview-breadcrumb">
           <span>Performance</span>
@@ -91,16 +91,21 @@
         </nav>
         <h2 class="overview-title">Store Overview</h2>
       </div>
-      <div style="display:flex;align-items:center;gap:12px;">
-        <div class="period-toggle">
-          <button class="period-btn active" data-period="weekly" onclick="ui.setOverviewPeriod('weekly')">Weekly</button>
-          <button class="period-btn" data-period="monthly" onclick="ui.setOverviewPeriod('monthly')">Monthly</button>
-        </div>
-        <!-- hidden select keeps JS working unchanged -->
-        <select id="overview-period" style="display:none">
+      <div class="flags-date-strip">
+        <span class="dd-control-label">View</span>
+        <select id="overview-period" onchange="ui.setOverviewPeriod(this.value)">
           <option value="weekly">Weekly</option>
           <option value="monthly">Monthly</option>
         </select>
+        <span class="strip-divider"></span>
+        <span class="dd-control-label">Quick select</span>
+        <select id="overview-preset" onchange="ui.onOverviewPresetChange()"></select>
+        <span class="strip-divider"></span>
+        <span class="dd-control-label">From</span>
+        <input type="date" id="overview-start" onchange="ui.onOverviewDateChange()">
+        <span class="dd-control-sep">—</span>
+        <span class="dd-control-label">To</span>
+        <input type="date" id="overview-end" onchange="ui.onOverviewDateChange()">
       </div>
     </div>
 

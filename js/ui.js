@@ -34,6 +34,72 @@ const ui = (() => {
 
   // ── Store Overview ─────────────────────────────────────────────────────
 
+  let _overviewDateMode = false;
+
+  function initOverviewPeriods() {
+    const data = app.getFlaggedData();
+    const sel  = document.getElementById('overview-preset');
+    if (!sel || !data || data.length === 0) return;
+
+    const weekly  = compute.aggregateWeekly(data);
+    const monthly = compute.aggregateMonthly(data);
+
+    sel.innerHTML = [
+      '<option value="all">All Time</option>',
+      '<optgroup label="Weekly">',
+      ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
+      '</optgroup>',
+      '<optgroup label="Monthly">',
+      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${d.label || d.month_key}</option>`),
+      '</optgroup>',
+    ].join('');
+
+    // Default: full span
+    const sortedDates = data.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+    if (sortedDates.length > 0) {
+      document.getElementById('overview-start').value = _isoDateStr(sortedDates[0]);
+      document.getElementById('overview-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
+    }
+    _overviewDateMode = false;
+  }
+
+  function onOverviewPresetChange() {
+    _overviewDateMode = false;
+    const data = app.getFlaggedData();
+    if (!data) return;
+    const periodVal = document.getElementById('overview-preset')?.value;
+    if (!periodVal) return;
+
+    if (periodVal === 'all') {
+      const sortedDates = data.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+      if (sortedDates.length > 0) {
+        document.getElementById('overview-start').value = _isoDateStr(sortedDates[0]);
+        document.getElementById('overview-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
+      }
+    } else {
+      const colonIdx   = periodVal.indexOf(':');
+      const periodType = periodVal.slice(0, colonIdx);
+      const periodKey  = periodVal.slice(colonIdx + 1);
+      const rows = data.filter(row => {
+        if (!row.date) return false;
+        if (periodType === 'W') return compute.aggregateWeekly([row]).some(w => w.week_key === periodKey);
+        const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
+        return ym === periodKey;
+      });
+      if (rows.length > 0) {
+        const dates = rows.map(r => r.date).sort((a, b) => a - b);
+        document.getElementById('overview-start').value = _isoDateStr(dates[0]);
+        document.getElementById('overview-end').value   = _isoDateStr(dates[dates.length - 1]);
+      }
+    }
+    renderStoreOverview();
+  }
+
+  function onOverviewDateChange() {
+    _overviewDateMode = true;
+    renderStoreOverview();
+  }
+
   function renderStoreOverview() {
     const data = app.getFlaggedData();
     if (!data || data.length === 0) return;
@@ -41,10 +107,19 @@ const ui = (() => {
     const auditData      = sheets.getAuditCached();
     const complaintsData = sheets.getComplaintsCached();
 
+    // Filter by date range
+    const startVal = document.getElementById('overview-start')?.value;
+    const endVal   = document.getElementById('overview-end')?.value;
+    const startMs  = startVal ? new Date(startVal).setHours(0,0,0,0)   : -Infinity;
+    const endMs    = endVal   ? new Date(endVal).setHours(23,59,59,999) : Infinity;
+    const filtered      = data.filter(r => r.date && r.date >= startMs && r.date <= endMs);
+    const filteredAudit = auditData ? auditData.filter(r => r.date && r.date >= startMs && r.date <= endMs) : [];
+    const filteredCompl = complaintsData ? complaintsData.filter(r => r.date && r.date >= startMs && r.date <= endMs) : [];
+
     const period = document.getElementById('overview-period')?.value || 'weekly';
     const aggregated = period === 'weekly'
-      ? compute.aggregateWeekly(data, auditData, complaintsData)
-      : compute.aggregateMonthly(data, auditData, complaintsData);
+      ? compute.aggregateWeekly(filtered, filteredAudit, filteredCompl)
+      : compute.aggregateMonthly(filtered, filteredAudit, filteredCompl);
 
     // Charts
     charts.renderOrdersHoursChart('chart-orders-hours', aggregated);
@@ -124,9 +199,6 @@ const ui = (() => {
   function setOverviewPeriod(val) {
     const sel = document.getElementById('overview-period');
     if (sel) sel.value = val;
-    document.querySelectorAll('.period-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.period === val);
-    });
     renderStoreOverview();
   }
 
@@ -2229,6 +2301,9 @@ const ui = (() => {
     switchTab,
     renderStoreOverview,
     setOverviewPeriod,
+    initOverviewPeriods,
+    onOverviewPresetChange,
+    onOverviewDateChange,
     initDeepDivePeriods,
     renderDeepDive,
     setDDFilter,
@@ -2294,6 +2369,7 @@ const app = (() => {
       ui.initDeepDivePeriods();
       ui.initFlagsDate();
       ui.initCaptainDropdown();
+      ui.initOverviewPeriods();
       ui.initTiersView();
       ui.initInventoryHealth();
       ui.initComplaintsDeepDive();
