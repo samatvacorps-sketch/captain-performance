@@ -789,12 +789,17 @@ const compute = (() => {
           employee_id: row.employee_id,
           employee_name: row.employee_id ? (captainNames.get(row.employee_id) || row.employee_id) : 'Unknown',
           totalComplaints: 0, inStoreYes: 0, inStoreNo: 0,
+          pickerFaultMissingOrders: new Set(),
           byCategory: {}, days: new Map(),
         };
         captainMap.set(row.employee_id, cap);
       }
       cap.totalComplaints++;
       if (row.in_store) cap.inStoreYes++; else cap.inStoreNo++;
+      // Picker Fault Missing: unique orders where category=item_missing AND in_store=Y
+      if (row.in_store && (row.complaint_category || '').toLowerCase() === 'item_missing') {
+        cap.pickerFaultMissingOrders.add(row.order_id);
+      }
       const cat = row.complaint_category || 'unknown';
       cap.byCategory[cat] = (cap.byCategory[cat] || 0) + 1;
       const dayEntry = cap.days.get(row.dateStr) || { complaints: 0, inStoreYes: 0 };
@@ -808,12 +813,15 @@ const compute = (() => {
     for (const [empId, cap] of captainMap) {
       const totalOrds = captainOrders.get(empId) || 0;
       const topCat = Object.entries(cap.byCategory).sort((a, b) => b[1] - a[1])[0];
+      const pfm = cap.pickerFaultMissingOrders.size;
       captainPerf.set(empId, {
         employee_id: empId,
         employee_name: cap.employee_name,
         totalComplaints: cap.totalComplaints,
         inStoreYes: cap.inStoreYes,
         inStoreNo: cap.inStoreNo,
+        pickerFaultMissing: pfm,
+        pickerFaultMissingRate: totalOrds > 0 ? +(pfm / totalOrds * 100).toFixed(2) : 0,
         totalOrdersPicked: totalOrds,
         complaintRate: totalOrds > 0 ? +(cap.inStoreYes / totalOrds * 100).toFixed(2) : 0,
         byCategory: cap.byCategory,

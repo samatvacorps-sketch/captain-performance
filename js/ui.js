@@ -2156,13 +2156,15 @@ const ui = (() => {
     if (!container) return;
 
     const rows = captains.map(c => {
-      const rateClass = c.complaintRate >= 1 ? 'rate-high' : c.complaintRate >= 0.5 ? 'rate-medium' : 'rate-low';
+      const rateClass    = c.complaintRate >= 1        ? 'rate-high' : c.complaintRate >= 0.5        ? 'rate-medium' : 'rate-low';
+      const pfmRateClass = c.pickerFaultMissingRate >= 1 ? 'rate-high' : c.pickerFaultMissingRate >= 0.5 ? 'rate-medium' : 'rate-low';
       return `<tr>
         <td style="font-weight:600;">${_esc(c.employee_name)}</td>
         <td>${_fmt(c.totalOrdersPicked)}</td>
         <td>${c.totalComplaints}</td>
         <td style="font-weight:700;color:#ff6b6b;">${c.inStoreYes}</td>
-        <td>${c.inStoreNo}</td>
+        <td>${c.pickerFaultMissing ?? '—'}</td>
+        <td><span class="compl-rate-badge ${pfmRateClass}">${c.pickerFaultMissingRate ?? 0}%</span></td>
         <td><span class="compl-rate-badge ${rateClass}">${c.complaintRate}%</span></td>
         <td>${_esc(c.topCategory)}</td>
       </tr>`;
@@ -2177,7 +2179,8 @@ const ui = (() => {
               <th>Total Orders</th>
               <th>Total Complaints</th>
               <th>In-Store Yes</th>
-              <th>In-Store No</th>
+              <th>Picker Fault Missing<br><span style="font-size:9px;font-weight:500;opacity:0.65;text-transform:none;letter-spacing:0">(Order Level)</span></th>
+              <th>Picker Fault Missing Rate</th>
               <th>Complaint Rate</th>
               <th>Top Category</th>
             </tr>
