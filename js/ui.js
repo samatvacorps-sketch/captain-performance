@@ -1461,6 +1461,7 @@ const ui = (() => {
     const monthly = compute.aggregateMonthly(auditData.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id })));
 
     sel.innerHTML = [
+      '<option value="all">All Time</option>',
       '<optgroup label="Weekly">',
       ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
       '</optgroup>',
@@ -1491,19 +1492,29 @@ const ui = (() => {
     if (!auditData) return;
     const periodVal = document.getElementById('inv-preset')?.value;
     if (!periodVal) return;
-    const colonIdx  = periodVal.indexOf(':');
-    const periodType = periodVal.slice(0, colonIdx);
-    const periodKey  = periodVal.slice(colonIdx + 1);
-    const rows = auditData.filter(row => {
-      if (!row.date) return false;
-      if (periodType === 'W') return compute.aggregateWeekly([{ date: row.date, dateStr: row.dateStr, employee_id: row.employee_id }]).some(w => w.week_key === periodKey);
-      const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
-      return ym === periodKey;
-    });
-    if (rows.length > 0) {
-      const dates = rows.map(r => r.date).sort((a, b) => a - b);
-      document.getElementById('inv-start').value = _isoDateStr(dates[0]);
-      document.getElementById('inv-end').value   = _isoDateStr(dates[dates.length - 1]);
+
+    if (periodVal === 'all') {
+      // Reset to full date span
+      const sortedDates = auditData.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+      if (sortedDates.length > 0) {
+        document.getElementById('inv-start').value = _isoDateStr(sortedDates[0]);
+        document.getElementById('inv-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
+      }
+    } else {
+      const colonIdx  = periodVal.indexOf(':');
+      const periodType = periodVal.slice(0, colonIdx);
+      const periodKey  = periodVal.slice(colonIdx + 1);
+      const rows = auditData.filter(row => {
+        if (!row.date) return false;
+        if (periodType === 'W') return compute.aggregateWeekly([{ date: row.date, dateStr: row.dateStr, employee_id: row.employee_id }]).some(w => w.week_key === periodKey);
+        const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
+        return ym === periodKey;
+      });
+      if (rows.length > 0) {
+        const dates = rows.map(r => r.date).sort((a, b) => a - b);
+        document.getElementById('inv-start').value = _isoDateStr(dates[0]);
+        document.getElementById('inv-end').value   = _isoDateStr(dates[dates.length - 1]);
+      }
     }
     _invCache = null;
     _invCacheKey = null;
