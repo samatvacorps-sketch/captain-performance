@@ -580,6 +580,7 @@ const compute = (() => {
         totalRacks,
         totalHours: +totalHours.toFixed(1),
         avgRacksPerHour: totalHours > 0 ? +(totalRacks / totalHours).toFixed(2) : null,
+        hrPerRack: totalRacks > 0 ? +(totalHours / totalRacks).toFixed(2) : null,
         totalDays: totalAuditDays,
         rackDays: cap.days.length,
         avgRacksPerDay: cap.days.length > 0 ? +(totalRacks / cap.days.length).toFixed(1) : 0,

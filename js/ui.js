@@ -1777,16 +1777,19 @@ const ui = (() => {
     const container = document.getElementById('inv-captain-ranking');
     if (!container) return;
 
+    // Lower Hr/Rack = more efficient → sort ascending
     const sorted = [...captains]
-      .filter(c => c.totals.avgRacksPerHour !== null)
-      .sort((a, b) => (b.totals.avgRacksPerHour || 0) - (a.totals.avgRacksPerHour || 0));
+      .filter(c => c.totals.hrPerRack !== null)
+      .sort((a, b) => (a.totals.hrPerRack || Infinity) - (b.totals.hrPerRack || Infinity));
 
-    const maxRPH = sorted.length > 0 ? sorted[0].totals.avgRacksPerHour : 1;
+    const minHPR = sorted.length > 0 ? sorted[0].totals.hrPerRack : 1;
+    const maxHPR = sorted.length > 0 ? sorted[sorted.length - 1].totals.hrPerRack : 1;
     const top = sorted.slice(0, 10);
 
     container.innerHTML = top.map((c, i) => {
       const initials = c.employee_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-      const pct = maxRPH > 0 ? ((c.totals.avgRacksPerHour / maxRPH) * 100).toFixed(0) : 0;
+      const range = maxHPR - minHPR || 1;
+      const pct = Math.max(10, Math.round(100 - ((c.totals.hrPerRack - minHPR) / range) * 90));
       return `
         <div class="inv-ranking-item">
           <span class="inv-ranking-rank">${i + 1}</span>
@@ -1795,7 +1798,7 @@ const ui = (() => {
             <div class="inv-ranking-name">${_esc(c.employee_name)}</div>
             <div class="inv-ranking-sub">${c.totals.totalHours}h · ${c.totals.totalRacks} racks</div>
           </div>
-          <span class="inv-ranking-value">${c.totals.avgRacksPerHour}</span>
+          <span class="inv-ranking-value">${c.totals.hrPerRack}</span>
           <div class="inv-ranking-bar"><div class="inv-ranking-bar-fill" style="width:${pct}%"></div></div>
         </div>`;
     }).join('');
@@ -1805,7 +1808,7 @@ const ui = (() => {
     const container = document.getElementById('inv-captain-table-container');
     if (!container) return;
 
-    const sorted = [...captains].sort((a, b) => (b.totals.avgRacksPerHour || 0) - (a.totals.avgRacksPerHour || 0));
+    const sorted = [...captains].sort((a, b) => (a.totals.hrPerRack || Infinity) - (b.totals.hrPerRack || Infinity));
 
     const rows = sorted.map(c => `
       <tr>
@@ -1813,7 +1816,7 @@ const ui = (() => {
         <td>${c.totals.totalDays}<span style="color:var(--text-muted);font-size:11px;"> (${c.totals.rackDays} w/racks)</span></td>
         <td>${_fmt(c.totals.totalRacks)}</td>
         <td>${c.totals.totalHours}</td>
-        <td style="font-weight:700;color:#4edea3;">${c.totals.avgRacksPerHour ?? '—'}</td>
+        <td style="font-weight:700;color:#4edea3;">${c.totals.hrPerRack ?? '—'}</td>
         <td>${c.totals.avgRacksPerDay}</td>
       </tr>
     `).join('');
@@ -1827,7 +1830,7 @@ const ui = (() => {
               <th>Days Audited</th>
               <th>Total Racks</th>
               <th>Total Hours</th>
-              <th>Racks / Hr</th>
+              <th>Audit Efficiency<br><span style="font-size:9px;font-weight:500;opacity:0.65;text-transform:none;letter-spacing:0">(Hr / Rack)</span></th>
               <th>Avg Racks / Day</th>
             </tr>
           </thead>
