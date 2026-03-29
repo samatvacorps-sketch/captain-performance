@@ -26,6 +26,26 @@ const CONFIG = {
     audit_codes: 4,    // E
   },
 
+  // ── Complaints Sheet ──────────────────────────────────────────────────
+  COMPLAINTS_DATA_RANGE: 'Complaints!A:O',
+  COMPLAINTS_COL: {
+    cycle: 0,              // A
+    x: 1,                  // B
+    order_date: 2,         // C
+    outlet_id: 3,          // D
+    outlet_name: 4,        // E
+    order_id: 5,           // F
+    employee_id: 6,        // G
+    product_id: 7,         // H
+    product_name: 8,       // I
+    l0_category: 9,        // J
+    l1_category: 10,       // K
+    complaint_category: 11, // L
+    customer_name: 12,     // M
+    rca: 13,               // N
+    in_store: 14,          // O
+  },
+
   // ── Flagging ─────────────────────────────────────────────────────────
   // How many SDs worse than the store average before flagging.
   // Editable in the Config tab UI.

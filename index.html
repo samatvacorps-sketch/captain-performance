@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Captain Performance — Samatva Intelligence</title>
+  <title>Dark Store Analytics — Samatva Intelligence</title>
   <link rel="stylesheet" href="css/styles.css" />
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -16,7 +16,7 @@
 <div id="auth-screen" class="auth-screen">
   <div class="auth-card">
     <img src="assets/samatva-logo.png" alt="Samatva Intelligence" style="width:110px;height:110px;object-fit:contain;border-radius:16px;margin-bottom:8px;">
-    <h1 style="font-size:22px;margin-bottom:2px;">Captain Performance</h1>
+    <h1 style="font-size:22px;margin-bottom:2px;">Dark Store Analytics</h1>
     <p style="font-size:12px;color:#888;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:18px;">by Samatva Intelligence</p>
     <p>Sign in with your Google account to access captain performance data.</p>
     <div id="google-signin-btn"></div>
@@ -32,7 +32,7 @@
     <div class="header-left">
       <img src="assets/samatva-logo.png" alt="Samatva Intelligence" style="width:32px;height:32px;object-fit:contain;border-radius:6px;">
       <div style="display:flex;flex-direction:column;line-height:1.2;">
-        <span class="header-title">Captain Performance</span>
+        <span class="header-title">Dark Store Analytics</span>
         <span class="header-subtitle" style="font-size:10px;color:#888;letter-spacing:1.2px;text-transform:uppercase;">Samatva Intelligence</span>
       </div>
     </div>
@@ -63,6 +63,9 @@
     </button>
     <button class="tab-btn" data-tab="inventory-health" onclick="app.switchTab('inventory-health')">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="10" height="12" rx="1.5"/><polyline points="6,8 7.5,9.5 10.5,6.5"/><line x1="5" y1="5" x2="11" y2="5"/></svg> Inventory Health
+    </button>
+    <button class="tab-btn" data-tab="complaints-deep-dive" onclick="app.switchTab('complaints-deep-dive')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5L1.5 13.5h13z"/><line x1="8" y1="6" x2="8" y2="9.5"/><circle cx="8" cy="11.5" r="0.5" fill="currentColor"/></svg> Complaints
     </button>
     <button class="tab-btn" data-tab="config-panel" onclick="app.switchTab('config-panel')">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="2" x2="4" y2="14"/><circle cx="4" cy="9" r="2"/><line x1="12" y1="2" x2="12" y2="14"/><circle cx="12" cy="5" r="2"/></svg> Config
@@ -341,15 +344,49 @@
           <option value="monthly">Monthly</option>
         </select>
         <span class="strip-divider"></span>
-        <span class="dd-control-label">Month</span>
-        <select id="inv-month" onchange="ui.renderInventoryHealth()">
-          <option value="all">All Months</option>
-        </select>
+        <span class="dd-control-label">Quick select</span>
+        <select id="inv-preset" onchange="ui.onInvPresetChange()"></select>
+        <span class="strip-divider"></span>
+        <span class="dd-control-label">From</span>
+        <input type="date" id="inv-start" onchange="ui.onInvDateChange()">
+        <span class="dd-control-sep">—</span>
+        <span class="dd-control-label">To</span>
+        <input type="date" id="inv-end" onchange="ui.onInvDateChange()">
       </div>
     </div>
 
     <div id="inv-content">
       <p class="placeholder-text">Loading audit data…</p>
+    </div>
+  </section>
+
+  <!-- ── COMPLAINTS DEEP DIVE ───────────────────────────────────────── -->
+  <section id="tab-complaints-deep-dive" class="tab-content hidden">
+
+    <!-- Header -->
+    <div class="flags-page-header">
+      <div>
+        <p class="flags-fleet-label">Complaint Analytics</p>
+        <h2 class="flags-title">Complaints Deep Dive</h2>
+      </div>
+      <div class="flags-date-strip">
+        <span class="dd-control-label">View</span>
+        <select id="compl-period" onchange="ui.onComplPeriodChange()">
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        <span class="strip-divider"></span>
+        <span class="dd-control-label">Month</span>
+        <select id="compl-month" onchange="ui.renderComplaintsDeepDive()">
+          <option value="all">All Months</option>
+        </select>
+        <span class="strip-divider"></span>
+        <button id="compl-qng-toggle" class="btn btn-secondary compl-qng-btn active" onclick="ui.toggleComplQNG()">QNG Included</button>
+      </div>
+    </div>
+
+    <div id="compl-content">
+      <p class="placeholder-text">Loading complaints data…</p>
     </div>
   </section>
 

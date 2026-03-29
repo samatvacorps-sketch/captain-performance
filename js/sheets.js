@@ -10,6 +10,7 @@ const sheets = (() => {
   let _cache = null;
   let _lastFetched = null;
   let _auditCache = null;
+  let _complaintsCache = null;
 
   // ── Public API ──────────────────────────────────────────────────────
 
@@ -126,6 +127,78 @@ const sheets = (() => {
   function getAuditCached() { return _auditCache || []; }
   function clearAuditCache() { _auditCache = null; }
 
+  // ── Complaints Data ───────────────────────────────────────────────────
+
+  async function fetchComplaintsData(force = false) {
+    if (_complaintsCache && !force) return _complaintsCache;
+
+    const token = await auth.getToken();
+    if (!token) throw new Error('Not authenticated');
+
+    const url = `${BASE_URL}/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(CONFIG.COMPLAINTS_DATA_RANGE)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`;
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      console.warn('Complaints sheet fetch failed:', response.status);
+      _complaintsCache = [];
+      return _complaintsCache;
+    }
+
+    const json = await response.json();
+    const rows = json.values || [];
+
+    if (rows.length < 2) {
+      _complaintsCache = [];
+      return _complaintsCache;
+    }
+
+    _complaintsCache = rows.slice(1).map(_parseComplaintRow).filter(Boolean);
+    return _complaintsCache;
+  }
+
+  function _parseComplaintRow(raw) {
+    if (!raw || raw.length === 0) return null;
+
+    const c = CONFIG.COMPLAINTS_COL;
+    const dateRaw = raw[c.order_date];
+    if (dateRaw === undefined || dateRaw === null || dateRaw === '') return null;
+
+    const date = _parseDate(dateRaw);
+    if (!date) return null;
+
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
+
+    const inStoreRaw = _str(raw[c.in_store]).toUpperCase();
+
+    return {
+      cycle:              _str(raw[c.cycle]),
+      x:                  _str(raw[c.x]),
+      date,
+      dateStr,
+      outlet_id:          _str(raw[c.outlet_id]),
+      outlet_name:        _str(raw[c.outlet_name]),
+      order_id:           _str(raw[c.order_id]),
+      employee_id:        _str(raw[c.employee_id]),
+      product_id:         _str(raw[c.product_id]),
+      product_name:       _str(raw[c.product_name]),
+      l0_category:        _str(raw[c.l0_category]),
+      l1_category:        _str(raw[c.l1_category]),
+      complaint_category: _str(raw[c.complaint_category]),
+      customer_name:      _str(raw[c.customer_name]),
+      rca:                _str(raw[c.rca]),
+      in_store:           inStoreRaw === 'Y' || inStoreRaw === 'YES',
+    };
+  }
+
+  function getComplaintsCached() { return _complaintsCache || []; }
+  function clearComplaintsCache() { _complaintsCache = null; }
+
   // ── Row Parsing ─────────────────────────────────────────────────────
 
   function _parseRow(raw) {
@@ -221,5 +294,5 @@ const sheets = (() => {
     return val !== undefined && val !== null ? String(val).trim() : '';
   }
 
-  return { fetchData, getCached, clearCache, lastFetched, fetchAuditData, getAuditCached, clearAuditCache };
+  return { fetchData, getCached, clearCache, lastFetched, fetchAuditData, getAuditCached, clearAuditCache, fetchComplaintsData, getComplaintsCached, clearComplaintsCache };
 })();

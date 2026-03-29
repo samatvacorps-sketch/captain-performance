@@ -223,45 +223,79 @@ const compute = (() => {
 
   /**
    * Returns array of weekly summary objects, sorted by week start date.
+   * auditData and complaintsData are from sub-sheets and used as primary
+   * sources for rack and complaint totals respectively.
    */
-  function aggregateWeekly(data) {
-    const byWeek = {};
+  function aggregateWeekly(data, auditData = [], complaintsData = []) {
+    // Build rack totals by week from Audits sub-sheet
+    const auditByWeek = {};
+    for (const row of auditData) {
+      if (!row.date) continue;
+      const wk = _isoWeekKey(row.date);
+      auditByWeek[wk] = (auditByWeek[wk] || 0) + row.audit_codes.length;
+    }
 
+    // Build complaint totals by week from Complaints sub-sheet
+    const complByWeek = {};
+    for (const row of complaintsData) {
+      if (!row.date) continue;
+      const wk = _isoWeekKey(row.date);
+      if (!complByWeek[wk]) complByWeek[wk] = { total: 0, inStoreYes: 0, inStoreNo: 0, byCategory: {} };
+      complByWeek[wk].total++;
+      if (row.in_store) complByWeek[wk].inStoreYes++; else complByWeek[wk].inStoreNo++;
+      const cat = row.complaint_category || 'unknown';
+      complByWeek[wk].byCategory[cat] = (complByWeek[wk].byCategory[cat] || 0) + 1;
+    }
+
+    const byWeek = {};
     for (const row of data) {
       if (!row.date) continue;
       const weekKey = _isoWeekKey(row.date);
       if (!byWeek[weekKey]) {
-        byWeek[weekKey] = {
-          week_key: weekKey,
-          week_start: _weekStart(row.date),
-          rows: [],
-        };
+        byWeek[weekKey] = { week_key: weekKey, week_start: _weekStart(row.date), rows: [] };
       }
       byWeek[weekKey].rows.push(row);
     }
 
     return Object.values(byWeek)
       .sort((a, b) => a.week_start - b.week_start)
-      .map(_summarise);
+      .map(g => _summarise(g, auditByWeek[g.week_key] || 0, complByWeek[g.week_key] || null));
   }
 
   // ── 7. Monthly Aggregation ───────────────────────────────────────────
 
-  function aggregateMonthly(data) {
-    const byMonth = {};
+  function aggregateMonthly(data, auditData = [], complaintsData = []) {
+    // Build rack totals by month from Audits sub-sheet
+    const auditByMonth = {};
+    for (const row of auditData) {
+      if (!row.date) continue;
+      const mk = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}`;
+      auditByMonth[mk] = (auditByMonth[mk] || 0) + row.audit_codes.length;
+    }
 
+    // Build complaint totals by month from Complaints sub-sheet
+    const complByMonth = {};
+    for (const row of complaintsData) {
+      if (!row.date) continue;
+      const mk = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}`;
+      if (!complByMonth[mk]) complByMonth[mk] = { total: 0, inStoreYes: 0, inStoreNo: 0, byCategory: {} };
+      complByMonth[mk].total++;
+      if (row.in_store) complByMonth[mk].inStoreYes++; else complByMonth[mk].inStoreNo++;
+      const cat = row.complaint_category || 'unknown';
+      complByMonth[mk].byCategory[cat] = (complByMonth[mk].byCategory[cat] || 0) + 1;
+    }
+
+    const byMonth = {};
     for (const row of data) {
       if (!row.date) continue;
       const key = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}`;
-      if (!byMonth[key]) {
-        byMonth[key] = { month_key: key, rows: [] };
-      }
+      if (!byMonth[key]) { byMonth[key] = { month_key: key, rows: [] }; }
       byMonth[key].rows.push(row);
     }
 
     return Object.values(byMonth)
       .sort((a, b) => a.month_key.localeCompare(b.month_key))
-      .map(_summarise);
+      .map(g => _summarise(g, auditByMonth[g.month_key] || 0, complByMonth[g.month_key] || null));
   }
 
   // ── Summary Helper ────────────────────────────────────────────────────
@@ -276,7 +310,7 @@ const compute = (() => {
     return `${month} W${weekOfMonth} ${year}`;
   }
 
-  function _summarise(group) {
+  function _summarise(group, subRacks = 0, subCompl = null) {
     const rows = group.rows;
     const n = rows.length;
     if (n === 0) return group;
@@ -288,9 +322,9 @@ const compute = (() => {
       return active.reduce((acc, r) => acc + (r[key] || 0), 0) / active.length;
     };
 
-    const pickingRows = rows.filter(r => r.flows?.is_picking);
-    const puttingRows = rows.filter(r => r.flows?.is_putting);
-    const fnvRows     = rows.filter(r => r.flows?.is_fnv);
+    const fnvRows = rows.filter(r => r.flows?.is_fnv);
+
+    const compl = subCompl || { total: 0, inStoreYes: 0, inStoreNo: 0, byCategory: {} };
 
     return {
       ...group,
@@ -300,11 +334,12 @@ const compute = (() => {
       total_putting_hours:    sum('putter_active_time') / 3600,
       total_audit_hours:      sum('auditor_active_time') / 3600,
       total_putaway_qty:      sum('putaway_qty'),
-      total_racks_audited:    sum('racks_audited'),
-      total_complaints:       sum('missing_complaints') + sum('wrong_complaints') + sum('other_complaints'),
-      missing_complaints:     sum('missing_complaints'),
-      wrong_complaints:       sum('wrong_complaints'),
-      other_complaints:       sum('other_complaints'),
+      total_racks_audited:    subRacks,
+      total_complaints:       compl.total,
+      complaints_instore_yes: compl.inStoreYes,
+      complaints_instore_no:  compl.inStoreNo,
+      complaints_instore_rate: compl.total > 0 ? +(compl.inStoreYes / compl.total * 100).toFixed(1) : 0,
+      complaints_by_category: compl.byCategory,
 
       avg_ppi:                           avg('ppi', r => r.flows?.is_picking),
       avg_picking_time_per_order:        avg('picking_time_per_order', r => r.flows?.is_picking),
@@ -593,6 +628,273 @@ const compute = (() => {
     return { volume, captainPerf, rackIntel };
   }
 
+  // ── 9. Complaint Aggregations ──────────────────────────────────────
+
+  function computeComplaintAggregations(complaintsData, dailyData) {
+    if (!complaintsData || complaintsData.length === 0) return null;
+
+    // ── Store Summary ──────────────────────────────────────────────
+    const dailyMap = new Map();
+    for (const row of complaintsData) {
+      let entry = dailyMap.get(row.dateStr);
+      if (!entry) {
+        entry = {
+          date: row.date, totalComplaints: 0, orders: new Set(),
+          inStoreYes: 0, inStoreNo: 0,
+          byCategory: {}, byRCA: {},
+        };
+        dailyMap.set(row.dateStr, entry);
+      }
+      entry.totalComplaints++;
+      entry.orders.add(row.order_id);
+      if (row.in_store) entry.inStoreYes++; else entry.inStoreNo++;
+      const cat = row.complaint_category || 'unknown';
+      entry.byCategory[cat] = (entry.byCategory[cat] || 0) + 1;
+      const rca = row.rca || 'Unknown';
+      entry.byRCA[rca] = (entry.byRCA[rca] || 0) + 1;
+    }
+
+    const daily = new Map();
+    for (const [ds, v] of dailyMap) {
+      daily.set(ds, {
+        date: v.date, totalComplaints: v.totalComplaints,
+        uniqueOrders: v.orders.size, inStoreYes: v.inStoreYes, inStoreNo: v.inStoreNo,
+        byCategory: v.byCategory, byRCA: v.byRCA,
+      });
+    }
+
+    // Total orders from Daily Metrics per day
+    const dailyOrders = new Map();
+    for (const row of dailyData) {
+      if (!row.date || !row.checkout_orders) continue;
+      const dk = _dateKey(row.date);
+      dailyOrders.set(dk, (dailyOrders.get(dk) || 0) + row.checkout_orders);
+    }
+
+    // Weekly bucketing
+    const weekBuckets = {};
+    for (const [ds, v] of dailyMap) {
+      const wk = _isoWeekKey(v.date);
+      if (!weekBuckets[wk]) {
+        weekBuckets[wk] = {
+          weekKey: wk, weekStart: _weekStart(v.date),
+          totalComplaints: 0, orders: new Set(), inStoreYes: 0, inStoreNo: 0,
+          byCategory: {}, byRCA: {}, days: 0,
+        };
+      }
+      const b = weekBuckets[wk];
+      b.totalComplaints += v.totalComplaints;
+      for (const o of v.orders) b.orders.add(o);
+      b.inStoreYes += v.inStoreYes;
+      b.inStoreNo += v.inStoreNo;
+      for (const [k, c] of Object.entries(v.byCategory)) b.byCategory[k] = (b.byCategory[k] || 0) + c;
+      for (const [k, c] of Object.entries(v.byRCA)) b.byRCA[k] = (b.byRCA[k] || 0) + c;
+      b.days++;
+    }
+    // Sum orders from Daily Metrics for each week
+    const weekOrders = {};
+    for (const row of dailyData) {
+      if (!row.date || !row.checkout_orders) continue;
+      const wk = _isoWeekKey(row.date);
+      if (weekBuckets[wk]) weekOrders[wk] = (weekOrders[wk] || 0) + row.checkout_orders;
+    }
+    const weekly = Object.values(weekBuckets)
+      .sort((a, b) => a.weekStart - b.weekStart)
+      .map(b => ({
+        weekKey: b.weekKey, label: _weekLabel(b.weekStart),
+        totalComplaints: b.totalComplaints, uniqueOrders: b.orders.size,
+        inStoreYes: b.inStoreYes, inStoreNo: b.inStoreNo,
+        byCategory: b.byCategory, byRCA: b.byRCA,
+        totalOrdersPicked: weekOrders[b.weekKey] || 0,
+        avgPerDay: b.days > 0 ? +(b.totalComplaints / b.days).toFixed(1) : 0,
+      }));
+
+    // Monthly bucketing
+    const monthBuckets = {};
+    for (const [, v] of dailyMap) {
+      const mk = `${v.date.getFullYear()}-${String(v.date.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthBuckets[mk]) {
+        monthBuckets[mk] = {
+          monthKey: mk, totalComplaints: 0, orders: new Set(),
+          inStoreYes: 0, inStoreNo: 0, byCategory: {}, byRCA: {}, days: 0,
+        };
+      }
+      const b = monthBuckets[mk];
+      b.totalComplaints += v.totalComplaints;
+      for (const o of v.orders) b.orders.add(o);
+      b.inStoreYes += v.inStoreYes;
+      b.inStoreNo += v.inStoreNo;
+      for (const [k, c] of Object.entries(v.byCategory)) b.byCategory[k] = (b.byCategory[k] || 0) + c;
+      for (const [k, c] of Object.entries(v.byRCA)) b.byRCA[k] = (b.byRCA[k] || 0) + c;
+      b.days++;
+    }
+    const monthOrders = {};
+    for (const row of dailyData) {
+      if (!row.date || !row.checkout_orders) continue;
+      const mk = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}`;
+      if (monthBuckets[mk]) monthOrders[mk] = (monthOrders[mk] || 0) + row.checkout_orders;
+    }
+    const monthly = Object.values(monthBuckets)
+      .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+      .map(b => ({
+        monthKey: b.monthKey, label: b.monthKey,
+        totalComplaints: b.totalComplaints, uniqueOrders: b.orders.size,
+        inStoreYes: b.inStoreYes, inStoreNo: b.inStoreNo,
+        byCategory: b.byCategory, byRCA: b.byRCA,
+        totalOrdersPicked: monthOrders[b.monthKey] || 0,
+        avgPerDay: b.days > 0 ? +(b.totalComplaints / b.days).toFixed(1) : 0,
+      }));
+
+    // Overall totals
+    const totalComplaints = complaintsData.length;
+    const uniqueOrders = new Set(complaintsData.map(r => r.order_id)).size;
+    const inStoreYes = complaintsData.filter(r => r.in_store).length;
+    const inStoreNo = totalComplaints - inStoreYes;
+    const totalOrdersPicked = [...dailyOrders.values()].reduce((s, v) => s + v, 0);
+
+    const totalsByCategory = {};
+    const totalsByRCA = {};
+    for (const row of complaintsData) {
+      const cat = row.complaint_category || 'unknown';
+      totalsByCategory[cat] = (totalsByCategory[cat] || 0) + 1;
+      const rca = row.rca || 'Unknown';
+      totalsByRCA[rca] = (totalsByRCA[rca] || 0) + 1;
+    }
+
+    const storeSummary = {
+      daily, weekly, monthly,
+      totals: {
+        totalComplaints, uniqueOrders, inStoreYes, inStoreNo,
+        inStoreRate: totalComplaints > 0 ? +(inStoreYes / totalComplaints * 100).toFixed(1) : 0,
+        totalOrdersPicked,
+        byCategory: totalsByCategory, byRCA: totalsByRCA,
+      },
+    };
+
+    // ── Captain Complaint Performance ─────────────────────────────
+    // Total orders per captain from Daily Metrics
+    const captainOrders = new Map();
+    const captainNames = new Map();
+    for (const row of dailyData) {
+      if (!row.checkout_orders || row.checkout_orders <= 0) continue;
+      captainOrders.set(row.employee_id, (captainOrders.get(row.employee_id) || 0) + row.checkout_orders);
+      if (!captainNames.has(row.employee_id)) captainNames.set(row.employee_id, row.employee_name);
+    }
+
+    const captainMap = new Map();
+    for (const row of complaintsData) {
+      let cap = captainMap.get(row.employee_id);
+      if (!cap) {
+        cap = {
+          employee_id: row.employee_id,
+          employee_name: row.employee_id ? (captainNames.get(row.employee_id) || row.employee_id) : 'Unknown',
+          totalComplaints: 0, inStoreYes: 0, inStoreNo: 0,
+          byCategory: {}, days: new Map(),
+        };
+        captainMap.set(row.employee_id, cap);
+      }
+      cap.totalComplaints++;
+      if (row.in_store) cap.inStoreYes++; else cap.inStoreNo++;
+      const cat = row.complaint_category || 'unknown';
+      cap.byCategory[cat] = (cap.byCategory[cat] || 0) + 1;
+      const dayEntry = cap.days.get(row.dateStr) || { complaints: 0, inStoreYes: 0 };
+      dayEntry.complaints++;
+      if (row.in_store) dayEntry.inStoreYes++;
+      cap.days.set(row.dateStr, dayEntry);
+    }
+
+    // Finalize captain performance
+    const captainPerf = new Map();
+    for (const [empId, cap] of captainMap) {
+      const totalOrds = captainOrders.get(empId) || 0;
+      const topCat = Object.entries(cap.byCategory).sort((a, b) => b[1] - a[1])[0];
+      captainPerf.set(empId, {
+        employee_id: empId,
+        employee_name: cap.employee_name,
+        totalComplaints: cap.totalComplaints,
+        inStoreYes: cap.inStoreYes,
+        inStoreNo: cap.inStoreNo,
+        totalOrdersPicked: totalOrds,
+        complaintRate: totalOrds > 0 ? +(cap.inStoreYes / totalOrds * 100).toFixed(2) : 0,
+        byCategory: cap.byCategory,
+        topCategory: topCat ? topCat[0] : '—',
+        days: [...cap.days.entries()].map(([ds, d]) => ({ dateStr: ds, ...d })),
+      });
+    }
+
+    // ── Category Intelligence ─────────────────────────────────────
+    const byL0 = new Map();
+    for (const row of complaintsData) {
+      const cat = row.l0_category || 'Unknown';
+      let entry = byL0.get(cat);
+      if (!entry) {
+        entry = { count: 0, inStoreYes: 0, products: {} };
+        byL0.set(cat, entry);
+      }
+      entry.count++;
+      if (row.in_store) entry.inStoreYes++;
+      const pName = row.product_name || 'Unknown';
+      entry.products[pName] = (entry.products[pName] || 0) + 1;
+    }
+
+    const byComplaintType = new Map();
+    for (const row of complaintsData) {
+      const cat = row.complaint_category || 'unknown';
+      let entry = byComplaintType.get(cat);
+      if (!entry) { entry = { count: 0, inStoreYes: 0 }; byComplaintType.set(cat, entry); }
+      entry.count++;
+      if (row.in_store) entry.inStoreYes++;
+    }
+
+    const byRCA = new Map();
+    for (const row of complaintsData) {
+      const rca = row.rca || 'Unknown';
+      let entry = byRCA.get(rca);
+      if (!entry) { entry = { count: 0 }; byRCA.set(rca, entry); }
+      entry.count++;
+    }
+
+    // Build sorted arrays
+    const sortedL0 = [...byL0.entries()]
+      .map(([cat, v]) => {
+        const topProducts = Object.entries(v.products).sort((a, b) => b[1] - a[1]).slice(0, 3);
+        const topRCAs = {};
+        for (const row of complaintsData.filter(r => (r.l0_category || 'Unknown') === cat)) {
+          const rca = row.rca || 'Unknown';
+          topRCAs[rca] = (topRCAs[rca] || 0) + 1;
+        }
+        const topRCA = Object.entries(topRCAs).sort((a, b) => b[1] - a[1])[0];
+        return {
+          category: cat, count: v.count, inStoreYes: v.inStoreYes,
+          inStorePct: v.count > 0 ? +(v.inStoreYes / v.count * 100).toFixed(1) : 0,
+          topProduct: topProducts[0] ? topProducts[0][0] : '—',
+          topRCA: topRCA ? topRCA[0] : '—',
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+
+    const sortedComplaintType = [...byComplaintType.entries()]
+      .map(([cat, v]) => ({
+        category: cat, count: v.count, inStoreYes: v.inStoreYes,
+        pct: totalComplaints > 0 ? +(v.count / totalComplaints * 100).toFixed(1) : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const sortedRCA = [...byRCA.entries()]
+      .map(([rca, v]) => ({
+        rca, count: v.count,
+        pct: totalComplaints > 0 ? +(v.count / totalComplaints * 100).toFixed(1) : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const categoryIntel = {
+      byL0, byComplaintType, byRCA,
+      sorted: { l0: sortedL0, complaintType: sortedComplaintType, rca: sortedRCA },
+    };
+
+    return { storeSummary, captainPerf, categoryIntel };
+  }
+
   function _dateKey(date) {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -618,6 +920,7 @@ const compute = (() => {
     aggregateWeekly,
     aggregateMonthly,
     computeAuditAggregations,
+    computeComplaintAggregations,
     formatDuration,
     deviationClass,
   };

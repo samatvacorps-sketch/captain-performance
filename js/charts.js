@@ -208,31 +208,31 @@ const charts = (() => {
 
     const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
 
+    const catColors = {
+      item_missing: COLORS.red,
+      item_damaged: COLORS.amber,
+      wrong_item:   '#facc15',
+      item_expired: COLORS.purple,
+      qng:          COLORS.silver,
+      unknown:      COLORS.silver,
+    };
+
+    // Collect all categories across all periods
+    const allCats = new Set();
+    for (const d of aggregated) {
+      for (const k of Object.keys(d.complaints_by_category || {})) allCats.add(k);
+    }
+
+    const datasets = [...allCats].map(cat => ({
+      label: cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      data: aggregated.map(d => (d.complaints_by_category || {})[cat] || 0),
+      backgroundColor: ALPHA(catColors[cat] || COLORS.silver, 0.8),
+      stack: 'complaints',
+    }));
+
     _instances[canvasId] = new Chart(ctx, {
       type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: 'Missing',
-            data: aggregated.map(d => d.missing_complaints || 0),
-            backgroundColor: ALPHA(COLORS.red, 0.8),
-            stack: 'complaints',
-          },
-          {
-            label: 'Wrong',
-            data: aggregated.map(d => d.wrong_complaints || 0),
-            backgroundColor: ALPHA(COLORS.amber, 0.8),
-            stack: 'complaints',
-          },
-          {
-            label: 'Other',
-            data: aggregated.map(d => d.other_complaints || 0),
-            backgroundColor: ALPHA(COLORS.purple, 0.7),
-            stack: 'complaints',
-          },
-        ],
-      },
+      data: { labels, datasets },
       options: {
         ...BASE_OPTS,
         scales: {
@@ -490,6 +490,264 @@ const charts = (() => {
     });
   }
 
+  // ── Chart 9: Complaint Trend (dual-axis bar + line) ────────────────
+
+  function renderComplaintTrendChart(canvasId, periodData) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels     = periodData.map(d => d.label || d.weekKey || d.monthKey);
+    const complaints = periodData.map(d => d.totalComplaints || 0);
+    const inStoreRate = periodData.map(d => {
+      const total = d.totalComplaints || 0;
+      return total > 0 ? +((d.inStoreYes / total) * 100).toFixed(1) : 0;
+    });
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Total Complaints',
+            data: complaints,
+            backgroundColor: ALPHA(COLORS.red, 0.7),
+            borderColor: COLORS.red,
+            borderWidth: 1,
+            borderRadius: 4,
+            yAxisID: 'y',
+          },
+          {
+            label: 'In-Store Fault %',
+            data: inStoreRate,
+            type: 'line',
+            borderColor: COLORS.amber,
+            backgroundColor: ALPHA(COLORS.amber, 0.1),
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            yAxisID: 'y2',
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y:  { ...BASE_OPTS.scales.y, position: 'left',  title: { display: true, text: 'Complaints', color: TICK_COLOR } },
+          y2: { ...BASE_OPTS.scales.y, position: 'right', title: { display: true, text: 'In-Store %', color: TICK_COLOR }, grid: { drawOnChartArea: false }, max: 100 },
+        },
+      },
+    });
+  }
+
+  // ── Chart 10: Complaint Category Stacked Bar ──────────────────────
+
+  function renderComplaintCategoryChart(canvasId, periodData) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = periodData.map(d => d.label || d.weekKey || d.monthKey);
+    const catColors = {
+      item_missing: COLORS.red,
+      item_damaged: COLORS.amber,
+      wrong_item:   '#facc15',
+      item_expired: COLORS.purple,
+      qng:          COLORS.silver,
+    };
+
+    // Collect all category keys across all periods
+    const allCats = new Set();
+    for (const d of periodData) {
+      for (const k of Object.keys(d.byCategory || {})) allCats.add(k);
+    }
+
+    const datasets = [...allCats].map(cat => ({
+      label: cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      data: periodData.map(d => (d.byCategory || {})[cat] || 0),
+      backgroundColor: ALPHA(catColors[cat] || COLORS.silver, 0.8),
+      stack: 'complaints',
+    }));
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y: { ...BASE_OPTS.scales.y, stacked: true, title: { display: true, text: 'Count', color: TICK_COLOR } },
+          x: { ...BASE_OPTS.scales.x, stacked: true },
+        },
+      },
+    });
+  }
+
+  // ── Chart 11: Captain Complaint Scatter ────────────────────────────
+
+  function renderCaptainComplaintScatter(canvasId, captainData) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const data = captainData
+      .filter(c => c.totalOrdersPicked > 0)
+      .map(c => ({
+        x: c.totalOrdersPicked,
+        y: c.inStoreYes,
+        label: c.employee_name,
+        rate: c.complaintRate,
+        total: c.totalComplaints,
+      }));
+
+    // Average complaint rate reference line
+    const totalY = data.reduce((s, d) => s + d.y, 0);
+    const totalX = data.reduce((s, d) => s + d.x, 0);
+    const avgRate = totalX > 0 ? totalY / totalX : 0;
+    const maxX = Math.max(...data.map(d => d.x), 1);
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [
+          {
+            label: 'Captains',
+            data,
+            backgroundColor: ALPHA(COLORS.red, 0.6),
+            borderColor: COLORS.red,
+            borderWidth: 1,
+            pointRadius: data.map(d => Math.max(5, Math.min(14, d.rate * 8))),
+            pointHoverRadius: data.map(d => Math.max(7, Math.min(16, d.rate * 8 + 2))),
+          },
+          {
+            label: `Avg (${(avgRate * 100).toFixed(2)}%)`,
+            data: [{ x: 0, y: 0 }, { x: maxX, y: +(avgRate * maxX).toFixed(0) }],
+            type: 'line',
+            borderColor: ALPHA(COLORS.silver, 0.5),
+            borderDash: [6, 4],
+            borderWidth: 1.5,
+            pointRadius: 0,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        plugins: {
+          ...BASE_OPTS.plugins,
+          tooltip: {
+            ...BASE_OPTS.plugins.tooltip,
+            mode: 'nearest',
+            intersect: true,
+            callbacks: {
+              label: (ctx) => {
+                const d = ctx.raw;
+                if (!d.label) return '';
+                return [
+                  d.label,
+                  `Orders: ${d.x}`,
+                  `In-Store Complaints: ${d.y}`,
+                  `Rate: ${d.rate}%`,
+                  `Total Complaints: ${d.total}`,
+                ];
+              },
+            },
+          },
+        },
+        scales: {
+          ...BASE_OPTS.scales,
+          x: { ...BASE_OPTS.scales.x, title: { display: true, text: 'Total Orders Picked', color: TICK_COLOR } },
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'In-Store Complaints', color: TICK_COLOR } },
+        },
+      },
+    });
+  }
+
+  // ── Chart 12: RCA Donut ────────────────────────────────────────────
+
+  function renderRCADonutChart(canvasId, sortedRCA) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const rcaColors = [COLORS.red, COLORS.amber, '#facc15', COLORS.purple, COLORS.teal, COLORS.pink, COLORS.silver];
+    const labels = sortedRCA.map(r => r.rca);
+    const data   = sortedRCA.map(r => r.count);
+    const total  = data.reduce((s, v) => s + v, 0);
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data,
+          backgroundColor: sortedRCA.map((_, i) => ALPHA(rcaColors[i % rcaColors.length], 0.8)),
+          borderColor: 'rgba(0,0,0,0.3)',
+          borderWidth: 1,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '60%',
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { font: { size: 11, family: 'Manrope' }, color: TICK_COLOR, padding: 10 },
+          },
+          tooltip: {
+            ...BASE_OPTS.plugins.tooltip,
+            callbacks: {
+              label: (ctx) => `${ctx.label}: ${ctx.raw} (${total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0}%)`,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // ── Chart 13: L0 Category Horizontal Bar ───────────────────────────
+
+  function renderL0CategoryChart(canvasId, sortedL0) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const top10 = sortedL0.slice(0, 10);
+    const labels = top10.map(c => c.category);
+    const counts = top10.map(c => c.count);
+    const bgColors = top10.map(c => {
+      const pct = c.inStorePct;
+      if (pct >= 60) return ALPHA(COLORS.red, 0.8);
+      if (pct >= 40) return ALPHA(COLORS.amber, 0.8);
+      return ALPHA(COLORS.teal, 0.8);
+    });
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Complaints',
+          data: counts,
+          backgroundColor: bgColors,
+          borderRadius: 4,
+        }],
+      },
+      options: {
+        ...BASE_OPTS,
+        indexAxis: 'y',
+        scales: {
+          ...BASE_OPTS.scales,
+          x: { ...BASE_OPTS.scales.x, title: { display: true, text: 'Complaints', color: TICK_COLOR } },
+          y: { ...BASE_OPTS.scales.y, ticks: { ...BASE_OPTS.scales.y.ticks, font: { size: 10, family: 'Manrope' } } },
+        },
+      },
+    });
+  }
+
   return {
     renderOrdersHoursChart,
     renderTimeMetricsChart,
@@ -500,5 +758,10 @@ const charts = (() => {
     renderAuditVolumeChart,
     renderAuditCoverageChart,
     renderAuditScatterChart,
+    renderComplaintTrendChart,
+    renderComplaintCategoryChart,
+    renderCaptainComplaintScatter,
+    renderRCADonutChart,
+    renderL0CategoryChart,
   };
 })();

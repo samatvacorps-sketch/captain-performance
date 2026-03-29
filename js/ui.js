@@ -38,10 +38,13 @@ const ui = (() => {
     const data = app.getFlaggedData();
     if (!data || data.length === 0) return;
 
+    const auditData      = sheets.getAuditCached();
+    const complaintsData = sheets.getComplaintsCached();
+
     const period = document.getElementById('overview-period')?.value || 'weekly';
     const aggregated = period === 'weekly'
-      ? compute.aggregateWeekly(data)
-      : compute.aggregateMonthly(data);
+      ? compute.aggregateWeekly(data, auditData, complaintsData)
+      : compute.aggregateMonthly(data, auditData, complaintsData);
 
     // Charts
     charts.renderOrdersHoursChart('chart-orders-hours', aggregated);
@@ -91,6 +94,8 @@ const ui = (() => {
       <th>Audit Hours</th>
       <th>Racks Audited</th>
       <th>Complaints</th>
+      <th>In-Store</th>
+      <th>In-Store %</th>
     </tr>`;
 
     body.innerHTML = aggregated.map(d => `<tr>
@@ -109,7 +114,11 @@ const ui = (() => {
       <td>${_fmt(d.total_audit_hours, 1)} h</td>
       <td>${_fmt(d.total_racks_audited)}</td>
       <td>${_fmt(d.total_complaints)}</td>
+      <td>${_fmt(d.complaints_instore_yes)}</td>
+      <td>${d.complaints_instore_rate ?? 0}%</td>
     </tr>`).join('');
+
+    _initTableSort(document.getElementById('overview-table'));
   }
 
   function setOverviewPeriod(val) {
@@ -310,9 +319,10 @@ const ui = (() => {
       container.innerHTML = `<p class="placeholder-text">${msg}</p>`;
     }
 
-    // Attach sort click listeners
+    // Attach sort listeners — touchend for mobile (fires reliably inside scroll containers),
+    // click for desktop. Guard prevents double-fire on touch devices.
     container.querySelectorAll('th[data-sort]').forEach(th => {
-      th.addEventListener('click', () => {
+      function _doDeepDiveSort() {
         const col = th.dataset.sort;
         if (_sortState.col === col) {
           _sortState.dir = _sortState.dir === 'asc' ? 'desc' : 'asc';
@@ -321,6 +331,20 @@ const ui = (() => {
           _sortState.dir = 'desc';
         }
         renderDeepDive();
+      }
+      let _ddTouchMoved = false;
+      th.addEventListener('touchstart', () => { _ddTouchMoved = false; }, { passive: true });
+      th.addEventListener('touchmove',  () => { _ddTouchMoved = true;  }, { passive: true });
+      th.addEventListener('touchend', (e) => {
+        if (_ddTouchMoved) return;
+        e.preventDefault();
+        _doDeepDiveSort();
+      }, { passive: false });
+      let _ddLastTouch = 0;
+      th.addEventListener('touchend', () => { _ddLastTouch = Date.now(); }, { passive: true });
+      th.addEventListener('click', () => {
+        if (Date.now() - _ddLastTouch < 500) return;
+        _doDeepDiveSort();
       });
     });
   }
@@ -487,6 +511,77 @@ const ui = (() => {
       case 'fnv_hours':    return captain.total_fnv_hours ?? 0;
       default:             return captain.avgValues?.[col] ?? -Infinity;
     }
+  }
+
+  /**
+   * Generic DOM table sorter.
+   * Attaches asc/desc click sorting to every <th> in the table's <thead>.
+   * Compares cell text numerically when both values parse as numbers,
+   * otherwise lexicographically. "—" and empty cells sort last.
+   */
+  function _initTableSort(tableEl) {
+    if (!tableEl) return;
+    const ths = [...tableEl.querySelectorAll('thead th')];
+    ths.forEach((th, colIdx) => {
+      // Store original inner HTML once (guard against double-init)
+      if (th.dataset.origHtml === undefined) th.dataset.origHtml = th.innerHTML;
+      th.style.cursor = 'pointer';
+      th.style.userSelect = 'none';
+
+      // Core sort handler — shared by both click and touchend
+      function _doSort() {
+        const tbody = tableEl.querySelector('tbody');
+        if (!tbody) return;
+        const prevDir = th.dataset.sortDir || '';
+        const dir = prevDir === 'asc' ? 'desc' : 'asc';
+        // Reset all headers
+        ths.forEach(t => {
+          t.dataset.sortDir = '';
+          t.innerHTML = t.dataset.origHtml;
+        });
+        th.dataset.sortDir = dir;
+        th.innerHTML = th.dataset.origHtml + (dir === 'asc' ? ' <span style="opacity:0.7">▲</span>' : ' <span style="opacity:0.7">▼</span>');
+        // Sort rows
+        const rows = [...tbody.querySelectorAll('tr')];
+        rows.sort((rowA, rowB) => {
+          const aRaw = rowA.cells[colIdx]?.textContent?.trim() || '';
+          const bRaw = rowB.cells[colIdx]?.textContent?.trim() || '';
+          // Empty / dash → always last
+          const aEmpty = aRaw === '' || aRaw === '—';
+          const bEmpty = bRaw === '' || bRaw === '—';
+          if (aEmpty && bEmpty) return 0;
+          if (aEmpty) return 1;
+          if (bEmpty) return -1;
+          // Strip non-numeric chars (commas, units like "h", "%") and try numeric compare
+          const aNum = parseFloat(aRaw.replace(/[^0-9.-]/g, ''));
+          const bNum = parseFloat(bRaw.replace(/[^0-9.-]/g, ''));
+          const numeric = !isNaN(aNum) && !isNaN(bNum);
+          if (numeric) return dir === 'asc' ? aNum - bNum : bNum - aNum;
+          return dir === 'asc' ? aRaw.localeCompare(bRaw) : bRaw.localeCompare(aRaw);
+        });
+        rows.forEach(r => tbody.appendChild(r));
+      }
+
+      // touchend fires immediately and reliably on mobile, even inside scrollable
+      // containers where the browser might swallow the synthetic click event.
+      // preventDefault() stops the browser from also firing a click afterward.
+      let _touchMoved = false;
+      th.addEventListener('touchstart', () => { _touchMoved = false; }, { passive: true });
+      th.addEventListener('touchmove',  () => { _touchMoved = true;  }, { passive: true });
+      th.addEventListener('touchend', (e) => {
+        if (_touchMoved) return;   // was a scroll gesture, not a tap
+        e.preventDefault();        // block the subsequent synthetic click
+        _doSort();
+      }, { passive: false });
+
+      // click handles desktop mice and keyboard Enter/Space on focused th
+      let _lastTouchEnd = 0;
+      th.addEventListener('touchend', () => { _lastTouchEnd = Date.now(); }, { passive: true });
+      th.addEventListener('click', () => {
+        if (Date.now() - _lastTouchEnd < 500) return; // already handled by touchend
+        _doSort();
+      });
+    });
   }
 
   function _applySortIndicator(col, activeCol, dir) {
@@ -981,6 +1076,7 @@ const ui = (() => {
     };
 
     container.innerHTML = _buildTiersHTML(stats, activeDayCounts);
+    container.querySelectorAll('.tiers-table').forEach(t => _initTableSort(t));
   }
 
   function _buildTiersHTML(stats, activeDayCounts) {
@@ -1014,7 +1110,7 @@ const ui = (() => {
     const allCards = tiers.map(t => {
       const has = st(t.key).captainCount > 0;
       return `
-        <div class="tier-metric-card" style="border-left-color:${t.color}">
+        <div class="tier-metric-card">
           <p class="tier-card-label">${t.label}</p>
           <div class="tier-card-row">
             <span class="tier-card-value" style="color:${t.color}">${st(t.key).captainCount}</span>
@@ -1351,29 +1447,73 @@ const ui = (() => {
 
   // ── Inventory Health ────────────────────────────────────────────────
 
-  let _invCache = null;      // cached computeAuditAggregations result
-  let _invCacheKey = null;   // cache key to invalidate on data refresh
+  let _invCache = null;
+  let _invCacheKey = null;
+  let _invDateMode = false; // false = preset, true = custom range
 
   function initInventoryHealth() {
     const auditData = sheets.getAuditCached();
-    const monthSel = document.getElementById('inv-month');
-    if (!monthSel || !auditData || auditData.length === 0) return;
+    const sel = document.getElementById('inv-preset');
+    if (!sel || !auditData || auditData.length === 0) return;
 
-    // Collect unique months from audit data
-    const months = [...new Set(auditData.map(r => {
-      const y = r.date.getFullYear();
-      const m = String(r.date.getMonth() + 1).padStart(2, '0');
-      return `${y}-${m}`;
-    }))].sort();
+    // Build preset options from audit data (weekly + monthly)
+    const weekly  = compute.aggregateWeekly(auditData.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id })));
+    const monthly = compute.aggregateMonthly(auditData.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id })));
 
-    monthSel.innerHTML = '<option value="all">All Months</option>' +
-      months.map(m => `<option value="${m}">${m}</option>`).join('');
+    sel.innerHTML = [
+      '<optgroup label="Weekly">',
+      ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
+      '</optgroup>',
+      '<optgroup label="Monthly">',
+      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${d.label || d.month_key}</option>`),
+      '</optgroup>',
+    ].join('');
 
+    // Default date range: full span of audit data
+    const sortedDates = auditData.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+    if (sortedDates.length > 0) {
+      document.getElementById('inv-start').value = _isoDateStr(sortedDates[0]);
+      document.getElementById('inv-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
+    }
+
+    _invDateMode = false;
     _invCache = null;
     _invCacheKey = null;
   }
 
   function onInvPeriodChange() {
+    renderInventoryHealth();
+  }
+
+  function onInvPresetChange() {
+    _invDateMode = false;
+    const auditData = sheets.getAuditCached();
+    if (!auditData) return;
+    const periodVal = document.getElementById('inv-preset')?.value;
+    if (!periodVal) return;
+    const colonIdx  = periodVal.indexOf(':');
+    const periodType = periodVal.slice(0, colonIdx);
+    const periodKey  = periodVal.slice(colonIdx + 1);
+    const rows = auditData.filter(row => {
+      if (!row.date) return false;
+      if (periodType === 'W') return compute.aggregateWeekly([{ date: row.date, dateStr: row.dateStr, employee_id: row.employee_id }]).some(w => w.week_key === periodKey);
+      const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
+      return ym === periodKey;
+    });
+    if (rows.length > 0) {
+      const dates = rows.map(r => r.date).sort((a, b) => a - b);
+      document.getElementById('inv-start').value = _isoDateStr(dates[0]);
+      document.getElementById('inv-end').value   = _isoDateStr(dates[dates.length - 1]);
+    }
+    _invCache = null;
+    _invCacheKey = null;
+    renderInventoryHealth();
+  }
+
+  function onInvDateChange() {
+    _invDateMode = true;
+    _invCache = null;
+    _invCacheKey = null;
     renderInventoryHealth();
   }
 
@@ -1389,21 +1529,14 @@ const ui = (() => {
       return;
     }
 
-    // Filter by month if selected
-    const monthFilter = document.getElementById('inv-month')?.value || 'all';
-    let filteredAudit = auditData;
-    let filteredDaily = dailyData;
-    if (monthFilter !== 'all') {
-      filteredAudit = auditData.filter(r => {
-        const mk = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}`;
-        return mk === monthFilter;
-      });
-      filteredDaily = dailyData.filter(r => {
-        if (!r.date) return false;
-        const mk = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}`;
-        return mk === monthFilter;
-      });
-    }
+    // Filter by date range
+    const startVal = document.getElementById('inv-start')?.value;
+    const endVal   = document.getElementById('inv-end')?.value;
+    const startMs  = startVal ? new Date(startVal).setHours(0, 0, 0, 0)      : -Infinity;
+    const endMs    = endVal   ? new Date(endVal).setHours(23, 59, 59, 999)    : Infinity;
+
+    const filteredAudit = auditData.filter(r => r.date && r.date >= startMs && r.date <= endMs);
+    const filteredDaily = dailyData.filter(r => r.date && r.date >= startMs && r.date <= endMs);
 
     if (filteredAudit.length === 0) {
       container.innerHTML = '<p class="placeholder-text">No audit data for the selected period.</p>';
@@ -1411,7 +1544,7 @@ const ui = (() => {
     }
 
     // Compute (or use cache)
-    const cacheKey = `${monthFilter}_${auditData.length}`;
+    const cacheKey = `${startVal}_${endVal}_${auditData.length}`;
     if (_invCacheKey !== cacheKey) {
       _invCache = compute.computeAuditAggregations(filteredAudit, filteredDaily);
       _invCacheKey = cacheKey;
@@ -1618,6 +1751,7 @@ const ui = (() => {
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+    _initTableSort(container.querySelector('.data-table'));
   }
 
   function _renderHeatmap(rackIntel) {
@@ -1727,6 +1861,308 @@ const ui = (() => {
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+    _initTableSort(container.querySelector('.data-table'));
+  }
+
+  // ── Complaints Deep Dive ──────────────────────────────────────────
+
+  let _complCache = null;
+  let _complCacheKey = null;
+  let _complIncludeQNG = true;
+
+  function initComplaintsDeepDive() {
+    const complData = sheets.getComplaintsCached();
+    const monthSel = document.getElementById('compl-month');
+    if (!monthSel || !complData || complData.length === 0) return;
+
+    const months = [...new Set(complData.map(r => {
+      const y = r.date.getFullYear();
+      const m = String(r.date.getMonth() + 1).padStart(2, '0');
+      return `${y}-${m}`;
+    }))].sort();
+
+    monthSel.innerHTML = '<option value="all">All Months</option>' +
+      months.map(m => `<option value="${m}">${m}</option>`).join('');
+
+    _complCache = null;
+    _complCacheKey = null;
+  }
+
+  function onComplPeriodChange() {
+    renderComplaintsDeepDive();
+  }
+
+  function toggleComplQNG() {
+    _complIncludeQNG = !_complIncludeQNG;
+    const btn = document.getElementById('compl-qng-toggle');
+    if (btn) {
+      btn.textContent = _complIncludeQNG ? 'QNG Included' : 'QNG Excluded';
+      btn.classList.toggle('active', _complIncludeQNG);
+    }
+    _complCache = null;
+    _complCacheKey = null;
+    renderComplaintsDeepDive();
+  }
+
+  function renderComplaintsDeepDive() {
+    const container = document.getElementById('compl-content');
+    if (!container) return;
+
+    const complData = sheets.getComplaintsCached();
+    const dailyData = sheets.getCached();
+
+    if (!complData || complData.length === 0) {
+      container.innerHTML = '<p class="placeholder-text">No complaints data available. Ensure the "Complaints" sheet exists in the source spreadsheet.</p>';
+      return;
+    }
+
+    // Filter by month
+    const monthFilter = document.getElementById('compl-month')?.value || 'all';
+    let filteredCompl = complData;
+    let filteredDaily = dailyData;
+    if (monthFilter !== 'all') {
+      filteredCompl = complData.filter(r => {
+        const mk = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}`;
+        return mk === monthFilter;
+      });
+      filteredDaily = dailyData.filter(r => {
+        if (!r.date) return false;
+        const mk = `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}`;
+        return mk === monthFilter;
+      });
+    }
+
+    // Exclude QNG if toggled off
+    if (!_complIncludeQNG) {
+      filteredCompl = filteredCompl.filter(r => (r.complaint_category || '').toLowerCase() !== 'qng');
+    }
+
+    if (filteredCompl.length === 0) {
+      container.innerHTML = '<p class="placeholder-text">No complaints data for the selected period.</p>';
+      return;
+    }
+
+    // Compute (or use cache)
+    const cacheKey = `${monthFilter}_${complData.length}_qng${_complIncludeQNG ? 1 : 0}`;
+    if (_complCacheKey !== cacheKey) {
+      _complCache = compute.computeComplaintAggregations(filteredCompl, filteredDaily);
+      _complCacheKey = cacheKey;
+    }
+    const agg = _complCache;
+    if (!agg) return;
+
+    const period = document.getElementById('compl-period')?.value || 'weekly';
+    const periodData = period === 'monthly' ? agg.storeSummary.monthly : agg.storeSummary.weekly;
+    const totals = agg.storeSummary.totals;
+
+    // Build full HTML
+    container.innerHTML = `
+      <!-- Stat Cards -->
+      <div class="stat-cards-row">
+        ${_invStatCard(ICONS.alertTriangle, 'stat-icon-red', 'Total Complaints', _fmt(totals.totalComplaints))}
+        ${_invStatCard(ICONS.box, 'stat-icon-orange', 'Orders Affected', _fmt(totals.uniqueOrders))}
+        ${_invStatCard(ICONS.barChart, 'stat-icon-amber', 'In-Store Fault Rate', totals.inStoreRate + '%')}
+        ${_invStatCard(ICONS.box, 'stat-icon-blue', 'Total Orders Picked', _fmt(totals.totalOrdersPicked))}
+      </div>
+
+      <!-- Zone 1: Trends -->
+      <div class="compl-section">
+        <div class="bento-grid">
+          <div class="bento-card bento-large">
+            <div class="bento-card-header">
+              <div>
+                <h3 class="bento-card-title">Complaint Trend</h3>
+                <p class="bento-card-subtitle">Total complaints vs in-store fault rate</p>
+              </div>
+              <div class="bento-chart-legend">
+                <span class="legend-item"><span class="legend-dot" style="background:#ff6b6b;"></span>Complaints</span>
+                <span class="legend-item"><span class="legend-dot" style="background:#ffca28;"></span>In-Store %</span>
+              </div>
+            </div>
+            <canvas id="chart-compl-trend"></canvas>
+          </div>
+          <div class="bento-card bento-small">
+            <div class="bento-card-header">
+              <div>
+                <h3 class="bento-card-title">RCA Breakdown</h3>
+                <p class="bento-card-subtitle">Root cause distribution</p>
+              </div>
+            </div>
+            <canvas id="chart-compl-rca"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zone 2: Captain Performance -->
+      <div class="compl-section">
+        <div class="tiers-section-header">
+          <span class="tiers-section-pip" style="background:#ff6b6b;"></span>
+          <h3 class="tiers-section-title">Captain Complaint Performance</h3>
+        </div>
+        <div class="bento-grid">
+          <div class="bento-card bento-large">
+            <div class="bento-card-header">
+              <div>
+                <h3 class="bento-card-title">Orders Picked vs In-Store Complaints</h3>
+                <p class="bento-card-subtitle">Each dot is a captain — size = complaint rate</p>
+              </div>
+            </div>
+            <canvas id="chart-compl-scatter"></canvas>
+          </div>
+          <div class="bento-card bento-small" style="padding:16px;">
+            <div class="bento-card-header" style="margin-bottom:12px;">
+              <div>
+                <h3 class="bento-card-title">Top Offenders</h3>
+                <p class="bento-card-subtitle">By in-store complaints</p>
+              </div>
+            </div>
+            <div id="compl-captain-ranking" class="compl-ranking-list"></div>
+          </div>
+        </div>
+        <div id="compl-captain-table-container" style="margin-top:16px;"></div>
+      </div>
+
+      <!-- Zone 3: Category Intelligence -->
+      <div class="compl-section">
+        <div class="tiers-section-header">
+          <span class="tiers-section-pip" style="background:#fb923c;"></span>
+          <h3 class="tiers-section-title">Category Intelligence</h3>
+        </div>
+        <div class="bento-grid">
+          <div class="bento-card bento-large">
+            <div class="bento-card-header">
+              <div>
+                <h3 class="bento-card-title">Complaint Categories Over Time</h3>
+                <p class="bento-card-subtitle">Stacked by complaint type</p>
+              </div>
+            </div>
+            <canvas id="chart-compl-category"></canvas>
+          </div>
+          <div class="bento-card bento-small">
+            <div class="bento-card-header">
+              <div>
+                <h3 class="bento-card-title">Top L0 Categories</h3>
+                <p class="bento-card-subtitle">By complaint volume</p>
+              </div>
+            </div>
+            <canvas id="chart-compl-l0"></canvas>
+          </div>
+        </div>
+        <div id="compl-category-table-container" style="margin-top:16px;"></div>
+      </div>
+    `;
+
+    // Render charts
+    charts.renderComplaintTrendChart('chart-compl-trend', periodData);
+    charts.renderRCADonutChart('chart-compl-rca', agg.categoryIntel.sorted.rca);
+    charts.renderComplaintCategoryChart('chart-compl-category', periodData);
+    charts.renderL0CategoryChart('chart-compl-l0', agg.categoryIntel.sorted.l0);
+
+    // Render captain scatter
+    const captainArr = [...agg.captainPerf.values()].sort((a, b) => b.inStoreYes - a.inStoreYes);
+    charts.renderCaptainComplaintScatter('chart-compl-scatter', captainArr);
+
+    // Render captain ranking + table
+    _renderCaptainComplaintRanking(captainArr);
+    _renderCaptainComplaintTable(captainArr);
+
+    // Render category table
+    _renderCategoryTable(agg.categoryIntel.sorted.l0);
+  }
+
+  function _renderCaptainComplaintRanking(captains) {
+    const container = document.getElementById('compl-captain-ranking');
+    if (!container) return;
+
+    const top10 = captains.slice(0, 10);
+    const maxVal = top10[0]?.inStoreYes || 1;
+
+    container.innerHTML = top10.map((c, i) => {
+      const initials = (c.employee_name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+      const pct = Math.round((c.inStoreYes / maxVal) * 100);
+      return `
+        <div class="compl-ranking-item">
+          <span class="compl-ranking-rank">${i + 1}</span>
+          <span class="compl-ranking-avatar">${initials}</span>
+          <div class="compl-ranking-info">
+            <div class="compl-ranking-name">${_esc(c.employee_name)}</div>
+            <div class="compl-ranking-sub">${c.complaintRate}% rate · ${_fmt(c.totalOrdersPicked)} orders</div>
+          </div>
+          <span class="compl-ranking-value">${c.inStoreYes}</span>
+          <div class="compl-ranking-bar"><div class="compl-ranking-bar-fill" style="width:${pct}%"></div></div>
+        </div>`;
+    }).join('');
+  }
+
+  function _renderCaptainComplaintTable(captains) {
+    const container = document.getElementById('compl-captain-table-container');
+    if (!container) return;
+
+    const rows = captains.map(c => {
+      const rateClass = c.complaintRate >= 1 ? 'rate-high' : c.complaintRate >= 0.5 ? 'rate-medium' : 'rate-low';
+      return `<tr>
+        <td style="font-weight:600;">${_esc(c.employee_name)}</td>
+        <td>${_fmt(c.totalOrdersPicked)}</td>
+        <td>${c.totalComplaints}</td>
+        <td style="font-weight:700;color:#ff6b6b;">${c.inStoreYes}</td>
+        <td>${c.inStoreNo}</td>
+        <td><span class="compl-rate-badge ${rateClass}">${c.complaintRate}%</span></td>
+        <td>${_esc(c.topCategory)}</td>
+      </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Captain</th>
+              <th>Total Orders</th>
+              <th>Total Complaints</th>
+              <th>In-Store Yes</th>
+              <th>In-Store No</th>
+              <th>Complaint Rate</th>
+              <th>Top Category</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    _initTableSort(container.querySelector('.data-table'));
+  }
+
+  function _renderCategoryTable(sortedL0) {
+    const container = document.getElementById('compl-category-table-container');
+    if (!container) return;
+
+    const rows = sortedL0.map(c => {
+      return `<tr>
+        <td style="font-weight:600;">${_esc(c.category)}</td>
+        <td>${c.count}</td>
+        <td style="font-weight:700;color:#ff6b6b;">${c.inStoreYes}</td>
+        <td>${c.inStorePct}%</td>
+        <td style="font-size:12px;">${_esc(c.topProduct)}</td>
+        <td style="font-size:12px;">${_esc(c.topRCA)}</td>
+      </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>L0 Category</th>
+              <th>Complaints</th>
+              <th>In-Store Yes</th>
+              <th>In-Store %</th>
+              <th>Top Product</th>
+              <th>Top RCA</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    _initTableSort(container.querySelector('.data-table'));
   }
 
   return {
@@ -1750,7 +2186,13 @@ const ui = (() => {
     renderConfigPanel,
     initInventoryHealth,
     onInvPeriodChange,
+    onInvPresetChange,
+    onInvDateChange,
     renderInventoryHealth,
+    initComplaintsDeepDive,
+    onComplPeriodChange,
+    renderComplaintsDeepDive,
+    toggleComplQNG,
   };
 })();
 
@@ -1775,6 +2217,7 @@ const app = (() => {
     try {
       const raw = await sheets.fetchData(true);
       await sheets.fetchAuditData(true);
+      await sheets.fetchComplaintsData(true);
 
       // Compute stats pipeline
       _storeStats   = compute.computeStoreStats(raw);
@@ -1791,6 +2234,7 @@ const app = (() => {
       ui.initCaptainDropdown();
       ui.initTiersView();
       ui.initInventoryHealth();
+      ui.initComplaintsDeepDive();
 
       // Render active tab
       _renderCurrentTab();
@@ -1830,8 +2274,9 @@ const app = (() => {
       case 'daily-flags':       ui.renderDailyFlags(); break;
       case 'captain-profile':   ui.renderCaptainProfile(); break;
       case 'tier-analysis':     ui.renderTiersView(); break;
-      case 'inventory-health':  ui.renderInventoryHealth(); break;
-      case 'config-panel':      ui.renderConfigPanel(); break;
+      case 'inventory-health':       ui.renderInventoryHealth(); break;
+      case 'complaints-deep-dive':   ui.renderComplaintsDeepDive(); break;
+      case 'config-panel':           ui.renderConfigPanel(); break;
     }
   }
 
