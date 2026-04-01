@@ -86,14 +86,31 @@ const compute = (() => {
    *
    * Returns: Map<employeeId, Map<metricKey, number>>
    */
-  function computePersonalAvgs(data) {
+  function computePersonalAvgs(data, auditData = []) {
     const byCaptain = _groupBy(data, 'employee_id');
     const result = new Map();
+
+    // Build per-captain rack totals from Audits sheet (authoritative rack source)
+    const auditRacks = new Map();
+    for (const row of auditData) {
+      auditRacks.set(row.employee_id, (auditRacks.get(row.employee_id) || 0) + row.audit_codes.length);
+    }
 
     for (const [empId, rows] of Object.entries(byCaptain)) {
       const metricMap = new Map();
 
       for (const metric of CONFIG.METRICS) {
+        // audit_hours_per_rack: use sum/sum with Audits-sheet rack counts to match Inventory Health
+        if (metric.key === 'audit_hours_per_rack') {
+          const totalSeconds = rows.reduce((s, r) => s + (r.auditor_active_time || 0), 0);
+          const totalRacks   = auditRacks.get(empId) || 0;
+          const val = (totalSeconds > 0 && totalRacks > 0)
+            ? +((totalSeconds / 3600) / totalRacks).toFixed(2)
+            : null;
+          metricMap.set(metric.key, val);
+          continue;
+        }
+
         const activeRows = rows.filter(r => _isActiveInFlow(r, metric.flow));
         if (activeRows.length === 0) {
           metricMap.set(metric.key, null);

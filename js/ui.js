@@ -1596,12 +1596,9 @@ const ui = (() => {
       '</optgroup>',
     ].join('');
 
-    // Default date range: full span of audit data
-    const sortedDates = auditData.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
-    if (sortedDates.length > 0) {
-      document.getElementById('inv-start').value = _isoDateStr(sortedDates[0]);
-      document.getElementById('inv-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
-    }
+    // Default to All Time — leave date inputs empty so all daily metrics are included
+    document.getElementById('inv-start').value = '';
+    document.getElementById('inv-end').value   = '';
 
     _invDateMode = false;
     _invCache = null;
@@ -1620,12 +1617,9 @@ const ui = (() => {
     if (!periodVal) return;
 
     if (periodVal === 'all') {
-      // Reset to full date span
-      const sortedDates = auditData.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
-      if (sortedDates.length > 0) {
-        document.getElementById('inv-start').value = _isoDateStr(sortedDates[0]);
-        document.getElementById('inv-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
-      }
+      // Clear date inputs so all daily metrics data is included (true All Time)
+      document.getElementById('inv-start').value = '';
+      document.getElementById('inv-end').value   = '';
     } else {
       const colonIdx  = periodVal.indexOf(':');
       const periodType = periodVal.slice(0, colonIdx);
@@ -2419,7 +2413,7 @@ const app = (() => {
       // Compute stats pipeline (filter supervisors before stats/flagging)
       const filteredRaw = ui.filterSupervisors(raw);
       _storeStats   = compute.computeStoreStats(filteredRaw);
-      _personalAvgs = compute.computePersonalAvgs(filteredRaw);
+      _personalAvgs = compute.computePersonalAvgs(filteredRaw, sheets.getAuditCached() || []);
       _flaggedData  = compute.flagSlackers(filteredRaw, _storeStats, _personalAvgs, CONFIG.THRESHOLD);
 
       // Update last-refreshed timestamp
