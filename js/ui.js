@@ -1596,9 +1596,13 @@ const ui = (() => {
       '</optgroup>',
     ].join('');
 
-    // Default to All Time — leave date inputs empty so all daily metrics are included
-    document.getElementById('inv-start').value = '';
-    document.getElementById('inv-end').value   = '';
+    // Default date range: full span of both audit data and daily metrics
+    const _allInvDates = [...auditData, ...(sheets.getCached() || [])]
+      .map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+    if (_allInvDates.length > 0) {
+      document.getElementById('inv-start').value = _isoDateStr(_allInvDates[0]);
+      document.getElementById('inv-end').value   = _isoDateStr(_allInvDates[_allInvDates.length - 1]);
+    }
 
     _invDateMode = false;
     _invCache = null;
@@ -1617,9 +1621,13 @@ const ui = (() => {
     if (!periodVal) return;
 
     if (periodVal === 'all') {
-      // Clear date inputs so all daily metrics data is included (true All Time)
-      document.getElementById('inv-start').value = '';
-      document.getElementById('inv-end').value   = '';
+      // Full span of both audit data and daily metrics
+      const _allDates = [...auditData, ...(sheets.getCached() || [])]
+        .map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+      if (_allDates.length > 0) {
+        document.getElementById('inv-start').value = _isoDateStr(_allDates[0]);
+        document.getElementById('inv-end').value   = _isoDateStr(_allDates[_allDates.length - 1]);
+      }
     } else {
       const colonIdx  = periodVal.indexOf(':');
       const periodType = periodVal.slice(0, colonIdx);
