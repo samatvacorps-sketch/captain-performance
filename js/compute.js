@@ -371,6 +371,11 @@ const compute = (() => {
 
   function _getMetricValue(row, metricKey) {
     if (metricKey === 'fnv_audit_rate') return row.fnv_audit_rate ?? null;
+    if (metricKey === 'audit_hours_per_rack') {
+      return (row.auditor_active_time > 0 && row.racks_audited > 0)
+        ? (row.auditor_active_time / 3600) / row.racks_audited
+        : null;
+    }
     const val = row[metricKey];
     return (val !== undefined && val !== null) ? val : null;
   }
