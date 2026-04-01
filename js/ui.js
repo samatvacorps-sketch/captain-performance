@@ -500,6 +500,12 @@ const ui = (() => {
         captain.composite_slacker_score = periodScore;
       }
 
+      // Flow-specific scores (each flow uses only its own metrics)
+      captain.picking_score = CONFIG.METRICS.filter(m => m.flow === 'picking' && captain.flags.get(m.key)).length;
+      captain.putting_score = CONFIG.METRICS.filter(m => m.flow === 'putting' && captain.flags.get(m.key)).length;
+      captain.audit_score   = CONFIG.METRICS.filter(m => m.flow === 'audit'   && captain.flags.get(m.key)).length;
+      captain.fnv_score     = CONFIG.METRICS.filter(m => m.flow === 'fnv'     && captain.flags.get(m.key)).length;
+
       // Picking extras
       captain.total_orders_picked = captain.rows
         .filter(r => r.flows?.is_picking)
@@ -710,7 +716,7 @@ const ui = (() => {
   function _buildDeepDiveTable(captains, metrics, flow, periodStoreStats) {
     if (flow === 'picking') return _buildPickingTable(captains, periodStoreStats);
     if (flow === 'putting') return _buildPuttingTable(captains, periodStoreStats);
-    if (flow === 'audit')   return _buildAuditTable(captains);
+    if (flow === 'audit')   return _buildAuditTable(captains, periodStoreStats);
     if (flow === 'fnv')     return _buildFNVTable(captains);
     return '';
   }
@@ -759,11 +765,11 @@ const ui = (() => {
 
       return `<tr>
         ${_captainCell(captain.employee_name, captain.employee_id)}
-        <td>${_scoreBadge(captain.composite_slacker_score)}</td>
+        <td>${_scoreBadge(captain.picking_score)}</td>
         <td>${_fmt(captain.total_orders_picked)}</td>
         <td>${captain.avg_ppi !== null ? _fmt(captain.avg_ppi, 2) : '—'}</td>
         ${metricCells}
-        <td>${_statusBadge(captain.composite_slacker_score)}</td>
+        <td>${_statusBadge(captain.picking_score)}</td>
       </tr>`;
     }).join('');
 
@@ -783,18 +789,16 @@ const ui = (() => {
       const flagged = metric ? captain.flags.get(metric.key) : false;
       const personalAvg = metric ? app.getPersonalAvgs()?.get(captain.employee_id)?.get(metric.key) : null;
       const storeAvg    = metric ? (periodStoreStats?.get(metric.key)?.avg ?? null) : null;
-      const scoreCls = captain.composite_slacker_score >= 1.5 ? 'cell-dark-red'
-                      : captain.composite_slacker_score >= 0.5 ? 'cell-red' : '';
       const fmt = v => (v === null || v === undefined) ? '—' : _fmt(v, 1);
 
       return `<tr>
         ${_captainCell(captain.employee_name, captain.employee_id)}
-        <td>${_scoreBadge(captain.composite_slacker_score)}</td>
+        <td>${_scoreBadge(captain.putting_score)}</td>
         <td>${_fmt(captain.total_putaway_qty)}</td>
         <td class="${cls}" title="${flagged ? '🚩 Flagged' : ''}">
-          ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ' 🚩' : ''}
+          ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ` <span style="opacity:0.7;vertical-align:middle">${ICONS.flagSm}</span>` : ''}
         </td>
-        <td>${_statusBadge(captain.composite_slacker_score)}</td>
+        <td>${_statusBadge(captain.putting_score)}</td>
       </tr>`;
     }).join('');
 
@@ -810,19 +814,38 @@ const ui = (() => {
     </table></div>`;
   }
 
-  function _buildAuditTable(captains) {
+  function _buildAuditTable(captains, periodStoreStats) {
+    const metric = CONFIG.METRICS.find(m => m.key === 'audit_hours_per_rack');
     const sorted = _sortedCaptains(captains, _sortState.col);
-    const rows = sorted.map(captain => `<tr>
-      ${_captainCell(captain.employee_name, captain.employee_id)}
-      <td>${_fmt(captain.total_racks_audited)}</td>
-      <td>${_fmt(captain.total_auditor_hours, 1)} h</td>
-    </tr>`).join('');
+    const rows = sorted.map(captain => {
+      const dev     = metric ? captain.deviations.get(metric.key) : null;
+      const cls     = compute.deviationClass(dev);
+      const actual  = metric ? captain.avgValues[metric.key] : null;
+      const flagged = metric ? captain.flags.get(metric.key) : false;
+      const personalAvg = metric ? app.getPersonalAvgs()?.get(captain.employee_id)?.get(metric.key) : null;
+      const storeAvg    = metric ? (periodStoreStats?.get(metric.key)?.avg ?? null) : null;
+      const fmt = v => (v === null || v === undefined) ? '—' : _fmt(v, 2);
+
+      return `<tr>
+        ${_captainCell(captain.employee_name, captain.employee_id)}
+        <td>${_scoreBadge(captain.audit_score)}</td>
+        <td>${_fmt(captain.total_racks_audited)}</td>
+        <td>${_fmt(captain.total_auditor_hours, 1)} h</td>
+        <td class="${cls}" title="${flagged ? 'Flagged' : ''}">
+          ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ` <span style="opacity:0.7;vertical-align:middle">${ICONS.flagSm}</span>` : ''}
+        </td>
+        <td>${_statusBadge(captain.audit_score)}</td>
+      </tr>`;
+    }).join('');
 
     return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>
         ${_thSort('Captain', 'name', 'audit')}
+        ${_thSort('Score', 'score', 'audit')}
         ${_thSort('Racks Audited', 'racks', 'audit')}
         ${_thSort('Auditor Hours', 'audit_hours', 'audit')}
+        ${_thSort('Audit Efficiency<br/><small style="font-weight:400;opacity:0.7">actual | personal | store (hr/rack)</small>', 'audit_hours_per_rack', 'audit')}
+        <th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;

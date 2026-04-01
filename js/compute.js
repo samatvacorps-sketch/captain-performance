@@ -132,7 +132,10 @@ const compute = (() => {
     return data.map(row => {
       const flows = computeFlowFlags(row);
       const fnvRate = computeFNVRate(row);
-      const enriched = { ...row, flows, fnv_audit_rate: fnvRate };
+      const auditHPR = (row.auditor_active_time > 0 && row.racks_audited > 0)
+        ? (row.auditor_active_time / 3600) / row.racks_audited
+        : null;
+      const enriched = { ...row, flows, fnv_audit_rate: fnvRate, audit_hours_per_rack: auditHPR };
 
       const flags = new Map();
       const deviations = new Map();

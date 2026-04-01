@@ -95,6 +95,14 @@ const CONFIG = {
       isDuration: false,
       col: 'S',
     },
+    {
+      key: 'audit_hours_per_rack',
+      label: 'Audit Efficiency',
+      flow: 'audit',
+      direction: 'HIGH',
+      isDuration: false,
+      col: null,
+    },
   ],
 
   // ── Column Index Map (0-based, after removing header row) ────────────
