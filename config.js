@@ -46,6 +46,17 @@ const CONFIG = {
     in_store: 14,          // O
   },
 
+  // ── Roster Sheet ─────────────────────────────────────────────────────
+  ROSTER_DATA_RANGE: 'Roster!A:F',
+  ROSTER_COL: {
+    employee_id:   0,  // A
+    employee_name: 1,  // B
+    shift:         2,  // C  (Morning / Evening / Night)
+    start:         3,  // D
+    end:           4,  // E
+    assigned_off:  5,  // F
+  },
+
   // ── Supervisor Exclusion ───────────────────────────────────────────────
   // Shift supervisors excluded from all calculations when toggle is active.
   SUPERVISOR_IDS: ['DLES282705', 'DLES280049', 'DLES280053'],

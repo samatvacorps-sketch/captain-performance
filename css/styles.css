@@ -313,6 +313,20 @@ body {
 }
 .supervisor-toggle-btn.active:hover { background: rgba(52, 168, 83, 0.2); }
 
+.tier-mode-btn {
+  font-size: 12px;
+  background: rgba(251, 146, 60, 0.1);
+  color: #fb923c;
+  border: 1px solid rgba(251, 146, 60, 0.3);
+}
+.tier-mode-btn:hover { background: rgba(251, 146, 60, 0.18); }
+.tier-mode-btn.experience {
+  background: rgba(192, 132, 252, 0.1);
+  color: #c084fc;
+  border-color: rgba(192, 132, 252, 0.3);
+}
+.tier-mode-btn.experience:hover { background: rgba(192, 132, 252, 0.18); }
+
 /* ── Loading Overlay ──────────────────────────────────────────────── */
 .loading-overlay {
   position: fixed;

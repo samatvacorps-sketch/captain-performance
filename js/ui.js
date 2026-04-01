@@ -1035,6 +1035,7 @@ const ui = (() => {
   // ── Tier Analysis ──────────────────────────────────────────────────────
 
   let _tierDateMode = false;
+  let _tierMode = 'time'; // 'time' | 'experience'
 
   function initTiersView() {
     const data = app.getFlaggedData();
@@ -1060,6 +1061,7 @@ const ui = (() => {
       document.getElementById('tiers-start').value = _isoDateStr(sortedDates[0]);
     }
     _tierDateMode = false;
+    _updateTierModeBtn();
     renderTiersView();
   }
 
@@ -1093,6 +1095,19 @@ const ui = (() => {
   function onTierDateChange() {
     _tierDateMode = true;
     renderTiersView();
+  }
+
+  function toggleTierMode() {
+    _tierMode = _tierMode === 'time' ? 'experience' : 'time';
+    _updateTierModeBtn();
+    renderTiersView();
+  }
+
+  function _updateTierModeBtn() {
+    const btn = document.getElementById('tier-mode-toggle');
+    if (!btn) return;
+    btn.textContent = _tierMode === 'time' ? 'Time-Based Tiers' : 'Experience-Based Tiers';
+    btn.classList.toggle('experience', _tierMode === 'experience');
   }
 
   function _filterTierRows(data) {
@@ -1130,30 +1145,44 @@ const ui = (() => {
     return 'senior';
   }
 
+  function _classifyExpTier(activeDayCounts, empId) {
+    const days = activeDayCounts[empId] || 0;
+    if (days < 30)  return 'new';
+    if (days < 120) return 'experienced';
+    return 'senior';
+  }
+
   function _tierMetrics(rows) {
-    const pickRows = rows.filter(r => r.flows?.is_picking);
-    const putRows  = rows.filter(r => r.flows?.is_putting);
-    const captains = new Set(rows.map(r => r.employee_id));
+    const pickRows  = rows.filter(r => r.flows?.is_picking);
+    const putRows   = rows.filter(r => r.flows?.is_putting);
+    const auditRows = rows.filter(r => r.flows?.is_audit);
+    const captains  = new Set(rows.map(r => r.employee_id));
 
     const avg = (arr, key) => {
-      const vals = arr.map(r => r[key]).filter(v => v !== null && v !== undefined && !isNaN(v) && v > 0);
-      return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      const vals = arr.map(r => r[key]).filter(v => v != null && !isNaN(v) && v > 0);
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
     };
     const sum = (arr, key) => arr.reduce((s, r) => s + (r[key] || 0), 0);
-    const avgScore = rows.length > 0
-      ? rows.reduce((s, r) => s + (r.composite_slacker_score || 0), 0) / rows.length : null;
+
+    const totalPutQty   = sum(putRows,   'putaway_qty');
+    const totalPutHrs   = sum(putRows,   'putter_active_time') / 3600;
+    const totalRacks    = sum(auditRows, 'racks_audited');
+    const totalAuditHrs = sum(auditRows, 'auditor_active_time') / 3600;
 
     return {
-      captainCount:       captains.size,
-      totalOrders:        sum(pickRows, 'checkout_orders'),
-      avgPickTime:        avg(pickRows, 'picking_time_per_order'),
-      avgDelayToStart:    avg(pickRows, 'assigned_to_started_per_order'),
-      avgBillingTime:     avg(pickRows, 'billing_time_per_order'),
-      avgTotalTime:       avg(pickRows, 'total_time_per_order'),
-      avgPPI:             avg(pickRows, 'ppi'),
-      totalPutawayQty:    sum(putRows, 'putaway_qty'),
-      avgIPH:             avg(putRows, 'iph'),
-      avgScore:           avgScore,
+      captainCount:    captains.size,
+      totalOrders:     sum(pickRows, 'checkout_orders'),
+      avgDelayToStart: avg(pickRows, 'assigned_to_started_per_order'),
+      avgPickTime:     avg(pickRows, 'picking_time_per_order'),
+      avgBillingTime:  avg(pickRows, 'billing_time_per_order'),
+      avgTotalTime:    avg(pickRows, 'total_time_per_order'),
+      totalPutawayQty: totalPutQty,
+      totalPutHours:   totalPutHrs,
+      iph:             totalPutHrs > 0 ? totalPutQty / totalPutHrs : null,
+      totalRacks,
+      totalAuditHours: totalAuditHrs,
+      rph:             totalAuditHrs > 0 ? totalRacks / totalAuditHrs : null,
+      avgScore:        rows.length ? rows.reduce((s, r) => s + (r.composite_slacker_score || 0), 0) / rows.length : null,
     };
   }
 
@@ -1162,63 +1191,67 @@ const ui = (() => {
     const container = document.getElementById('tiers-content');
     if (!data || data.length === 0 || !container) return;
 
-    // Determine period start to count active days UP TO (not including) that date
+    // Active-day counts before period start (for experience tier)
     const startVal = document.getElementById('tiers-start')?.value;
     const periodStartMs = startVal ? new Date(startVal).setHours(0,0,0,0) : Infinity;
-
-    // Count each captain's active days strictly before the selected period start
     const activeDayMap = {};
     for (const row of data) {
-      if (!row.employee_id || !row.dateStr) continue;
-      if (row.date && row.date < periodStartMs) {
-        if (!activeDayMap[row.employee_id]) activeDayMap[row.employee_id] = new Set();
-        activeDayMap[row.employee_id].add(String(row.dateStr));
-      }
+      if (!row.employee_id || !row.date || row.date >= periodStartMs) continue;
+      (activeDayMap[row.employee_id] = activeDayMap[row.employee_id] || new Set()).add(row.dateStr);
     }
-    const activeDayCounts = {};
-    for (const [id, days] of Object.entries(activeDayMap)) {
-      activeDayCounts[id] = days.size;
-    }
+    const activeDayCounts = Object.fromEntries(
+      Object.entries(activeDayMap).map(([id, s]) => [id, s.size])
+    );
 
     const filtered = _filterTierRows(data);
-    if (filtered.length === 0) {
+    if (!filtered.length) {
       container.innerHTML = '<p class="placeholder-text">No data for selected period.</p>';
       return;
     }
 
-    // Split filtered rows by tier
-    const tierRows = { new: [], experienced: [], senior: [], blinkit: [], od: [] };
-    for (const row of filtered) {
-      const tier = _classifyCaptain(activeDayCounts, row.employee_id);
-      tierRows[tier].push(row);
+    let groupDefs, groupRows, groupLabel;
+
+    if (_tierMode === 'time') {
+      const rosterMap = new Map(
+        sheets.getRosterCached()
+          .filter(r => r.employee_id)
+          .map(r => [r.employee_id, r.shift.toLowerCase()])
+      );
+      groupDefs = [
+        { key: 'morning', label: 'Morning', color: '#fb923c' },
+        { key: 'evening', label: 'Evening', color: '#adc6ff' },
+        { key: 'night',   label: 'Night',   color: '#c084fc' },
+      ];
+      groupLabel = 'Shift';
+      groupRows = { morning: [], evening: [], night: [] };
+      for (const row of filtered) {
+        const s = rosterMap.get(row.employee_id) || '';
+        if (groupRows[s]) groupRows[s].push(row);
+      }
+    } else {
+      groupDefs = [
+        { key: 'new',         label: 'New',         sub: '< 30 active days',   color: '#4edea3' },
+        { key: 'experienced', label: 'Experienced', sub: '30–120 active days', color: '#adc6ff' },
+        { key: 'senior',      label: 'Senior',      sub: '> 120 active days',  color: '#c084fc' },
+      ];
+      groupLabel = 'Tier';
+      groupRows = { new: [], experienced: [], senior: [] };
+      for (const row of filtered) {
+        const t = _classifyExpTier(activeDayCounts, row.employee_id);
+        groupRows[t].push(row);
+      }
     }
 
-    const stats = {
-      new:        _tierMetrics(tierRows.new),
-      experienced: _tierMetrics(tierRows.experienced),
-      senior:     _tierMetrics(tierRows.senior),
-      blinkit:    _tierMetrics(tierRows.blinkit),
-      od:         _tierMetrics(tierRows.od),
-    };
-
-    container.innerHTML = _buildTiersHTML(stats, activeDayCounts);
+    const groupStats = Object.fromEntries(groupDefs.map(g => [g.key, _tierMetrics(groupRows[g.key])]));
+    container.innerHTML = _buildTiersHTML(groupStats, groupDefs, groupLabel);
     container.querySelectorAll('.tiers-table').forEach(t => _initTableSort(t));
   }
 
-  function _buildTiersHTML(stats, activeDayCounts) {
-    const tiers = [
-      { key: 'new',         label: 'New',          sub: '< 30 active days',      color: '#4edea3' },
-      { key: 'experienced', label: 'Experienced',  sub: '30–120 active days',    color: '#adc6ff' },
-      { key: 'senior',      label: 'Senior',       sub: '> 120 active days',     color: '#c084fc' },
-      { key: 'blinkit',     label: 'Blinkit Caps', sub: 'GCEB (excl. GCEBOD)',   color: '#fb923c' },
-      { key: 'od',          label: 'ODs',          sub: 'ID starts with GCEBOD', color: '#fbbf24' },
-    ];
-
+  function _buildTiersHTML(groupStats, groupDefs, groupLabel) {
     const fmtDur = v => v !== null ? compute.formatDuration(v) : '—';
-    const fmtNum = (v, d=1) => v !== null ? _fmt(v, d) : '—';
-    const st = k => stats[k];
+    const fmtNum = (v, d=1) => v != null ? _fmt(v, d) : '—';
+    const st = k => groupStats[k];
 
-    // Color-code values across tiers
     const colorCode = (vals, direction) => {
       const valid = vals.filter(v => v !== null && v > 0);
       if (valid.length < 2) return vals.map(() => '');
@@ -1232,53 +1265,53 @@ const ui = (() => {
       });
     };
 
-    // ── 1. Tier overview cards (5-column equal grid) ───────────────────
-    const allCards = tiers.map(t => {
-      const has = st(t.key).captainCount > 0;
+    // ── 1. Summary cards ──────────────────────────────────────────────
+    const cards = groupDefs.map(g => {
+      const s = st(g.key);
+      const has = s.captainCount > 0;
       return `
         <div class="tier-metric-card">
-          <p class="tier-card-label">${t.label}</p>
+          <p class="tier-card-label">${g.label}</p>
           <div class="tier-card-row">
-            <span class="tier-card-value" style="color:${t.color}">${st(t.key).captainCount}</span>
-            ${has ? `<span class="tier-card-badge" style="color:${t.color};background:${t.color}18">Active</span>` : ''}
+            <span class="tier-card-value" style="color:${g.color}">${s.captainCount}</span>
+            ${has ? `<span class="tier-card-badge" style="color:${g.color};background:${g.color}18">Active</span>` : ''}
           </div>
-          <p class="tier-card-sub">${t.sub}</p>
-          ${has ? `<p class="tier-card-hint">Avg score: ${fmtNum(st(t.key).avgScore, 2)}</p>`
+          ${g.sub ? `<p class="tier-card-sub">${g.sub}</p>` : ''}
+          ${has ? `<p class="tier-card-hint">Avg score: ${fmtNum(s.avgScore, 2)}</p>`
                 : `<p class="tier-card-hint inactive">No data</p>`}
         </div>`;
     }).join('');
 
     const bentoGrid = `
-      <div class="tiers-bento-grid">
-        ${allCards}
+      <div class="tiers-bento-grid" style="grid-template-columns:repeat(${groupDefs.length},1fr)">
+        ${cards}
       </div>`;
 
-    // ── 2. Picking Flow Analysis ──────────────────────────────────────
-    const pickVals = {
-      orders:  tiers.map(t => st(t.key).totalOrders),
-      pick:    tiers.map(t => st(t.key).avgPickTime),
-      delay:   tiers.map(t => st(t.key).avgDelayToStart),
-      billing: tiers.map(t => st(t.key).avgBillingTime),
-      score:   tiers.map(t => st(t.key).avgScore),
-    };
-    const totalOrders = pickVals.orders.reduce((a, v) => a + (v || 0), 0);
+    // ── 2. Picking Flow ───────────────────────────────────────────────
+    const ordersVals = groupDefs.map(g => st(g.key).totalOrders);
+    const delayVals  = groupDefs.map(g => st(g.key).avgDelayToStart);
+    const pickVals   = groupDefs.map(g => st(g.key).avgPickTime);
+    const billVals   = groupDefs.map(g => st(g.key).avgBillingTime);
+    const totalVals  = groupDefs.map(g => st(g.key).avgTotalTime);
+    const totalOrders = ordersVals.reduce((a, v) => a + (v || 0), 0);
+    const clsOrders  = colorCode(ordersVals, 'LOW');
+    const clsDelay   = colorCode(delayVals,  'HIGH');
+    const clsPick    = colorCode(pickVals,   'HIGH');
+    const clsBill    = colorCode(billVals,   'HIGH');
+    const clsTotal   = colorCode(totalVals,  'HIGH');
 
-    const pickRows = tiers.map((t, i) => {
-      const has = st(t.key).captainCount > 0;
-      const orderPct = totalOrders > 0 && pickVals.orders[i]
-        ? `<span class="tiers-pct">${((pickVals.orders[i]/totalOrders)*100).toFixed(1)}%</span>` : '';
-      const clsPick   = colorCode(pickVals.pick,    'HIGH');
-      const clsDelay  = colorCode(pickVals.delay,   'HIGH');
-      const clsBill   = colorCode(pickVals.billing, 'HIGH');
-      const clsScore  = colorCode(pickVals.score,   'HIGH');
+    const pickTableRows = groupDefs.map((g, i) => {
+      const has = st(g.key).captainCount > 0;
+      const pct = totalOrders > 0 && ordersVals[i]
+        ? `<span class="tiers-pct">${((ordersVals[i]/totalOrders)*100).toFixed(1)}%</span>` : '';
       return `
         <tr class="${has ? '' : 'tiers-row-empty'}">
-          <td class="tiers-tier-name" style="color:${t.color}">${t.label}</td>
-          <td>${has ? `${_fmt(pickVals.orders[i], 0)} ${orderPct}` : '—'}</td>
-          <td class="${clsPick[i]}">${fmtDur(pickVals.pick[i])}</td>
-          <td class="${clsDelay[i]}">${fmtDur(pickVals.delay[i])}</td>
-          <td class="${clsBill[i]}">${fmtDur(pickVals.billing[i])}</td>
-          <td class="${clsScore[i]}">${fmtNum(pickVals.score[i], 2)}</td>
+          <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
+          <td class="${clsOrders[i]}">${has ? `${_fmt(ordersVals[i], 0)} ${pct}` : '—'}</td>
+          <td class="${clsDelay[i]}">${fmtDur(delayVals[i])}</td>
+          <td class="${clsPick[i]}">${fmtDur(pickVals[i])}</td>
+          <td class="${clsBill[i]}">${fmtDur(billVals[i])}</td>
+          <td class="${clsTotal[i]}">${fmtDur(totalVals[i])}</td>
         </tr>`;
     }).join('');
 
@@ -1286,63 +1319,98 @@ const ui = (() => {
       <div class="tiers-flow-section">
         <div class="tiers-section-header">
           <div class="tiers-section-pip" style="background:#adc6ff"></div>
-          <h3 class="tiers-section-title">Picking Flow Analysis</h3>
+          <h3 class="tiers-section-title">Picking Flow</h3>
         </div>
         <div class="table-wrapper" style="border-radius:12px;">
           <table class="tiers-table">
-            <thead>
-              <tr>
-                <th>Tier</th>
-                <th>Total Picked</th>
-                <th>Avg Pick Time</th>
-                <th>Avg Delay</th>
-                <th>Billing Time</th>
-                <th>Avg Score</th>
-              </tr>
-            </thead>
-            <tbody>${pickRows}</tbody>
+            <thead><tr>
+              <th>${groupLabel}</th>
+              <th>Total Orders</th>
+              <th>Avg Delay</th>
+              <th>Avg Pick Time</th>
+              <th>Avg Bill Time</th>
+              <th>Avg Total Pick Time</th>
+            </tr></thead>
+            <tbody>${pickTableRows}</tbody>
           </table>
         </div>
       </div>`;
 
-    // ── 3. Putting Flow Bento ─────────────────────────────────────────
-    const totalPutaway = tiers.reduce((a, t) => a + (st(t.key).totalPutawayQty || 0), 0);
-    const activePut    = tiers.filter(t => st(t.key).totalPutawayQty > 0);
-    const clsIPH       = colorCode(tiers.map(t => st(t.key).avgIPH), 'LOW');
+    // ── 3. Putting Flow ───────────────────────────────────────────────
+    const putQtyVals  = groupDefs.map(g => st(g.key).totalPutawayQty);
+    const putHrVals   = groupDefs.map(g => st(g.key).totalPutHours);
+    const iphVals     = groupDefs.map(g => st(g.key).iph);
+    const clsPutQty   = colorCode(putQtyVals, 'LOW');
+    const clsIPH      = colorCode(iphVals,    'LOW');
 
-    const iph_mini_cards = tiers.map((t, i) => {
-      const iph = st(t.key).avgIPH;
-      const qty = st(t.key).totalPutawayQty;
-      if (!qty) return '';
-      const pct = totalPutaway > 0 ? (qty / totalPutaway) * 100 : 0;
+    const putTableRows = groupDefs.map((g, i) => {
+      const has = st(g.key).captainCount > 0 && putQtyVals[i] > 0;
       return `
-        <div class="tier-iph-card ${clsIPH[i]}">
-          <p class="tier-card-label" style="color:${t.color}">${t.label}</p>
-          <p class="tier-iph-value">${fmtNum(iph, 1)}</p>
-          <div class="tier-iph-bar-bg">
-            <div class="tier-iph-bar-fill" style="width:${pct.toFixed(1)}%;background:${t.color}"></div>
-          </div>
-          <p class="tier-card-hint">${_fmt(qty, 0)} items · ${pct.toFixed(1)}%</p>
-        </div>`;
-    }).filter(Boolean).join('');
+        <tr class="${has ? '' : 'tiers-row-empty'}">
+          <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
+          <td class="${clsPutQty[i]}">${has ? _fmt(putQtyVals[i], 0) : '—'}</td>
+          <td>${has && putHrVals[i] > 0 ? fmtNum(putHrVals[i]) + ' hrs' : '—'}</td>
+          <td class="${clsIPH[i]}">${fmtNum(iphVals[i])}</td>
+        </tr>`;
+    }).join('');
 
     const putSection = `
       <div class="tiers-flow-section">
         <div class="tiers-section-header">
           <div class="tiers-section-pip" style="background:#4d8eff"></div>
-          <h3 class="tiers-section-title">Putting Flow Analysis</h3>
+          <h3 class="tiers-section-title">Putting Flow</h3>
         </div>
-        <div class="tiers-putting-bento">
-          <div class="tiers-putting-hero">
-            <p class="tier-card-label">Total Putaway Qty</p>
-            <p class="tiers-hero-value">${_fmt(totalPutaway, 0)}</p>
-            <p class="tier-card-hint">${activePut.length} tier${activePut.length !== 1 ? 's' : ''} active this period</p>
-          </div>
-          <div class="tiers-iph-grid">${iph_mini_cards || '<p class="tier-card-hint inactive" style="padding:16px">No putting data for period</p>'}</div>
+        <div class="table-wrapper" style="border-radius:12px;">
+          <table class="tiers-table">
+            <thead><tr>
+              <th>${groupLabel}</th>
+              <th>Total Qty Put</th>
+              <th>Total Putaway Hours</th>
+              <th>IPH</th>
+            </tr></thead>
+            <tbody>${putTableRows}</tbody>
+          </table>
         </div>
       </div>`;
 
-    return `${bentoGrid}${pickSection}${putSection}`;
+    // ── 4. Audit Flow ─────────────────────────────────────────────────
+    const rackVals    = groupDefs.map(g => st(g.key).totalRacks);
+    const auditHrVals = groupDefs.map(g => st(g.key).totalAuditHours);
+    const rphVals     = groupDefs.map(g => st(g.key).rph);
+    const clsRacks    = colorCode(rackVals, 'LOW');
+    const clsRPH      = colorCode(rphVals,  'LOW');
+
+    const auditTableRows = groupDefs.map((g, i) => {
+      const has = st(g.key).captainCount > 0 && rackVals[i] > 0;
+      return `
+        <tr class="${has ? '' : 'tiers-row-empty'}">
+          <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
+          <td class="${clsRacks[i]}">${has ? _fmt(rackVals[i], 0) : '—'}</td>
+          <td>${has && auditHrVals[i] > 0 ? fmtNum(auditHrVals[i]) + ' hrs' : '—'}</td>
+          <td class="${clsRPH[i]}">${fmtNum(rphVals[i])}</td>
+        </tr>`;
+    }).join('');
+
+    const auditSection = `
+      <div class="tiers-flow-section">
+        <div class="tiers-section-header">
+          <div class="tiers-section-pip" style="background:#4edea3"></div>
+          <h3 class="tiers-section-title">Audit Flow</h3>
+        </div>
+        <div class="table-wrapper" style="border-radius:12px;">
+          <table class="tiers-table">
+            <thead><tr>
+              <th>${groupLabel}</th>
+              <th>Total Racks Audited</th>
+              <th>Total Audit Hours</th>
+              <th>Racks/Hr (RPH)</th>
+            </tr></thead>
+            <tbody>${auditTableRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    return `${bentoGrid}${pickSection}${putSection}${auditSection}`;
   }
 
   // ── Captain Profile ────────────────────────────────────────────────────
@@ -2370,6 +2438,7 @@ const ui = (() => {
     renderTiersView,
     onTierPresetChange,
     onTierDateChange,
+    toggleTierMode,
     initFlagsDate,
     renderDailyFlags,
     initCaptainDropdown,
@@ -2415,6 +2484,7 @@ const app = (() => {
       const raw = await sheets.fetchData(true);
       await sheets.fetchAuditData(true);
       await sheets.fetchComplaintsData(true);
+      await sheets.fetchRosterData(true);
 
       // Compute stats pipeline (filter supervisors before stats/flagging)
       const filteredRaw = ui.filterSupervisors(raw);

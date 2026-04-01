@@ -11,6 +11,7 @@ const sheets = (() => {
   let _lastFetched = null;
   let _auditCache = null;
   let _complaintsCache = null;
+  let _rosterCache = null;
 
   // ── Public API ──────────────────────────────────────────────────────
 
@@ -294,5 +295,42 @@ const sheets = (() => {
     return val !== undefined && val !== null ? String(val).trim() : '';
   }
 
-  return { fetchData, getCached, clearCache, lastFetched, fetchAuditData, getAuditCached, clearAuditCache, fetchComplaintsData, getComplaintsCached, clearComplaintsCache };
+  // ── Roster Data ────────────────────────────────────────────────────────
+
+  async function fetchRosterData(force = false) {
+    if (_rosterCache && !force) return _rosterCache;
+    const token = await auth.getToken();
+    if (!token) throw new Error('Not authenticated');
+    const url = `${BASE_URL}/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(CONFIG.ROSTER_DATA_RANGE)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`;
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) {
+      console.warn('Roster sheet fetch failed:', response.status);
+      _rosterCache = [];
+      return _rosterCache;
+    }
+    const json = await response.json();
+    const rows = json.values || [];
+    if (rows.length < 2) { _rosterCache = []; return _rosterCache; }
+    _rosterCache = rows.slice(1).map(_parseRosterRow).filter(Boolean);
+    return _rosterCache;
+  }
+
+  function _parseRosterRow(raw) {
+    if (!raw || raw.length === 0) return null;
+    const c = CONFIG.ROSTER_COL;
+    const empId = _str(raw[c.employee_id]);
+    if (!empId) return null;
+    return {
+      employee_id:   empId,
+      employee_name: _str(raw[c.employee_name]),
+      shift:         _str(raw[c.shift]),
+      start:         _str(raw[c.start]),
+      end:           _str(raw[c.end]),
+      assigned_off:  _str(raw[c.assigned_off]),
+    };
+  }
+
+  function getRosterCached() { return _rosterCache || []; }
+
+  return { fetchData, getCached, clearCache, lastFetched, fetchAuditData, getAuditCached, clearAuditCache, fetchComplaintsData, getComplaintsCached, clearComplaintsCache, fetchRosterData, getRosterCached };
 })();
