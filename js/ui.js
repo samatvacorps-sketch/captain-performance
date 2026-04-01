@@ -1164,25 +1164,40 @@ const ui = (() => {
     };
     const sum = (arr, key) => arr.reduce((s, r) => s + (r[key] || 0), 0);
 
+    // Weighted avg PPI (weighted by orders picked per row)
+    const totalPickOrders = sum(pickRows, 'checkout_orders');
+    const weightedAvgPPI  = totalPickOrders > 0
+      ? pickRows.reduce((s, r) => s + ((r.ppi > 0 ? r.ppi : 0) * (r.checkout_orders || 0)), 0) / totalPickOrders
+      : null;
+
+    const avgDelay = avg(pickRows, 'assigned_to_started_per_order');
+    const avgPick  = avg(pickRows, 'picking_time_per_order');
+    const avgBill  = avg(pickRows, 'billing_time_per_order');
+    // Compute total time from components to avoid bad raw data
+    const avgTotal = (avgDelay != null && avgPick != null && avgBill != null)
+      ? avgDelay + avgPick + avgBill : null;
+
     const totalPutQty   = sum(putRows,   'putaway_qty');
     const totalPutHrs   = sum(putRows,   'putter_active_time') / 3600;
     const totalRacks    = sum(auditRows, 'racks_audited');
     const totalAuditHrs = sum(auditRows, 'auditor_active_time') / 3600;
 
     return {
-      captainCount:    captains.size,
-      totalOrders:     sum(pickRows, 'checkout_orders'),
-      avgDelayToStart: avg(pickRows, 'assigned_to_started_per_order'),
-      avgPickTime:     avg(pickRows, 'picking_time_per_order'),
-      avgBillingTime:  avg(pickRows, 'billing_time_per_order'),
-      avgTotalTime:    avg(pickRows, 'total_time_per_order'),
-      totalPutawayQty: totalPutQty,
-      totalPutHours:   totalPutHrs,
-      iph:             totalPutHrs > 0 ? totalPutQty / totalPutHrs : null,
+      captainCount:          captains.size,
+      totalOrders:           totalPickOrders,
+      weightedAvgPPI,
+      avgDelayToStart:       avgDelay,
+      avgPickTime:           avgPick,
+      avgBillingTime:        avgBill,
+      avgTotalTime:          avgTotal,
+      totalPickerActiveTime: sum(pickRows, 'picker_active_time') / 3600,
+      totalPutawayQty:       totalPutQty,
+      iph:                   totalPutHrs > 0 ? totalPutQty / totalPutHrs : null,
+      totalPutHours:         totalPutHrs,
       totalRacks,
-      totalAuditHours: totalAuditHrs,
-      rph:             totalAuditHrs > 0 ? totalRacks / totalAuditHrs : null,
-      avgScore:        rows.length ? rows.reduce((s, r) => s + (r.composite_slacker_score || 0), 0) / rows.length : null,
+      hpr:                   totalRacks > 0 ? totalAuditHrs / totalRacks : null,
+      totalAuditHours:       totalAuditHrs,
+      avgScore:              rows.length ? rows.reduce((s, r) => s + (r.composite_slacker_score || 0), 0) / rows.length : null,
     };
   }
 
@@ -1288,30 +1303,36 @@ const ui = (() => {
       </div>`;
 
     // ── 2. Picking Flow ───────────────────────────────────────────────
-    const ordersVals = groupDefs.map(g => st(g.key).totalOrders);
-    const delayVals  = groupDefs.map(g => st(g.key).avgDelayToStart);
-    const pickVals   = groupDefs.map(g => st(g.key).avgPickTime);
-    const billVals   = groupDefs.map(g => st(g.key).avgBillingTime);
-    const totalVals  = groupDefs.map(g => st(g.key).avgTotalTime);
-    const totalOrders = ordersVals.reduce((a, v) => a + (v || 0), 0);
-    const clsOrders  = colorCode(ordersVals, 'LOW');
-    const clsDelay   = colorCode(delayVals,  'HIGH');
-    const clsPick    = colorCode(pickVals,   'HIGH');
-    const clsBill    = colorCode(billVals,   'HIGH');
-    const clsTotal   = colorCode(totalVals,  'HIGH');
+    const ordersVals    = groupDefs.map(g => st(g.key).totalOrders);
+    const ppiVals       = groupDefs.map(g => st(g.key).weightedAvgPPI);
+    const delayVals     = groupDefs.map(g => st(g.key).avgDelayToStart);
+    const pickVals      = groupDefs.map(g => st(g.key).avgPickTime);
+    const billVals      = groupDefs.map(g => st(g.key).avgBillingTime);
+    const totalVals     = groupDefs.map(g => st(g.key).avgTotalTime);
+    const pickActVals   = groupDefs.map(g => st(g.key).totalPickerActiveTime);
+    const totalOrders   = ordersVals.reduce((a, v) => a + (v || 0), 0);
+    const clsOrders     = colorCode(ordersVals, 'LOW');
+    const clsPPI        = colorCode(ppiVals,    'HIGH');
+    const clsDelay      = colorCode(delayVals,  'HIGH');
+    const clsPick       = colorCode(pickVals,   'HIGH');
+    const clsBill       = colorCode(billVals,   'HIGH');
+    const clsTotal      = colorCode(totalVals,  'HIGH');
 
     const pickTableRows = groupDefs.map((g, i) => {
       const has = st(g.key).captainCount > 0;
       const pct = totalOrders > 0 && ordersVals[i]
         ? `<span class="tiers-pct">${((ordersVals[i]/totalOrders)*100).toFixed(1)}%</span>` : '';
+      const pickActHrs = pickActVals[i];
       return `
         <tr class="${has ? '' : 'tiers-row-empty'}">
           <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
           <td class="${clsOrders[i]}">${has ? `${_fmt(ordersVals[i], 0)} ${pct}` : '—'}</td>
+          <td class="${clsPPI[i]}">${fmtDur(ppiVals[i])}</td>
           <td class="${clsDelay[i]}">${fmtDur(delayVals[i])}</td>
           <td class="${clsPick[i]}">${fmtDur(pickVals[i])}</td>
           <td class="${clsBill[i]}">${fmtDur(billVals[i])}</td>
           <td class="${clsTotal[i]}">${fmtDur(totalVals[i])}</td>
+          <td>${has && pickActHrs > 0 ? fmtNum(pickActHrs) + ' hrs' : '—'}</td>
         </tr>`;
     }).join('');
 
@@ -1325,11 +1346,13 @@ const ui = (() => {
           <table class="tiers-table">
             <thead><tr>
               <th>${groupLabel}</th>
-              <th>Total Orders</th>
+              <th>Total Orders Picked</th>
+              <th>Avg PPI</th>
               <th>Avg Delay</th>
               <th>Avg Pick Time</th>
               <th>Avg Bill Time</th>
               <th>Avg Total Pick Time</th>
+              <th>Total Picker Active Time</th>
             </tr></thead>
             <tbody>${pickTableRows}</tbody>
           </table>
@@ -1338,8 +1361,8 @@ const ui = (() => {
 
     // ── 3. Putting Flow ───────────────────────────────────────────────
     const putQtyVals  = groupDefs.map(g => st(g.key).totalPutawayQty);
-    const putHrVals   = groupDefs.map(g => st(g.key).totalPutHours);
     const iphVals     = groupDefs.map(g => st(g.key).iph);
+    const putHrVals   = groupDefs.map(g => st(g.key).totalPutHours);
     const clsPutQty   = colorCode(putQtyVals, 'LOW');
     const clsIPH      = colorCode(iphVals,    'LOW');
 
@@ -1349,8 +1372,8 @@ const ui = (() => {
         <tr class="${has ? '' : 'tiers-row-empty'}">
           <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
           <td class="${clsPutQty[i]}">${has ? _fmt(putQtyVals[i], 0) : '—'}</td>
-          <td>${has && putHrVals[i] > 0 ? fmtNum(putHrVals[i]) + ' hrs' : '—'}</td>
           <td class="${clsIPH[i]}">${fmtNum(iphVals[i])}</td>
+          <td>${has && putHrVals[i] > 0 ? fmtNum(putHrVals[i]) + ' hrs' : '—'}</td>
         </tr>`;
     }).join('');
 
@@ -1365,8 +1388,8 @@ const ui = (() => {
             <thead><tr>
               <th>${groupLabel}</th>
               <th>Total Qty Put</th>
-              <th>Total Putaway Hours</th>
               <th>IPH</th>
+              <th>Total Putaway Hours</th>
             </tr></thead>
             <tbody>${putTableRows}</tbody>
           </table>
@@ -1375,10 +1398,10 @@ const ui = (() => {
 
     // ── 4. Audit Flow ─────────────────────────────────────────────────
     const rackVals    = groupDefs.map(g => st(g.key).totalRacks);
+    const hprVals     = groupDefs.map(g => st(g.key).hpr);
     const auditHrVals = groupDefs.map(g => st(g.key).totalAuditHours);
-    const rphVals     = groupDefs.map(g => st(g.key).rph);
     const clsRacks    = colorCode(rackVals, 'LOW');
-    const clsRPH      = colorCode(rphVals,  'LOW');
+    const clsHPR      = colorCode(hprVals,  'HIGH');
 
     const auditTableRows = groupDefs.map((g, i) => {
       const has = st(g.key).captainCount > 0 && rackVals[i] > 0;
@@ -1386,8 +1409,8 @@ const ui = (() => {
         <tr class="${has ? '' : 'tiers-row-empty'}">
           <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
           <td class="${clsRacks[i]}">${has ? _fmt(rackVals[i], 0) : '—'}</td>
+          <td class="${clsHPR[i]}">${fmtNum(hprVals[i], 2)}</td>
           <td>${has && auditHrVals[i] > 0 ? fmtNum(auditHrVals[i]) + ' hrs' : '—'}</td>
-          <td class="${clsRPH[i]}">${fmtNum(rphVals[i])}</td>
         </tr>`;
     }).join('');
 
@@ -1402,8 +1425,8 @@ const ui = (() => {
             <thead><tr>
               <th>${groupLabel}</th>
               <th>Total Racks Audited</th>
+              <th>Hrs/Rack (HPR)</th>
               <th>Total Audit Hours</th>
-              <th>Racks/Hr (RPH)</th>
             </tr></thead>
             <tbody>${auditTableRows}</tbody>
           </table>
