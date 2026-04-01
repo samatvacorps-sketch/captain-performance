@@ -46,6 +46,10 @@ const CONFIG = {
     in_store: 14,          // O
   },
 
+  // ── Supervisor Exclusion ───────────────────────────────────────────────
+  // Shift supervisors excluded from all calculations when toggle is active.
+  SUPERVISOR_IDS: ['DLES282705', 'DLES280049', 'DLES280053'],
+
   // ── Flagging ─────────────────────────────────────────────────────────
   // How many SDs worse than the store average before flagging.
   // Editable in the Config tab UI.

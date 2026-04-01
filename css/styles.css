@@ -298,6 +298,21 @@ body {
 }
 .btn-ghost:hover { background: rgba(198, 198, 202, 0.07); color: var(--text); }
 
+.supervisor-toggle-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid rgba(63, 73, 85, 0.45);
+  font-size: 12px;
+}
+.supervisor-toggle-btn:hover { background: rgba(198, 198, 202, 0.07); color: var(--text); }
+.supervisor-toggle-btn.active {
+  background: rgba(52, 168, 83, 0.12);
+  color: #4caf69;
+  border-color: rgba(52, 168, 83, 0.4);
+  font-weight: 600;
+}
+.supervisor-toggle-btn.active:hover { background: rgba(52, 168, 83, 0.2); }
+
 /* ── Loading Overlay ──────────────────────────────────────────────── */
 .loading-overlay {
   position: fixed;

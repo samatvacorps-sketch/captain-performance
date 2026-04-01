@@ -19,6 +19,31 @@ const ui = (() => {
     renderDeepDive();
   }
 
+  // ── Supervisor Exclusion ─────────────────────────────────────────────
+  let _excludeSupervisors = localStorage.getItem('excludeSupervisors') !== 'false'; // default true
+
+  function _supervisorFilter(rows) {
+    if (!_excludeSupervisors || !CONFIG.SUPERVISOR_IDS) return rows;
+    const s = new Set(CONFIG.SUPERVISOR_IDS);
+    return rows.filter(r => !s.has(r.employee_id));
+  }
+
+  function _updateSupervisorBtn() {
+    const btn = document.getElementById('supervisor-toggle');
+    if (!btn) return;
+    btn.classList.toggle('active', _excludeSupervisors);
+    btn.textContent = _excludeSupervisors ? 'Excl. Supervisors' : 'Incl. Supervisors';
+  }
+
+  function toggleSupervisors() {
+    _excludeSupervisors = !_excludeSupervisors;
+    localStorage.setItem('excludeSupervisors', String(_excludeSupervisors));
+    _updateSupervisorBtn();
+    app.refresh();
+  }
+
+  function filterSupervisors(rows) { return _supervisorFilter(rows); }
+
   // ── Tab Switching ─────────────────────────────────────────────────────
 
   function switchTab(tabId) {
@@ -104,8 +129,8 @@ const ui = (() => {
     const data = app.getFlaggedData();
     if (!data || data.length === 0) return;
 
-    const auditData      = sheets.getAuditCached();
-    const complaintsData = sheets.getComplaintsCached();
+    const auditData      = _supervisorFilter(sheets.getAuditCached() || []);
+    const complaintsData = _supervisorFilter(sheets.getComplaintsCached() || []);
 
     // Filter by date range
     const startVal = document.getElementById('overview-start')?.value;
@@ -561,7 +586,13 @@ const ui = (() => {
         }
       });
       const vals = activeRows
-        .map(r => metric.key === 'fnv_audit_rate' ? r.fnv_audit_rate : r[metric.key])
+        .map(r => {
+          if (metric.key === 'fnv_audit_rate') return r.fnv_audit_rate;
+          if (metric.key === 'audit_hours_per_rack')
+            return (r.auditor_active_time > 0 && r.racks_audited > 0)
+              ? (r.auditor_active_time / 3600) / r.racks_audited : null;
+          return r[metric.key];
+        })
         .filter(v => v !== null && v !== undefined && !isNaN(v) && v > 0);
       if (vals.length === 0) { result.set(metric.key, { avg: null, sd: null }); continue; }
       const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -1627,8 +1658,8 @@ const ui = (() => {
     const container = document.getElementById('inv-content');
     if (!container) return;
 
-    const auditData = sheets.getAuditCached();
-    const dailyData = sheets.getCached();
+    const auditData = _supervisorFilter(sheets.getAuditCached() || []);
+    const dailyData = _supervisorFilter(sheets.getCached());
 
     if (!auditData || auditData.length === 0) {
       container.innerHTML = '<p class="placeholder-text">No audit data available. Ensure the "Audits" sheet exists in the source spreadsheet.</p>';
@@ -2071,8 +2102,8 @@ const ui = (() => {
     const container = document.getElementById('compl-content');
     if (!container) return;
 
-    const complData = sheets.getComplaintsCached();
-    const dailyData = sheets.getCached();
+    const complData = _supervisorFilter(sheets.getComplaintsCached() || []);
+    const dailyData = _supervisorFilter(sheets.getCached());
 
     if (!complData || complData.length === 0) {
       container.innerHTML = '<p class="placeholder-text">No complaints data available. Ensure the "Complaints" sheet exists in the source spreadsheet.</p>';
@@ -2356,6 +2387,9 @@ const ui = (() => {
     onComplDateChange,
     renderComplaintsDeepDive,
     toggleComplQNG,
+    toggleSupervisors,
+    filterSupervisors,
+    updateSupervisorBtn: _updateSupervisorBtn,
   };
 })();
 
@@ -2382,14 +2416,17 @@ const app = (() => {
       await sheets.fetchAuditData(true);
       await sheets.fetchComplaintsData(true);
 
-      // Compute stats pipeline
-      _storeStats   = compute.computeStoreStats(raw);
-      _personalAvgs = compute.computePersonalAvgs(raw);
-      _flaggedData  = compute.flagSlackers(raw, _storeStats, _personalAvgs, CONFIG.THRESHOLD);
+      // Compute stats pipeline (filter supervisors before stats/flagging)
+      const filteredRaw = ui.filterSupervisors(raw);
+      _storeStats   = compute.computeStoreStats(filteredRaw);
+      _personalAvgs = compute.computePersonalAvgs(filteredRaw);
+      _flaggedData  = compute.flagSlackers(filteredRaw, _storeStats, _personalAvgs, CONFIG.THRESHOLD);
 
       // Update last-refreshed timestamp
       const ts = document.getElementById('last-refreshed');
       if (ts) ts.textContent = `Last refreshed: ${new Date().toLocaleTimeString()}`;
+
+      ui.updateSupervisorBtn();
 
       // Init dynamic dropdowns
       ui.initDeepDivePeriods();
@@ -2426,7 +2463,8 @@ const app = (() => {
     // Re-flag with new threshold
     const raw = sheets.getCached();
     if (raw.length > 0) {
-      _flaggedData = compute.flagSlackers(raw, _storeStats, _personalAvgs, CONFIG.THRESHOLD);
+      const filteredRaw = ui.filterSupervisors(raw);
+      _flaggedData = compute.flagSlackers(filteredRaw, _storeStats, _personalAvgs, CONFIG.THRESHOLD);
       _renderCurrentTab();
     }
   }
