@@ -1687,11 +1687,15 @@ const ui = (() => {
       '</optgroup>',
     ].join('');
 
-    // Default date range: full span of audit data
-    const sortedDates = auditData.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
-    if (sortedDates.length > 0) {
-      document.getElementById('inv-start').value = _isoDateStr(sortedDates[0]);
-      document.getElementById('inv-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
+    // Default date range: full span of audit data AND daily audit-hour data
+    const dailyAll = _supervisorFilter(sheets.getCached());
+    const allDates = [
+      ...auditData.map(r => r.date),
+      ...dailyAll.filter(r => r.auditor_active_time > 0).map(r => r.date),
+    ].filter(Boolean).sort((a, b) => a - b);
+    if (allDates.length > 0) {
+      document.getElementById('inv-start').value = _isoDateStr(allDates[0]);
+      document.getElementById('inv-end').value   = _isoDateStr(allDates[allDates.length - 1]);
     }
 
     _invDateMode = false;
@@ -1711,11 +1715,15 @@ const ui = (() => {
     if (!periodVal) return;
 
     if (periodVal === 'all') {
-      // Reset to full date span
-      const sortedDates = auditData.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
-      if (sortedDates.length > 0) {
-        document.getElementById('inv-start').value = _isoDateStr(sortedDates[0]);
-        document.getElementById('inv-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
+      // Reset to full date span (audit + daily audit-hour dates)
+      const dailyAll = _supervisorFilter(sheets.getCached());
+      const allDates = [
+        ...auditData.map(r => r.date),
+        ...dailyAll.filter(r => r.auditor_active_time > 0).map(r => r.date),
+      ].filter(Boolean).sort((a, b) => a - b);
+      if (allDates.length > 0) {
+        document.getElementById('inv-start').value = _isoDateStr(allDates[0]);
+        document.getElementById('inv-end').value   = _isoDateStr(allDates[allDates.length - 1]);
       }
     } else {
       const colonIdx  = periodVal.indexOf(':');
@@ -1772,7 +1780,7 @@ const ui = (() => {
     }
 
     // Compute (or use cache)
-    const cacheKey = `${startVal}_${endVal}_${auditData.length}`;
+    const cacheKey = `${startVal}_${endVal}_${auditData.length}_${dailyData.length}`;
     if (_invCacheKey !== cacheKey) {
       _invCache = compute.computeAuditAggregations(filteredAudit, filteredDaily);
       _invCacheKey = cacheKey;
@@ -2445,6 +2453,178 @@ const ui = (() => {
     _initTableSort(container.querySelector('.data-table'));
   }
 
+  // ── Incentives ─────────────────────────────────────────────────────────
+
+  let _incentiveCache = null;
+  let _incentiveCacheKey = null;
+
+  function initIncentivePeriods() {
+    const data = _supervisorFilter(sheets.getCached());
+    if (!data || data.length === 0) return;
+
+    const monthly = compute.aggregateMonthly(data);
+    const sel = document.getElementById('incentive-month');
+    if (!sel) return;
+
+    sel.innerHTML = monthly.slice().reverse()
+      .map(m => `<option value="${m.month_key}">${m.label || m.month_key}</option>`)
+      .join('');
+
+    _incentiveCache = null;
+    _incentiveCacheKey = null;
+    renderIncentives();
+  }
+
+  function onIncentiveMonthChange() {
+    _incentiveCache = null;
+    _incentiveCacheKey = null;
+    renderIncentives();
+  }
+
+  function renderIncentives() {
+    const monthKey = document.getElementById('incentive-month')?.value;
+    if (!monthKey) return;
+
+    // Picking: use flagged daily data (has flows.is_picking)
+    const flaggedData = _supervisorFilter(app.getFlaggedData() || []);
+    // Audit: use Audits sheet (has audit_codes array for correct rack counts)
+    const auditSheetData = _supervisorFilter(sheets.getAuditCached() || []);
+
+    if (!flaggedData || flaggedData.length === 0) return;
+
+    const cacheKey = `${monthKey}_${flaggedData.length}_${auditSheetData.length}`;
+    if (_incentiveCacheKey !== cacheKey) {
+      // Use any date-bearing data to derive week keys for this month
+      const weekKeys = compute.getWeekKeysForMonth(flaggedData, monthKey);
+      const picking = compute.computePickingIncentives(flaggedData, weekKeys);
+      const audit   = compute.computeAuditIncentives(auditSheetData, monthKey);
+      _incentiveCache = { weekKeys, picking, audit };
+      _incentiveCacheKey = cacheKey;
+    }
+
+    const { weekKeys, picking, audit } = _incentiveCache;
+
+    // ── Month label for column headers (e.g. "Mar") ──
+    const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const monthNum = parseInt(monthKey.split('-')[1], 10) - 1;
+    const monthShort = MONTH_SHORT[monthNum];
+
+    // ── Week labels: "Mar W1", "Mar W2", … in sorted order ──
+    const weekLabels = weekKeys.map((wk, i) => ({ key: wk, label: `${monthShort} W${i + 1}` }));
+
+    // ── Aggregate totals ──
+    let totalPicking = 0, totalAudit = 0, earningCount = 0;
+    const allCaptains = new Set([...picking.keys(), ...audit.keys()]);
+    for (const empId of allCaptains) {
+      const p = picking.get(empId)?.total || 0;
+      const a = audit.get(empId)?.amount || 0;
+      totalPicking += p;
+      totalAudit += a;
+      if (p > 0 || a > 0) earningCount++;
+    }
+
+    // ── Stat cards ──
+    const cardsEl = document.getElementById('incentive-stat-cards');
+    if (cardsEl) {
+      cardsEl.innerHTML = `
+        <div class="stat-card">
+          <div class="stat-label">Picking Incentive</div>
+          <div class="stat-value" style="color:var(--accent)">\u20B9${_fmt(totalPicking)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Audit Incentive</div>
+          <div class="stat-value" style="color:var(--green)">\u20B9${_fmt(totalAudit)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Payout</div>
+          <div class="stat-value">\u20B9${_fmt(totalPicking + totalAudit)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Captains Earning</div>
+          <div class="stat-value">${earningCount} / ${allCaptains.size}</div>
+        </div>`;
+    }
+
+    // ── Unified table ──
+    // Columns: Captain | [W1 Picking] [W2 Picking] ... | Audit Total | Total Incentive
+    const tableEl = document.getElementById('incentive-table-content');
+    if (!tableEl) return;
+
+    // Build combined list sorted by total incentive desc
+    const combined = [];
+    for (const empId of allCaptains) {
+      const cap   = picking.get(empId);
+      const aud   = audit.get(empId);
+      const name  = cap?.employee_name || aud?.employee_name || empId;
+      const pTotal = cap?.total || 0;
+      const aAmt   = aud?.amount || 0;
+      combined.push({ empId, name, cap, aud, pTotal, aAmt, total: pTotal + aAmt });
+    }
+    combined.sort((a, b) => b.total - a.total);
+
+    // Header
+    const weekHeaders = weekLabels.map(w => `<th>${w.label} Picking</th>`).join('');
+
+    // Rows
+    const rows = combined.map(c => {
+      const weekCells = weekLabels.map(w => {
+        const wk = c.cap?.weeks.get(w.key);
+        if (!wk || wk.orders === 0) return '<td style="color:var(--text-muted)">—</td>';
+        const amtClass = wk.amount > 0 ? 'cell-green' : '';
+        const detail = `<div style="font-size:11px;color:var(--text-muted);font-weight:400;margin-top:2px">${_fmt(wk.orders)} orders · ${compute.formatDuration(wk.avgTime)}</div>`;
+        return `<td class="${amtClass}">${wk.amount > 0 ? '\u20B9' + _fmt(wk.amount) : '—'}${detail}</td>`;
+      }).join('');
+
+      // Audit cell: show racks + amount
+      let auditCell;
+      if (c.aud) {
+        const r = c.aud.totalRacks;
+        auditCell = `<td class="${c.aud.amount > 0 ? 'cell-green' : ''}">\u20B9${_fmt(c.aud.amount)}<div style="font-size:11px;color:var(--text-muted);font-weight:400;margin-top:2px">${r} rack${r !== 1 ? 's' : ''}</div></td>`;
+      } else {
+        auditCell = `<td style="color:var(--text-muted)">—</td>`;
+      }
+
+      const rowClass = c.total > 0 ? '' : 'incentive-zero';
+      return `<tr class="${rowClass}">
+        <td><strong>${_esc(c.name)}</strong><br><small style="color:var(--text-muted)">${c.empId}</small></td>
+        ${weekCells}
+        ${auditCell}
+        <td><strong>\u20B9${_fmt(c.total)}</strong></td>
+      </tr>`;
+    }).join('');
+
+    // Totals row
+    const weekTotals = weekLabels.map(w => {
+      let wAmt = 0;
+      for (const [, cap] of picking) { const wk = cap.weeks.get(w.key); if (wk) wAmt += wk.amount; }
+      return `<td><strong>${wAmt > 0 ? '\u20B9' + _fmt(wAmt) : '—'}</strong></td>`;
+    }).join('');
+
+    tableEl.innerHTML = `
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr>
+            <th>Captain</th>
+            ${weekHeaders}
+            <th>Audit Total</th>
+            <th>Total Incentive</th>
+          </tr></thead>
+          <tbody>
+            ${rows}
+          </tbody>
+          <tfoot>
+            <tr style="border-top:2px solid var(--border)">
+              <td><strong>TOTAL</strong></td>
+              ${weekTotals}
+              <td><strong>\u20B9${_fmt(totalAudit)}</strong></td>
+              <td><strong>\u20B9${_fmt(totalPicking + totalAudit)}</strong></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>`;
+    _initTableSort(tableEl.querySelector('.data-table'));
+  }
+
   return {
     switchTab,
     renderStoreOverview,
@@ -2482,6 +2662,9 @@ const ui = (() => {
     toggleSupervisors,
     filterSupervisors,
     updateSupervisorBtn: _updateSupervisorBtn,
+    initIncentivePeriods,
+    onIncentiveMonthChange,
+    renderIncentives,
   };
 })();
 
@@ -2529,6 +2712,7 @@ const app = (() => {
       ui.initTiersView();
       ui.initInventoryHealth();
       ui.initComplaintsDeepDive();
+      ui.initIncentivePeriods();
 
       // Render active tab
       _renderCurrentTab();
@@ -2571,6 +2755,7 @@ const app = (() => {
       case 'tier-analysis':     ui.renderTiersView(); break;
       case 'inventory-health':       ui.renderInventoryHealth(); break;
       case 'complaints-deep-dive':   ui.renderComplaintsDeepDive(); break;
+      case 'incentives':             ui.renderIncentives(); break;
       case 'config-panel':           ui.renderConfigPanel(); break;
     }
   }

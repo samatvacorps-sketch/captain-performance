@@ -68,6 +68,9 @@
     <button class="tab-btn" data-tab="complaints-deep-dive" onclick="app.switchTab('complaints-deep-dive')">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5L1.5 13.5h13z"/><line x1="8" y1="6" x2="8" y2="9.5"/><circle cx="8" cy="11.5" r="0.5" fill="currentColor"/></svg> Complaints
     </button>
+    <button class="tab-btn" data-tab="incentives" onclick="app.switchTab('incentives')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><line x1="8" y1="5" x2="8" y2="11"/><line x1="6" y1="7" x2="10" y2="7"/><line x1="6" y1="9" x2="10" y2="9"/></svg> Incentives
+    </button>
     <button class="tab-btn" data-tab="config-panel" onclick="app.switchTab('config-panel')">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="2" x2="4" y2="14"/><circle cx="4" cy="9" r="2"/><line x1="12" y1="2" x2="12" y2="14"/><circle cx="12" cy="5" r="2"/></svg> Config
     </button>
@@ -399,6 +402,26 @@
 
     <div id="compl-content">
       <p class="placeholder-text">Loading complaints data…</p>
+    </div>
+  </section>
+
+  <!-- ── INCENTIVES ──────────────────────────────────────────────────── -->
+  <section id="tab-incentives" class="tab-content hidden">
+    <div class="flags-page-header">
+      <div>
+        <p class="flags-fleet-label">Compensation Intelligence</p>
+        <h2 class="flags-title">Incentives</h2>
+      </div>
+      <div class="flags-date-strip">
+        <span class="dd-control-label">Month</span>
+        <select id="incentive-month" onchange="ui.onIncentiveMonthChange()"></select>
+      </div>
+    </div>
+
+    <div id="incentive-stat-cards" class="stat-cards-row"></div>
+
+    <div class="inv-section">
+      <div id="incentive-table-content"></div>
     </div>
   </section>
 

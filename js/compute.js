@@ -324,6 +324,12 @@ const compute = (() => {
       if (active.length === 0) return 0;
       return active.reduce((acc, r) => acc + (r[key] || 0), 0) / active.length;
     };
+    const weightedAvg = (valueKey, weightKey, activeFilter) => {
+      const active = activeFilter ? rows.filter(activeFilter) : rows;
+      const totalWeight = active.reduce((acc, r) => acc + (r[weightKey] || 0), 0);
+      if (totalWeight === 0) return 0;
+      return active.reduce((acc, r) => acc + (r[valueKey] || 0) * (r[weightKey] || 0), 0) / totalWeight;
+    };
 
     const fnvRows = rows.filter(r => r.flows?.is_fnv);
 
@@ -346,7 +352,7 @@ const compute = (() => {
 
       avg_ppi:                           avg('ppi', r => r.flows?.is_picking),
       avg_picking_time_per_order:        avg('picking_time_per_order', r => r.flows?.is_picking),
-      avg_total_time_per_order:          avg('total_time_per_order', r => r.flows?.is_picking),
+      avg_total_time_per_order:          weightedAvg('total_time_per_order', 'checkout_orders', r => r.flows?.is_picking),
       avg_assigned_to_started:           avg('assigned_to_started_per_order', r => r.flows?.is_picking),
       avg_billing_time:                  avg('billing_time_per_order', r => r.flows?.is_picking),
       avg_iph:                           avg('iph', r => r.flows?.is_putting),
@@ -928,6 +934,150 @@ const compute = (() => {
     };
   }
 
+  // ── Incentive Calculation ──────────────────────────────────────────────
+
+  const PICKING_SLABS_400 = [
+    { maxTime: 70,  amount: 500 },   // <1:10
+    { maxTime: 75,  amount: 400 },   // 1:10-1:15
+    { maxTime: 80,  amount: 300 },   // 1:15-1:20
+    { maxTime: 90,  amount: 250 },   // 1:20-1:30
+    { maxTime: 110, amount: 125 },   // 1:30-1:50
+  ];
+  const PICKING_SLABS_800 = [
+    { maxTime: 75,  amount: 500 },   // <1:15
+    { maxTime: 80,  amount: 400 },   // 1:15-1:20
+    { maxTime: 85,  amount: 300 },   // 1:20-1:25
+    { maxTime: 95,  amount: 250 },   // 1:25-1:35
+    { maxTime: 120, amount: 125 },   // 1:35-2:00
+  ];
+
+  function _pickingSlabAmount(avgTime, slabs) {
+    for (const slab of slabs) {
+      if (avgTime < slab.maxTime) return slab.amount;
+    }
+    return 0;
+  }
+
+  /**
+   * Returns distinct ISO week keys whose Monday (week start) falls in a given month.
+   * This matches how _weekLabel() names weeks — by their start date's month —
+   * so Incentives "Mar W1" = the same week as Deep Dive "Mar W1".
+   * @param {Array} data - daily metric rows
+   * @param {string} monthKey - "YYYY-MM"
+   * @returns {string[]} sorted week keys
+   */
+  function getWeekKeysForMonth(data, monthKey) {
+    const keys = new Set();
+    for (const row of data) {
+      if (!row.date) continue;
+      const ws = _weekStart(row.date); // Monday of this row's ISO week
+      const wsYm = `${ws.getFullYear()}-${String(ws.getMonth() + 1).padStart(2, '0')}`;
+      if (wsYm === monthKey) keys.add(_isoWeekKey(row.date));
+    }
+    return [...keys].sort();
+  }
+
+  /**
+   * Compute weekly picking incentives per captain.
+   * @param {Array} data - daily metric rows
+   * @param {string[]} weekKeys - ISO week keys to include
+   * @returns {Map<string, { employee_name, weeks: Map, total }>}
+   */
+  function computePickingIncentives(data, weekKeys) {
+    const wkSet = new Set(weekKeys);
+    // Group by employee → week (only picking-flow rows)
+    const empMap = new Map();
+
+    for (const row of data) {
+      if (!row.date || !row.flows?.is_picking) continue;
+      if (!row.checkout_orders || row.checkout_orders <= 0) continue;
+      const wk = _isoWeekKey(row.date);
+      if (!wkSet.has(wk)) continue;
+
+      let emp = empMap.get(row.employee_id);
+      if (!emp) {
+        emp = { employee_name: row.employee_name, weeks: new Map() };
+        empMap.set(row.employee_id, emp);
+      }
+      let week = emp.weeks.get(wk);
+      if (!week) {
+        week = { orders: 0, timeSum: 0, orderSum: 0 };
+        emp.weeks.set(wk, week);
+      }
+      week.orders += row.checkout_orders;
+      // Weighted average: total_time_per_order × checkout_orders
+      if (row.total_time_per_order > 0) {
+        week.timeSum += row.total_time_per_order * row.checkout_orders;
+        week.orderSum += row.checkout_orders;
+      }
+    }
+
+    // Compute incentive per captain-week
+    const result = new Map();
+    for (const [empId, emp] of empMap) {
+      const weekResults = new Map();
+      let total = 0;
+      for (const [wk, w] of emp.weeks) {
+        const avgTime = w.orderSum > 0 ? w.timeSum / w.orderSum : 0;
+        let amount = 0;
+        if (w.orders >= 800) {
+          amount = _pickingSlabAmount(avgTime, PICKING_SLABS_800);
+        } else if (w.orders >= 400) {
+          amount = _pickingSlabAmount(avgTime, PICKING_SLABS_400);
+        }
+        weekResults.set(wk, { orders: w.orders, avgTime, amount });
+        total += amount;
+      }
+      result.set(empId, { employee_name: emp.employee_name, weeks: weekResults, total });
+    }
+    return result;
+  }
+
+  /**
+   * Compute monthly audit incentives per captain (tiered pricing).
+   * Uses the Audits sheet (auditData) for accurate rack counts via audit_codes.length.
+   * @param {Array} auditData - rows from the Audits sheet (each has audit_codes array)
+   * @param {string} monthKey - "YYYY-MM"
+   * @returns {Map<string, { employee_name, totalRacks, amount, tier1, tier2, tier3 }>}
+   */
+  function computeAuditIncentives(auditData, monthKey) {
+    const empMap = new Map();
+    for (const row of auditData) {
+      if (!row.date) continue;
+      const ym = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}`;
+      if (ym !== monthKey) continue;
+      const racks = row.audit_codes ? row.audit_codes.length : 0;
+      if (racks <= 0) continue;
+
+      let emp = empMap.get(row.employee_id);
+      if (!emp) {
+        emp = { employee_name: row.employee_name, totalRacks: 0 };
+        empMap.set(row.employee_id, emp);
+      }
+      emp.totalRacks += racks;
+    }
+
+    const result = new Map();
+    for (const [empId, emp] of empMap) {
+      const r = emp.totalRacks;
+      const tier1Racks = Math.min(r, 40);
+      const tier2Racks = Math.min(Math.max(r - 40, 0), 40);
+      const tier3Racks = Math.max(r - 80, 0);
+      const tier1 = tier1Racks * 30;
+      const tier2 = tier2Racks * 40;
+      const tier3 = tier3Racks * 50;
+      result.set(empId, {
+        employee_name: emp.employee_name,
+        totalRacks: r,
+        amount: tier1 + tier2 + tier3,
+        tier1, tier1Racks,
+        tier2, tier2Racks,
+        tier3, tier3Racks,
+      });
+    }
+    return result;
+  }
+
   return {
     computeFlowFlags,
     computeFNVRate,
@@ -940,5 +1090,8 @@ const compute = (() => {
     computeComplaintAggregations,
     formatDuration,
     deviationClass,
+    getWeekKeysForMonth,
+    computePickingIncentives,
+    computeAuditIncentives,
   };
 })();
