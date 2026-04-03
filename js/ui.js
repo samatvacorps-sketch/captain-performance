@@ -2569,9 +2569,9 @@ const ui = (() => {
         <td>${_fmt(d.totalComplaints)}</td>
         <td>${_fmt(d.inStoreNo)}</td>
         <td>${_fmt(d.inStoreYes)}</td>
-        <td>${pct(d.totalComplaints, ord)}</td>
-        <td>${pct(d.inStoreNo, ord)}</td>
-        <td>${pct(d.inStoreYes, ord)}</td>
+        <td>${pct(d.totalComplaints, ord, 2)}</td>
+        <td>${pct(d.inStoreNo, ord, 2)}</td>
+        <td>${pct(d.inStoreYes, ord, 2)}</td>
         <td>${_fmt(d.missingOutStore)}</td>
         <td>${_fmt(d.missingInStore)}</td>
         <td>${pct(d.missingInStore, ord, 2)}</td>
