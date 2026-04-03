@@ -1486,6 +1486,78 @@ tr.incentive-zero td { opacity: 0.45; }
   opacity: 0.4;
 }
 
+.tier-count-clickable {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 4px;
+  transition: opacity 0.15s;
+}
+.tier-count-clickable:hover { opacity: 0.75; }
+
+.tier-shift-popover {
+  position: absolute;
+  z-index: 9999;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 240px;
+  max-width: 300px;
+  max-height: 320px;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+.tier-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  background: var(--card-bg);
+}
+.tier-popover-count {
+  background: var(--surface-high);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.tier-popover-list {
+  list-style: none;
+  padding: 4px 0;
+  margin: 0;
+}
+.tier-popover-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+}
+.tier-popover-list li:hover { background: var(--surface-high); }
+.tier-popover-name {
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tier-popover-id {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: monospace;
+  white-space: nowrap;
+}
+
 /* Flow section headers */
 .tiers-flow-section {
   margin-bottom: 24px;

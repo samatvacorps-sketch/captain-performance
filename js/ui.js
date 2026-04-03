@@ -71,6 +71,8 @@ const ui = (() => {
 
     sel.innerHTML = [
       '<option value="all">All Time</option>',
+      '<option value="t1">T-1 (Yesterday)</option>',
+      '<option value="t2">T-2 (Day before yesterday)</option>',
       '<optgroup label="Weekly">',
       ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
       '</optgroup>',
@@ -94,6 +96,17 @@ const ui = (() => {
     if (!data) return;
     const periodVal = document.getElementById('overview-preset')?.value;
     if (!periodVal) return;
+
+    if (periodVal === 't1' || periodVal === 't2') {
+      const d = new Date();
+      d.setDate(d.getDate() - (periodVal === 't1' ? 1 : 2));
+      const ds = _isoDateStr(d);
+      document.getElementById('overview-start').value = ds;
+      document.getElementById('overview-end').value   = ds;
+      _overviewDateMode = true;
+      renderStoreOverview();
+      return;
+    }
 
     if (periodVal === 'all') {
       const sortedDates = data.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
@@ -243,6 +256,8 @@ const ui = (() => {
     if (!sel) return;
 
     sel.innerHTML = [
+      '<option value="t1">T-1 (Yesterday)</option>',
+      '<option value="t2">T-2 (Day before yesterday)</option>',
       '<optgroup label="Weekly">',
       ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
       '</optgroup>',
@@ -271,6 +286,19 @@ const ui = (() => {
     if (!data) return;
     const periodVal = document.getElementById('deep-dive-period')?.value;
     if (!periodVal) return;
+
+    if (periodVal === 't1' || periodVal === 't2') {
+      const d = new Date();
+      d.setDate(d.getDate() - (periodVal === 't1' ? 1 : 2));
+      const ds = _isoDateStr(d);
+      document.getElementById('deep-dive-start').value = ds;
+      document.getElementById('deep-dive-end').value   = ds;
+      _deepDiveDateMode = true;
+      _ddFilter = 'all';
+      renderDeepDive();
+      return;
+    }
+
     const colonIdx  = periodVal.indexOf(':');
     const periodType = periodVal.slice(0, colonIdx);
     const periodKey  = periodVal.slice(colonIdx + 1);
@@ -321,7 +349,7 @@ const ui = (() => {
       // Use 'W' scoring logic for multi-day ranges (period avg vs store avg)
       const diffDays = startVal && endVal
         ? (new Date(endVal) - new Date(startVal)) / 86400000 : 30;
-      periodType = diffDays === 0 ? 'D' : 'W';
+      periodType = 'W'; // always use period-relative scoring in date mode
     } else {
       const colonIdx  = periodVal.indexOf(':');
       periodType = periodVal.slice(0, colonIdx);
@@ -1036,6 +1064,7 @@ const ui = (() => {
 
   let _tierDateMode = false;
   let _tierMode = 'time'; // 'time' | 'experience'
+  let _tierGroupRows = {}; // snapshot for popover access
 
   function initTiersView() {
     const data = app.getFlaggedData();
@@ -1047,6 +1076,8 @@ const ui = (() => {
     if (!sel) return;
 
     sel.innerHTML = [
+      '<option value="t1">T-1 (Yesterday)</option>',
+      '<option value="t2">T-2 (Day before yesterday)</option>',
       '<optgroup label="Weekly">',
       ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
       '</optgroup>',
@@ -1071,6 +1102,18 @@ const ui = (() => {
     if (!data) return;
     const periodVal  = document.getElementById('tiers-period')?.value;
     if (!periodVal) return;
+
+    if (periodVal === 't1' || periodVal === 't2') {
+      const d = new Date();
+      d.setDate(d.getDate() - (periodVal === 't1' ? 1 : 2));
+      const ds = _isoDateStr(d);
+      document.getElementById('tiers-start').value = ds;
+      document.getElementById('tiers-end').value   = ds;
+      _tierDateMode = true;
+      renderTiersView();
+      return;
+    }
+
     const colonIdx   = periodVal.indexOf(':');
     const periodType = periodVal.slice(0, colonIdx);
     const periodKey  = periodVal.slice(colonIdx + 1);
@@ -1227,10 +1270,23 @@ const ui = (() => {
     let groupDefs, groupRows, groupLabel;
 
     if (_tierMode === 'time') {
+      // Pick each captain's most recent roster entry on or before the period start.
+      const refDate = startVal ? new Date(startVal) : new Date();
+      const _rosterSerial = s => {
+        const n = parseFloat(s);
+        return (!isNaN(n) && n > 1000) ? new Date(Math.round((n - 25569) * 86400000)) : null;
+      };
+      const bestEntry = new Map();
+      for (const r of sheets.getRosterCached()) {
+        if (!r.employee_id || !r.shift) continue;
+        const shiftDate = _rosterSerial(r.start);
+        if (!shiftDate || shiftDate > refDate) continue;
+        const prev = bestEntry.get(r.employee_id);
+        const prevDate = prev ? _rosterSerial(prev.start) : null;
+        if (!prev || !prevDate || shiftDate > prevDate) bestEntry.set(r.employee_id, r);
+      }
       const rosterMap = new Map(
-        sheets.getRosterCached()
-          .filter(r => r.employee_id)
-          .map(r => [r.employee_id, r.shift.toLowerCase()])
+        [...bestEntry.values()].map(r => [r.employee_id, r.shift.toLowerCase()])
       );
       groupDefs = [
         { key: 'morning', label: 'Morning', color: '#fb923c' },
@@ -1240,6 +1296,8 @@ const ui = (() => {
       groupLabel = 'Shift';
       groupRows = { morning: [], evening: [], night: [] };
       for (const row of filtered) {
+        const f = row.flows;
+        if (!f || (!f.is_picking && !f.is_putting && !f.is_audit && !f.is_fnv)) continue;
         const s = rosterMap.get(row.employee_id) || '';
         if (groupRows[s]) groupRows[s].push(row);
       }
@@ -1252,14 +1310,70 @@ const ui = (() => {
       groupLabel = 'Tier';
       groupRows = { new: [], experienced: [], senior: [] };
       for (const row of filtered) {
+        const f = row.flows;
+        if (!f || (!f.is_picking && !f.is_putting && !f.is_audit && !f.is_fnv)) continue;
         const t = _classifyExpTier(activeDayCounts, row.employee_id);
         groupRows[t].push(row);
       }
     }
 
     const groupStats = Object.fromEntries(groupDefs.map(g => [g.key, _tierMetrics(groupRows[g.key])]));
+    _tierGroupRows = groupRows;
     container.innerHTML = _buildTiersHTML(groupStats, groupDefs, groupLabel);
     container.querySelectorAll('.tiers-table').forEach(t => _initTableSort(t));
+
+    container.querySelectorAll('.tier-count-clickable').forEach(span => {
+      span.addEventListener('click', e => {
+        e.stopPropagation();
+        const groupKey   = span.dataset.group;
+        const groupLabel = span.dataset.label;
+        const rows       = _tierGroupRows[groupKey] || [];
+        const captains   = [...new Map(
+          rows.map(r => [r.employee_id, { id: r.employee_id, name: r.employee_name }])
+        ).values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        _showShiftPopover(span, captains, groupLabel);
+      });
+    });
+  }
+
+  function _showShiftPopover(anchor, captains, label) {
+    document.getElementById('tier-shift-popover')?.remove();
+    if (!captains.length) return;
+
+    const pop = document.createElement('div');
+    pop.id = 'tier-shift-popover';
+    pop.className = 'tier-shift-popover';
+    pop.innerHTML = `
+      <div class="tier-popover-header">
+        ${label} Captains
+        <span class="tier-popover-count">${captains.length}</span>
+      </div>
+      <ul class="tier-popover-list">
+        ${captains.map(c => `
+          <li>
+            <span class="tier-popover-name">${c.name || '—'}</span>
+            <span class="tier-popover-id">${c.id}</span>
+          </li>`).join('')}
+      </ul>`;
+    document.body.appendChild(pop);
+
+    const rect  = anchor.getBoundingClientRect();
+    const scrollX = window.scrollX || window.pageXOffset;
+    const scrollY = window.scrollY || window.pageYOffset;
+    const popW  = 260;
+    let left = rect.left + scrollX;
+    if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+    if (left < 8) left = 8;
+    pop.style.left = left + 'px';
+    pop.style.top  = (rect.bottom + scrollY + 6) + 'px';
+
+    const dismiss = ev => {
+      if (!pop.contains(ev.target)) {
+        pop.remove();
+        document.removeEventListener('click', dismiss, true);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', dismiss, true), 0);
   }
 
   function _buildTiersHTML(groupStats, groupDefs, groupLabel) {
@@ -1288,7 +1402,11 @@ const ui = (() => {
         <div class="tier-metric-card">
           <p class="tier-card-label">${g.label}</p>
           <div class="tier-card-row">
-            <span class="tier-card-value" style="color:${g.color}">${s.captainCount}</span>
+            <span class="tier-card-value${has ? ' tier-count-clickable' : ''}"
+              style="color:${g.color}"
+              data-group="${g.key}"
+              data-label="${g.label}"
+              title="${has ? 'Click to see captains' : ''}">${s.captainCount}</span>
             ${has ? `<span class="tier-card-badge" style="color:${g.color};background:${g.color}18">Active</span>` : ''}
           </div>
           ${g.sub ? `<p class="tier-card-sub">${g.sub}</p>` : ''}
@@ -1679,6 +1797,8 @@ const ui = (() => {
 
     sel.innerHTML = [
       '<option value="all">All Time</option>',
+      '<option value="t1">T-1 (Yesterday)</option>',
+      '<option value="t2">T-2 (Day before yesterday)</option>',
       '<optgroup label="Weekly">',
       ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
       '</optgroup>',
@@ -1713,6 +1833,19 @@ const ui = (() => {
     if (!auditData) return;
     const periodVal = document.getElementById('inv-preset')?.value;
     if (!periodVal) return;
+
+    if (periodVal === 't1' || periodVal === 't2') {
+      const d = new Date();
+      d.setDate(d.getDate() - (periodVal === 't1' ? 1 : 2));
+      const ds = _isoDateStr(d);
+      document.getElementById('inv-start').value = ds;
+      document.getElementById('inv-end').value   = ds;
+      _invDateMode = true;
+      _invCache = null;
+      _invCacheKey = null;
+      renderInventoryHealth();
+      return;
+    }
 
     if (periodVal === 'all') {
       // Reset to full date span (audit + daily audit-hour dates)
@@ -2120,6 +2253,8 @@ const ui = (() => {
 
     sel.innerHTML = [
       '<option value="all">All Time</option>',
+      '<option value="t1">T-1 (Yesterday)</option>',
+      '<option value="t2">T-2 (Day before yesterday)</option>',
       '<optgroup label="Weekly">',
       ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
       '</optgroup>',
@@ -2150,6 +2285,19 @@ const ui = (() => {
     if (!complData) return;
     const periodVal = document.getElementById('compl-preset')?.value;
     if (!periodVal) return;
+
+    if (periodVal === 't1' || periodVal === 't2') {
+      const d = new Date();
+      d.setDate(d.getDate() - (periodVal === 't1' ? 1 : 2));
+      const ds = _isoDateStr(d);
+      document.getElementById('compl-start').value = ds;
+      document.getElementById('compl-end').value   = ds;
+      _complDateMode = true;
+      _complCache = null;
+      _complCacheKey = null;
+      renderComplaintsDeepDive();
+      return;
+    }
 
     if (periodVal === 'all') {
       const sortedDates = complData.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
