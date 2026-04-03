@@ -424,6 +424,31 @@ const compute = (() => {
     return d;
   }
 
+  /**
+   * Blinkit merchant cycle: starts 26th of prev month, ends 25th of this month.
+   * A date on the 26th or later belongs to the NEXT calendar month's cycle.
+   * Returns "YYYY-MM" of the cycle's end month.
+   */
+  function _merchantCycleKey(date) {
+    const d = date.getDate();
+    const m = date.getMonth(); // 0-based
+    const y = date.getFullYear();
+    if (d >= 26) {
+      const nm = m + 1;
+      return nm > 11 ? `${y + 1}-01` : `${y}-${String(nm + 1).padStart(2, '0')}`;
+    }
+    return `${y}-${String(m + 1).padStart(2, '0')}`;
+  }
+
+  function _merchantCycleLabel(cycleKey) {
+    const [y, mo] = cycleKey.split('-').map(Number);
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const cycleMonth = mo - 1; // 0-based end month
+    const prevMonth  = cycleMonth === 0 ? 11 : cycleMonth - 1;
+    const prevYear   = cycleMonth === 0 ? y - 1 : y;
+    return `${months[prevMonth]} 26 – ${months[cycleMonth]} 25, ${y}`;
+  }
+
   // ── Public getters for UI ─────────────────────────────────────────────
 
   /** Format seconds to HH:MM:SS or MM:SS */
@@ -802,6 +827,51 @@ const compute = (() => {
         missingOutStore: monthMissingOutStore[b.monthKey]?.size || 0,
       }));
 
+    // Merchant cycle bucketing (26th prev month → 25th this month)
+    const cycleBuckets = {};
+    for (const [, v] of dailyMap) {
+      const ck = _merchantCycleKey(v.date);
+      if (!cycleBuckets[ck]) {
+        cycleBuckets[ck] = {
+          cycleKey: ck, totalComplaints: 0, orders: new Set(),
+          inStoreYes: 0, inStoreNo: 0, days: 0,
+        };
+      }
+      const cb = cycleBuckets[ck];
+      cb.totalComplaints += v.totalComplaints;
+      for (const o of v.orders) cb.orders.add(o);
+      cb.inStoreYes += v.inStoreYes;
+      cb.inStoreNo  += v.inStoreNo;
+      cb.days++;
+    }
+    const cycleOrders = {};
+    for (const row of dailyData) {
+      if (!row.date || !row.checkout_orders) continue;
+      const ck = _merchantCycleKey(row.date);
+      if (cycleBuckets[ck]) cycleOrders[ck] = (cycleOrders[ck] || 0) + row.checkout_orders;
+    }
+    const cycleMissingInStore  = {};
+    const cycleMissingOutStore = {};
+    for (const row of complaintsData) {
+      if (!row.date || (row.complaint_category || '').toLowerCase() !== 'item_missing') continue;
+      const ck = _merchantCycleKey(row.date);
+      const target = row.in_store ? cycleMissingInStore : cycleMissingOutStore;
+      (target[ck] = target[ck] || new Set()).add(row.order_id);
+    }
+    const merchantCycle = Object.values(cycleBuckets)
+      .sort((a, b) => a.cycleKey.localeCompare(b.cycleKey))
+      .map(b => ({
+        cycleKey: b.cycleKey,
+        label: _merchantCycleLabel(b.cycleKey),
+        totalComplaints: b.totalComplaints,
+        uniqueOrders: b.orders.size,
+        inStoreYes: b.inStoreYes,
+        inStoreNo: b.inStoreNo,
+        totalOrdersPicked: cycleOrders[b.cycleKey] || 0,
+        missingInStore:  cycleMissingInStore[b.cycleKey]?.size  || 0,
+        missingOutStore: cycleMissingOutStore[b.cycleKey]?.size || 0,
+      }));
+
     // Overall totals
     const totalComplaints = complaintsData.length;
     const uniqueOrders = new Set(complaintsData.map(r => r.order_id)).size;
@@ -828,7 +898,7 @@ const compute = (() => {
     ).size;
 
     const storeSummary = {
-      daily, weekly, monthly,
+      daily, weekly, monthly, merchantCycle,
       totals: {
         totalComplaints, uniqueOrders, inStoreYes, inStoreNo,
         inStoreRate: totalComplaints > 0 ? +(inStoreYes / totalComplaints * 100).toFixed(1) : 0,

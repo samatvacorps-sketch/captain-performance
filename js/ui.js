@@ -2532,10 +2532,10 @@ const ui = (() => {
       </div>
     `;
 
-    // Render period summary table
+    // Render period summary table (always uses merchant cycles regardless of weekly/monthly toggle)
     const summaryEl = document.getElementById('compl-summary-table');
     if (summaryEl) {
-      summaryEl.innerHTML = _renderComplaintSummaryTable(periodData);
+      summaryEl.innerHTML = _renderComplaintSummaryTable(agg.storeSummary.merchantCycle || []);
       _initTableSort(summaryEl.querySelector('.data-table'));
     }
 
