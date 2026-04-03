@@ -1012,9 +1012,11 @@ const compute = (() => {
   }
 
   /**
-   * Returns distinct ISO week keys whose Monday (week start) falls in a given month.
-   * This matches how _weekLabel() names weeks — by their start date's month —
-   * so Incentives "Mar W1" = the same week as Deep Dive "Mar W1".
+   * Returns distinct ISO week keys that "belong" to a given month.
+   * Assignment rule: a week belongs to the month containing its Thursday
+   * (same ISO-8601 principle used for year assignment). This means:
+   *  - W14 2026 (Mar 30–Apr 5): Thursday = Apr 2 → April  ✓
+   *  - W9  2026 (Feb 23–Mar 1): Thursday = Feb 26 → February ✓ (won't bleed into March)
    * @param {Array} data - daily metric rows
    * @param {string} monthKey - "YYYY-MM"
    * @returns {string[]} sorted week keys
@@ -1023,9 +1025,10 @@ const compute = (() => {
     const keys = new Set();
     for (const row of data) {
       if (!row.date) continue;
-      const ws = _weekStart(row.date); // Monday of this row's ISO week
-      const wsYm = `${ws.getFullYear()}-${String(ws.getMonth() + 1).padStart(2, '0')}`;
-      if (wsYm === monthKey) keys.add(_isoWeekKey(row.date));
+      const ws  = _weekStart(row.date);          // Monday
+      const thu = new Date(ws.getTime() + 3 * 86400000); // Thursday = Mon + 3 days
+      const thuYm = `${thu.getFullYear()}-${String(thu.getMonth() + 1).padStart(2, '0')}`;
+      if (thuYm === monthKey) keys.add(_isoWeekKey(row.date));
     }
     return [...keys].sort();
   }
