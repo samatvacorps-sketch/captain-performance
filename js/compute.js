@@ -601,6 +601,28 @@ const compute = (() => {
       };
     }
 
+    // ── Add captains with audit hours but 0 racks in Audits sheet ──────
+    for (const [empId, auditSec] of captainAuditSeconds) {
+      if (captainMap.has(empId)) continue;
+      const nameRow = dailyData.find(r => r.employee_id === empId);
+      const empName = nameRow?.employee_name || empId;
+      const totalHours = auditSec / 3600;
+      captainMap.set(empId, {
+        employee_id: empId,
+        employee_name: empName,
+        days: [],
+        totals: {
+          totalRacks: 0,
+          totalHours: +totalHours.toFixed(1),
+          avgRacksPerHour: null,
+          hrPerRack: null,
+          totalDays: captainAuditDays.get(empId) || 0,
+          rackDays: 0,
+          avgRacksPerDay: 0,
+        },
+      });
+    }
+
     const captainPerf = captainMap;
 
     // ── Rack intelligence ───────────────────────────────────────────
@@ -686,6 +708,22 @@ const compute = (() => {
       dailyOrders.set(dk, (dailyOrders.get(dk) || 0) + row.checkout_orders);
     }
 
+    // Pre-compute missing-complaint unique order sets per period (item_missing, split by in_store)
+    const weekMissingInStore  = {};
+    const weekMissingOutStore = {};
+    const monthMissingInStore  = {};
+    const monthMissingOutStore = {};
+    for (const row of complaintsData) {
+      if (!row.date || (row.complaint_category || '').toLowerCase() !== 'item_missing') continue;
+      const wk = _isoWeekKey(row.date);
+      const mk = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}`;
+      const target = row.in_store
+        ? { w: weekMissingInStore,  m: monthMissingInStore  }
+        : { w: weekMissingOutStore, m: monthMissingOutStore };
+      (target.w[wk] = target.w[wk] || new Set()).add(row.order_id);
+      (target.m[mk] = target.m[mk] || new Set()).add(row.order_id);
+    }
+
     // Weekly bucketing
     const weekBuckets = {};
     for (const [ds, v] of dailyMap) {
@@ -722,6 +760,8 @@ const compute = (() => {
         byCategory: b.byCategory, byRCA: b.byRCA,
         totalOrdersPicked: weekOrders[b.weekKey] || 0,
         avgPerDay: b.days > 0 ? +(b.totalComplaints / b.days).toFixed(1) : 0,
+        missingInStore:  weekMissingInStore[b.weekKey]?.size  || 0,
+        missingOutStore: weekMissingOutStore[b.weekKey]?.size || 0,
       }));
 
     // Monthly bucketing
@@ -758,6 +798,8 @@ const compute = (() => {
         byCategory: b.byCategory, byRCA: b.byRCA,
         totalOrdersPicked: monthOrders[b.monthKey] || 0,
         avgPerDay: b.days > 0 ? +(b.totalComplaints / b.days).toFixed(1) : 0,
+        missingInStore:  monthMissingInStore[b.monthKey]?.size  || 0,
+        missingOutStore: monthMissingOutStore[b.monthKey]?.size || 0,
       }));
 
     // Overall totals
@@ -776,12 +818,23 @@ const compute = (() => {
       totalsByRCA[rca] = (totalsByRCA[rca] || 0) + 1;
     }
 
+    const missingInStoreTotal = new Set(
+      complaintsData.filter(r => r.in_store && (r.complaint_category || '').toLowerCase() === 'item_missing')
+        .map(r => r.order_id)
+    ).size;
+    const missingOutStoreTotal = new Set(
+      complaintsData.filter(r => !r.in_store && (r.complaint_category || '').toLowerCase() === 'item_missing')
+        .map(r => r.order_id)
+    ).size;
+
     const storeSummary = {
       daily, weekly, monthly,
       totals: {
         totalComplaints, uniqueOrders, inStoreYes, inStoreNo,
         inStoreRate: totalComplaints > 0 ? +(inStoreYes / totalComplaints * 100).toFixed(1) : 0,
         totalOrdersPicked,
+        missingInStore: missingInStoreTotal,
+        missingOutStore: missingOutStoreTotal,
         byCategory: totalsByCategory, byRCA: totalsByRCA,
       },
     };

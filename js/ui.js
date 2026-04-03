@@ -368,11 +368,20 @@ const ui = (() => {
       });
     }
 
+    // Build auditRacksMap for accurate rack counts (Audits sheet over Daily Metrics col H)
+    const _auditRaw = sheets.getAuditCached() || [];
+    const _filteredDateStrs = new Set(filtered.map(r => r.dateStr).filter(Boolean));
+    const auditRacksMap = new Map();
+    for (const ar of _auditRaw) {
+      if (ar.dateStr && _filteredDateStrs.has(ar.dateStr))
+        auditRacksMap.set(`${ar.employee_id}_${ar.dateStr}`, ar.audit_codes.length);
+    }
+
     // Compute period store stats (avg + SD) from the filtered rows
-    const periodStoreStats = _computePeriodStoreStats(filtered);
+    const periodStoreStats = _computePeriodStoreStats(filtered, auditRacksMap);
 
     // Aggregate per captain for this period
-    const byCaptain = _groupByCaptain(filtered, periodType, periodStoreStats);
+    const byCaptain = _groupByCaptain(filtered, periodType, periodStoreStats, auditRacksMap);
 
     // Apply captain filter (set by clicking summary cards)
     const visibleCaptains = _ddFilter === 'flagged'
@@ -474,7 +483,7 @@ const ui = (() => {
     });
   }
 
-  function _groupByCaptain(rows, periodType, periodStoreStats) {
+  function _groupByCaptain(rows, periodType, periodStoreStats, auditRacksMap) {
     const map = {};
     for (const row of rows) {
       const id = row.employee_id;
@@ -572,14 +581,24 @@ const ui = (() => {
       captain.total_putaway_qty = captain.rows
         .filter(r => r.flows?.is_putting)
         .reduce((s, r) => s + (r.putaway_qty || 0), 0);
+      captain.total_putter_hours = captain.rows
+        .filter(r => r.flows?.is_putting)
+        .reduce((s, r) => s + (r.putter_active_time || 0), 0) / 3600;
 
       // Audit extras
       captain.total_racks_audited = captain.rows
         .filter(r => r.flows?.is_audit)
-        .reduce((s, r) => s + (r.racks_audited || 0), 0);
+        .reduce((s, r) => {
+          const mapKey = `${r.employee_id}_${r.dateStr}`;
+          const mapRacks = auditRacksMap?.get(mapKey);
+          return s + (mapRacks !== undefined ? mapRacks : (r.racks_audited || 0));
+        }, 0);
       captain.total_auditor_hours = captain.rows
         .filter(r => r.flows?.is_audit)
         .reduce((s, r) => s + (r.auditor_active_time || 0), 0) / 3600;
+      // Override audit_hours_per_rack using accurate rack count from auditRacksMap
+      captain.avgValues['audit_hours_per_rack'] = captain.total_racks_audited > 0 && captain.total_auditor_hours > 0
+        ? captain.total_auditor_hours / captain.total_racks_audited : null;
 
       // FNV extras
       const fnvVals = captain.rows.filter(r => r.flows?.is_fnv)
@@ -601,7 +620,7 @@ const ui = (() => {
    * rows from the currently selected period.
    * Used for both period-level flagging and display of store avg.
    */
-  function _computePeriodStoreStats(rows) {
+  function _computePeriodStoreStats(rows, auditRacksMap) {
     const result = new Map();
     for (const metric of CONFIG.METRICS) {
       const activeRows = rows.filter(r => {
@@ -616,9 +635,12 @@ const ui = (() => {
       const vals = activeRows
         .map(r => {
           if (metric.key === 'fnv_audit_rate') return r.fnv_audit_rate;
-          if (metric.key === 'audit_hours_per_rack')
-            return (r.auditor_active_time > 0 && r.racks_audited > 0)
-              ? (r.auditor_active_time / 3600) / r.racks_audited : null;
+          if (metric.key === 'audit_hours_per_rack') {
+            const mapKey = `${r.employee_id}_${r.dateStr}`;
+            const racks = auditRacksMap?.get(mapKey) ?? (r.racks_audited || 0);
+            return (r.auditor_active_time > 0 && racks > 0)
+              ? (r.auditor_active_time / 3600) / racks : null;
+          }
           return r[metric.key];
         })
         .filter(v => v !== null && v !== undefined && !isNaN(v) && v > 0);
@@ -642,6 +664,7 @@ const ui = (() => {
       case 'avg_ppi':               return captain.avg_ppi ?? -Infinity;
       case 'total_time_per_order':  return captain.avgValues?.total_time_per_order ?? -Infinity;
       case 'putaway_qty':  return captain.total_putaway_qty ?? 0;
+      case 'put_hours':    return captain.total_putter_hours ?? 0;
       case 'racks':        return captain.total_racks_audited ?? 0;
       case 'audit_hours':  return captain.total_auditor_hours ?? 0;
       case 'fnv_rate':     return captain.avg_fnv_rate ?? -Infinity;
@@ -854,6 +877,7 @@ const ui = (() => {
         ${_captainCell(captain.employee_name, captain.employee_id)}
         <td>${_scoreBadge(captain.putting_score)}</td>
         <td>${_fmt(captain.total_putaway_qty)}</td>
+        <td>${_fmt(captain.total_putter_hours, 1)} h</td>
         <td class="${cls}" title="${flagged ? '🚩 Flagged' : ''}">
           ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ` <span style="opacity:0.7;vertical-align:middle">${ICONS.flagSm}</span>` : ''}
         </td>
@@ -866,6 +890,7 @@ const ui = (() => {
         ${_thSort('Captain', 'name', 'putting')}
         ${_thSort('Score', 'score', 'putting')}
         ${_thSort('Putaway Qty', 'putaway_qty', 'putting')}
+        ${_thSort('Putter Hours', 'put_hours', 'putting')}
         ${_thSort('Items Put Away/Hr<br/><small style="font-weight:400;opacity:0.7">actual | personal | store</small>', 'iph', 'putting')}
         <th></th>
       </tr></thead>
@@ -1195,7 +1220,7 @@ const ui = (() => {
     return 'senior';
   }
 
-  function _tierMetrics(rows) {
+  function _tierMetrics(rows, auditRacksMap) {
     const pickRows  = rows.filter(r => r.flows?.is_picking);
     const putRows   = rows.filter(r => r.flows?.is_putting);
     const auditRows = rows.filter(r => r.flows?.is_audit);
@@ -1222,7 +1247,11 @@ const ui = (() => {
 
     const totalPutQty   = sum(putRows,   'putaway_qty');
     const totalPutHrs   = sum(putRows,   'putter_active_time') / 3600;
-    const totalRacks    = sum(auditRows, 'racks_audited');
+    const totalRacks    = auditRows.reduce((s, r) => {
+      const mapKey = `${r.employee_id}_${r.dateStr}`;
+      const mapRacks = auditRacksMap?.get(mapKey);
+      return s + (mapRacks !== undefined ? mapRacks : (r.racks_audited || 0));
+    }, 0);
     const totalAuditHrs = sum(auditRows, 'auditor_active_time') / 3600;
 
     return {
@@ -1265,6 +1294,15 @@ const ui = (() => {
     if (!filtered.length) {
       container.innerHTML = '<p class="placeholder-text">No data for selected period.</p>';
       return;
+    }
+
+    // Build auditRacksMap for accurate rack counts (Audits sheet over Daily Metrics col H)
+    const _tierAuditRaw = sheets.getAuditCached() || [];
+    const _tierDateStrs = new Set(filtered.map(r => r.dateStr).filter(Boolean));
+    const auditRacksMap = new Map();
+    for (const ar of _tierAuditRaw) {
+      if (ar.dateStr && _tierDateStrs.has(ar.dateStr))
+        auditRacksMap.set(`${ar.employee_id}_${ar.dateStr}`, ar.audit_codes.length);
     }
 
     let groupDefs, groupRows, groupLabel;
@@ -1317,7 +1355,7 @@ const ui = (() => {
       }
     }
 
-    const groupStats = Object.fromEntries(groupDefs.map(g => [g.key, _tierMetrics(groupRows[g.key])]));
+    const groupStats = Object.fromEntries(groupDefs.map(g => [g.key, _tierMetrics(groupRows[g.key], auditRacksMap)]));
     _tierGroupRows = groupRows;
     container.innerHTML = _buildTiersHTML(groupStats, groupDefs, groupLabel);
     container.querySelectorAll('.tiers-table').forEach(t => _initTableSort(t));
@@ -2398,6 +2436,15 @@ const ui = (() => {
         ${_invStatCard(ICONS.box, 'stat-icon-blue', 'Total Orders Picked', _fmt(totals.totalOrdersPicked))}
       </div>
 
+      <!-- Period Summary Table -->
+      <div class="compl-section">
+        <div class="tiers-section-header">
+          <span class="tiers-section-pip" style="background:#4edea3;"></span>
+          <h3 class="tiers-section-title">Period Summary</h3>
+        </div>
+        <div id="compl-summary-table"></div>
+      </div>
+
       <!-- Zone 1: Trends -->
       <div class="compl-section">
         <div class="bento-grid">
@@ -2485,6 +2532,13 @@ const ui = (() => {
       </div>
     `;
 
+    // Render period summary table
+    const summaryEl = document.getElementById('compl-summary-table');
+    if (summaryEl) {
+      summaryEl.innerHTML = _renderComplaintSummaryTable(periodData);
+      _initTableSort(summaryEl.querySelector('.data-table'));
+    }
+
     // Render charts
     charts.renderComplaintTrendChart('chart-compl-trend', periodData);
     charts.renderRCADonutChart('chart-compl-rca', agg.categoryIntel.sorted.rca);
@@ -2501,6 +2555,50 @@ const ui = (() => {
 
     // Render category table
     _renderCategoryTable(agg.categoryIntel.sorted.l0);
+  }
+
+  function _renderComplaintSummaryTable(periodData) {
+    const pct = (num, den, dp = 1) =>
+      den > 0 ? _fmt(num / den * 100, dp) + '%' : '—';
+
+    const rows = periodData.map(d => {
+      const ord = d.totalOrdersPicked || 0;
+      return `<tr>
+        <td style="white-space:nowrap;">${_esc(d.label || d.weekKey || d.monthKey)}</td>
+        <td>${_fmt(ord)}</td>
+        <td>${_fmt(d.totalComplaints)}</td>
+        <td>${_fmt(d.inStoreNo)}</td>
+        <td>${_fmt(d.inStoreYes)}</td>
+        <td>${pct(d.totalComplaints, ord)}</td>
+        <td>${pct(d.inStoreNo, ord)}</td>
+        <td>${pct(d.inStoreYes, ord)}</td>
+        <td>${_fmt(d.missingOutStore)}</td>
+        <td>${_fmt(d.missingInStore)}</td>
+        <td>${pct(d.missingInStore, ord, 2)}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th>Total Orders</th>
+              <th>Total Complaints</th>
+              <th>Out-Store Complaints</th>
+              <th>In-Store Complaints</th>
+              <th>Complaint %</th>
+              <th>Out-Store Complaint %</th>
+              <th>In-Store Complaint %</th>
+              <th>Out-Store Missing<br><span style="font-size:9px;font-weight:500;opacity:0.65;text-transform:none;letter-spacing:0">(Order Level)</span></th>
+              <th>In-Store Missing<br><span style="font-size:9px;font-weight:500;opacity:0.65;text-transform:none;letter-spacing:0">(Order Level)</span></th>
+              <th>In-Store Missing %</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
   }
 
   function _renderCaptainComplaintRanking(captains) {
