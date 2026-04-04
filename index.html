@@ -98,7 +98,8 @@
       <div class="flags-date-strip">
         <span class="dd-control-label">View</span>
         <select id="overview-period" onchange="ui.setOverviewPeriod(this.value)">
-          <option value="weekly">Weekly</option>
+          <option value="daily">Daily</option>
+          <option value="weekly" selected>Weekly</option>
           <option value="monthly">Monthly</option>
         </select>
         <span class="strip-divider"></span>
@@ -293,6 +294,13 @@
         <h2 class="flags-title">Captain Profile</h2>
       </div>
       <div class="flags-date-strip">
+        <span class="dd-control-label">View</span>
+        <select id="profile-view" onchange="ui.setCpView(this.value)">
+          <option value="daily" selected>Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        <span class="strip-divider"></span>
         <span class="dd-control-label">Quick select</span>
         <select id="profile-preset" onchange="ui.onProfilePresetChange()"></select>
         <span class="strip-divider"></span>

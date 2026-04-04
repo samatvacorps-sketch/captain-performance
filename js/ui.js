@@ -12,6 +12,7 @@ const ui = (() => {
 
   // ── Captain Profile State ─────────────────────────────────────────────
   let _cpDateMode = false; // false = preset active, true = custom date range
+  let _cpView = 'daily';   // 'daily' | 'weekly' | 'monthly'
   const _CAPTAIN_COLORS = ['#adc6ff', '#ffca28', '#4edea3', '#c084fc', '#f9a8d4', '#c6c6ca'];
   let _selectedCaptains = []; // [{ id, name, color }]
 
@@ -167,9 +168,11 @@ const ui = (() => {
     const filteredCompl = complaintsData ? complaintsData.filter(r => r.date && r.date >= startMs && r.date <= endMs) : [];
 
     const period = document.getElementById('overview-period')?.value || 'weekly';
-    const aggregated = period === 'weekly'
-      ? compute.aggregateWeekly(filtered, filteredAudit, filteredCompl)
-      : compute.aggregateMonthly(filtered, filteredAudit, filteredCompl);
+    const aggregated = period === 'daily'
+      ? compute.aggregateDaily(filtered, filteredAudit, filteredCompl)
+      : period === 'weekly'
+        ? compute.aggregateWeekly(filtered, filteredAudit, filteredCompl)
+        : compute.aggregateMonthly(filtered, filteredAudit, filteredCompl);
 
     // Charts
     charts.renderOrdersHoursChart('chart-orders-hours', aggregated);
@@ -193,7 +196,7 @@ const ui = (() => {
 
     // Table
     const title = document.getElementById('overview-table-title');
-    if (title) title.textContent = period === 'weekly' ? 'Weekly Summary' : 'Monthly Summary';
+    if (title) title.textContent = period === 'daily' ? 'Daily Summary' : period === 'weekly' ? 'Weekly Summary' : 'Monthly Summary';
 
     _renderOverviewTable(aggregated, period);
   }
@@ -204,7 +207,7 @@ const ui = (() => {
     if (!head || !body) return;
 
     head.innerHTML = `<tr>
-      <th>${period === 'weekly' ? 'Week' : 'Month'}</th>
+      <th>${period === 'daily' ? 'Date' : period === 'weekly' ? 'Week' : 'Month'}</th>
       <th>Captains</th>
       <th>Orders Picked</th>
       <th>PPI</th>
@@ -1797,6 +1800,11 @@ const ui = (() => {
     renderCaptainProfile();
   }
 
+  function setCpView(val) {
+    _cpView = val || 'daily';
+    renderCaptainProfile();
+  }
+
   function renderCaptainProfile() {
     const data = app.getFlaggedData();
     const container = document.getElementById('profile-content');
@@ -1812,23 +1820,60 @@ const ui = (() => {
     const startMs = startInput?.value ? new Date(startInput.value).setHours(0,0,0,0)   : -Infinity;
     const endMs   = endInput?.value   ? new Date(endInput.value).setHours(23,59,59,999) :  Infinity;
 
-    // Build per-captain data
+    const auditData = (sheets.getAuditCached() || []).filter(r => r.date >= startMs && r.date <= endMs);
+
+    // Aggregated field name for weekly/monthly bucket lookup
+    const AGG_FIELD = {
+      'assigned_to_started_per_order': 'avg_assigned_to_started',
+      'picking_time_per_order':        'avg_picking_time_per_order',
+      'billing_time_per_order':        'avg_billing_time',
+      'total_time_per_order':          'avg_total_time_per_order',
+      'iph':                           'avg_iph',
+      'fnv_audit_rate':                'avg_fnv_audit_rate',
+    };
+
+    // Build per-captain data with view-appropriate bucket map
     const captainData = _selectedCaptains.map(({ id, name, color }) => {
       const allRows = data.filter(r => r.employee_id === id).sort((a, b) => a.date - b.date);
       const rows    = allRows.filter(r => r.date >= startMs && r.date <= endMs);
-      const rowMap  = new Map(rows.map(r => [_isoDateStr(r.date), r]));
-      return { id, name, color, allRows, rows, rowMap };
+
+      let bucketMap, labelMap;
+      if (_cpView === 'weekly') {
+        const captainAudit = auditData.filter(a => a.employee_id === id);
+        const buckets = compute.aggregateWeekly(rows, captainAudit);
+        bucketMap = new Map(buckets.map(b => [b.week_key, b]));
+        labelMap  = new Map(buckets.map(b => [b.week_key, b.label || b.week_key]));
+      } else if (_cpView === 'monthly') {
+        const captainAudit = auditData.filter(a => a.employee_id === id);
+        const buckets = compute.aggregateMonthly(rows, captainAudit);
+        bucketMap = new Map(buckets.map(b => [b.month_key, b]));
+        labelMap  = new Map(buckets.map(b => [b.month_key, b.label || b.month_key]));
+      } else {
+        // daily
+        bucketMap = new Map(rows.map(r => [_isoDateStr(r.date), r]));
+        labelMap  = null;
+      }
+
+      return { id, name, color, allRows, rows, bucketMap, labelMap };
     });
 
-    // Union date axis across all captains
-    const allDates = [...new Set(captainData.flatMap(c => [...c.rowMap.keys()]))].sort();
+    // Union bucket-key axis across all captains
+    const allKeys = [...new Set(captainData.flatMap(c => [...c.bucketMap.keys()]))].sort();
 
-    if (allDates.length === 0) {
+    if (allKeys.length === 0) {
       container.innerHTML = '<p class="placeholder-text">No data for the selected captains in this date range.</p>';
       return;
     }
 
-    // Hero cards
+    // Build display labels for x-axis (for weekly/monthly, prefer human-readable label from any captain)
+    const displayLabels = allKeys.map(k => {
+      for (const c of captainData) {
+        if (c.labelMap && c.labelMap.has(k)) return c.labelMap.get(k);
+      }
+      return k; // fallback to key (dates stay as-is)
+    });
+
+    // Hero cards (always use raw daily rows for totals)
     const isMulti = captainData.length > 1;
     const heroCards = captainData.map(({ id, name, color, allRows, rows }) => {
       const initials       = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -1889,15 +1934,24 @@ const ui = (() => {
     );
 
     activeMetrics.forEach((metric, i) => {
-      const series = captainData.map(({ name, color, rowMap }) => {
-        const values  = allDates.map(ds => {
-          const r = rowMap.get(ds);
-          if (!r) return null;
-          const v = metric.key === 'fnv_audit_rate' ? r.fnv_audit_rate : r[metric.key];
+      const series = captainData.map(({ name, color, bucketMap }) => {
+        const values = allKeys.map(k => {
+          const b = bucketMap.get(k);
+          if (!b) return null;
+          let v;
+          if (_cpView === 'daily') {
+            v = metric.key === 'fnv_audit_rate' ? b.fnv_audit_rate : b[metric.key];
+          } else if (metric.key === 'audit_hours_per_rack') {
+            const racks = b.total_racks_audited;
+            v = racks > 0 ? (b.total_audit_hours / racks) : null;
+          } else {
+            v = b[AGG_FIELD[metric.key]];
+          }
           return (v && v > 0) ? (metric.isDuration ? +(v/60).toFixed(2) : +v.toFixed(2)) : null;
         });
-        const flagDays = allDates.map(ds => {
-          const r = rowMap.get(ds);
+        const flagDays = allKeys.map(k => {
+          if (_cpView !== 'daily') return false;
+          const r = bucketMap.get(k);
           return r ? r.flags?.get(metric.key) === true : false;
         });
         return { label: name, values, flagDays, color };
@@ -1913,7 +1967,7 @@ const ui = (() => {
       grid.appendChild(card);
 
       setTimeout(() => {
-        charts.renderSparkline(canvasId, allDates, series);
+        charts.renderSparkline(canvasId, displayLabels, series);
       }, 0);
     });
   }
@@ -3089,6 +3143,7 @@ const ui = (() => {
     onProfileCaptainAdd,
     onProfileExpGroupLoad,
     removeCaptain,
+    setCpView,
     renderConfigPanel,
     initInventoryHealth,
     onInvPeriodChange,

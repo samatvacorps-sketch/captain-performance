@@ -301,6 +301,41 @@ const compute = (() => {
       .map(g => _summarise(g, auditByMonth[g.month_key] || 0, complByMonth[g.month_key] || null));
   }
 
+  // ── 8. Daily Aggregation ─────────────────────────────────────────────
+
+  function aggregateDaily(data, auditData = [], complaintsData = []) {
+    const complByDate = {};
+    for (const row of complaintsData) {
+      if (!row.date) continue;
+      const dk = _dk(row.date);
+      if (!complByDate[dk]) complByDate[dk] = { total: 0, inStoreYes: 0, inStoreNo: 0, byCategory: {} };
+      complByDate[dk].total++;
+      if (row.in_store) complByDate[dk].inStoreYes++; else complByDate[dk].inStoreNo++;
+      const cat = row.complaint_category || 'unknown';
+      complByDate[dk].byCategory[cat] = (complByDate[dk].byCategory[cat] || 0) + 1;
+    }
+
+    const byDate = {};
+    for (const row of data) {
+      if (!row.date) continue;
+      const dk = _dk(row.date);
+      if (!byDate[dk]) byDate[dk] = { date_key: dk, date: row.date, rows: [] };
+      byDate[dk].rows.push(row);
+    }
+
+    return Object.values(byDate)
+      .sort((a, b) => a.date - b.date)
+      .map(g => ({
+        ..._summarise(g, 0, complByDate[g.date_key] || null),
+        date_key: g.date_key,
+        label: g.date_key,
+      }));
+  }
+
+  function _dk(date) {
+    return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  }
+
   // ── Summary Helper ────────────────────────────────────────────────────
 
   /** Format a week start date as "Aug W1 2025" */
@@ -1212,6 +1247,7 @@ const compute = (() => {
     flagSlackers,
     aggregateWeekly,
     aggregateMonthly,
+    aggregateDaily,
     computeAuditAggregations,
     computeComplaintAggregations,
     formatDuration,
