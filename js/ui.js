@@ -2204,7 +2204,7 @@ const ui = (() => {
     if (!agg) return;
 
     const period = document.getElementById('inv-period')?.value || 'weekly';
-    const periodData = period === 'monthly' ? agg.volume.monthly : agg.volume.weekly;
+    const periodData = period === 'daily' ? agg.volume.dailyArray : period === 'monthly' ? agg.volume.monthly : agg.volume.weekly;
 
     // Totals for stat cards
     const totalRacks = [...agg.volume.daily.values()].reduce((s, d) => s + d.totalRacks, 0);
@@ -2238,7 +2238,7 @@ const ui = (() => {
           <div class="bento-card-header">
             <div>
               <h3 class="bento-card-title">Audit Coverage</h3>
-              <p class="bento-card-subtitle">Unique rack codes per ${period === 'monthly' ? 'month' : 'week'}</p>
+              <p class="bento-card-subtitle">Unique rack codes per ${period === 'daily' ? 'day' : period === 'monthly' ? 'month' : 'week'}</p>
             </div>
           </div>
           <canvas id="chart-audit-coverage" style="max-height:280px;"></canvas>
@@ -2667,7 +2667,7 @@ const ui = (() => {
     if (!agg) return;
 
     const period = document.getElementById('compl-period')?.value || 'weekly';
-    const periodData = period === 'monthly' ? agg.storeSummary.monthly : agg.storeSummary.weekly;
+    const periodData = period === 'daily' ? agg.storeSummary.dailyArray : period === 'monthly' ? agg.storeSummary.monthly : agg.storeSummary.weekly;
     const totals = agg.storeSummary.totals;
 
     // Build full HTML

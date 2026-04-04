@@ -342,10 +342,10 @@ const compute = (() => {
   function _weekLabel(weekStart) {
     if (!weekStart) return '';
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const month = months[weekStart.getMonth()];
-    const weekOfMonth = Math.ceil(weekStart.getDate() / 7);
-    const year = weekStart.getFullYear();
-    return `${month} W${weekOfMonth} ${year}`;
+    const weekEnd = new Date(weekStart.getTime() + 6 * 86400000); // Sunday
+    const startStr = `${months[weekStart.getMonth()]} ${weekStart.getDate()}`;
+    const endStr   = `${months[weekEnd.getMonth()]} ${weekEnd.getDate()}`;
+    return `${startStr} – ${endStr} (${weekEnd.getFullYear()})`;
   }
 
   function _summarise(group, subRacks = 0, subCompl = null) {
@@ -614,7 +614,11 @@ const compute = (() => {
         avgRacksPerDay: b.days > 0 ? +(b.totalRacks / b.days).toFixed(1) : 0,
       }));
 
-    const volume = { daily, weekly, monthly };
+    const dailyArray = [...daily.entries()]
+      .sort((a, b) => a[1].date - b[1].date)
+      .map(([ds, v]) => ({ ...v, label: ds }));
+
+    const volume = { daily, dailyArray, weekly, monthly };
 
     // ── Captain total audit hours from Daily Metrics (all audit days) ──
     // Keyed by employee_id → total auditor_active_time seconds across ALL days
@@ -766,6 +770,11 @@ const compute = (() => {
       if (!row.date || !row.checkout_orders) continue;
       const dk = _dateKey(row.date);
       dailyOrders.set(dk, (dailyOrders.get(dk) || 0) + row.checkout_orders);
+    }
+
+    // Enrich daily entries with totalOrdersPicked
+    for (const [ds, v] of daily) {
+      v.totalOrdersPicked = dailyOrders.get(ds) || 0;
     }
 
     // Pre-compute missing-complaint unique order sets per period (item_missing, split by in_store)
@@ -932,8 +941,12 @@ const compute = (() => {
         .map(r => r.order_id)
     ).size;
 
+    const dailyArray = [...daily.entries()]
+      .sort((a, b) => a[1].date - b[1].date)
+      .map(([ds, v]) => ({ ...v, label: ds }));
+
     const storeSummary = {
-      daily, weekly, monthly, merchantCycle,
+      daily, dailyArray, weekly, monthly, merchantCycle,
       totals: {
         totalComplaints, uniqueOrders, inStoreYes, inStoreNo,
         inStoreRate: totalComplaints > 0 ? +(inStoreYes / totalComplaints * 100).toFixed(1) : 0,
