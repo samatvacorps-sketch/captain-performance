@@ -246,43 +246,29 @@ const charts = (() => {
 
   // ── Sparkline for Captain Profile ─────────────────────────────────────
 
-  function renderSparkline(canvasId, labels, values, flagDays, color = COLORS.accent, opts = {}) {
+  // series: [{ label, values, flagDays, color }]
+  function renderSparkline(canvasId, labels, series) {
     _destroy(canvasId);
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return;
 
-    const { labelA = '', valuesB = null, flagDaysB = null, labelB = '' } = opts;
-    const isComparison = !!valuesB;
+    const isMulti = series.length > 1;
 
-    const pointColorsA = values.map((_, i) => flagDays[i] ? COLORS.red : ALPHA(color, 0.7));
-    const datasets = [{
-      label: labelA,
-      data: values,
-      borderColor: color,
-      backgroundColor: ALPHA(color, 0.08),
-      fill: true,
-      tension: 0.3,
-      pointRadius: values.map((_, i) => flagDays[i] ? 5 : 3),
-      pointBackgroundColor: pointColorsA,
-      pointBorderColor: pointColorsA,
-    }];
-
-    if (isComparison) {
-      const colB = COLORS.amber;
-      const pointColorsB = valuesB.map((_, i) => (flagDaysB?.[i]) ? COLORS.red : ALPHA(colB, 0.7));
-      datasets.push({
-        label: labelB,
-        data: valuesB,
-        borderColor: colB,
-        backgroundColor: ALPHA(colB, 0.06),
-        fill: false,
+    const datasets = series.map(({ label, values, flagDays, color }, idx) => {
+      const pointColors = values.map((_, i) => flagDays[i] ? COLORS.red : ALPHA(color, 0.7));
+      return {
+        label,
+        data: values,
+        borderColor: color,
+        backgroundColor: ALPHA(color, idx === 0 ? 0.08 : 0.04),
+        fill: idx === 0,
         tension: 0.3,
-        spanGaps: true,
-        pointRadius: valuesB.map((_, i) => (flagDaysB?.[i]) ? 5 : 3),
-        pointBackgroundColor: pointColorsB,
-        pointBorderColor: pointColorsB,
-      });
-    }
+        spanGaps: idx > 0,
+        pointRadius: values.map((_, i) => flagDays[i] ? 5 : 3),
+        pointBackgroundColor: pointColors,
+        pointBorderColor: pointColors,
+      };
+    });
 
     _instances[canvasId] = new Chart(ctx, {
       type: 'line',
@@ -291,9 +277,10 @@ const charts = (() => {
         responsive: true,
         maintainAspectRatio: true,
         plugins: {
-          legend: isComparison
+          legend: isMulti
             ? { display: true, position: 'bottom',
-                labels: { font: { size: 10, family: 'Manrope' }, color: TICK_COLOR, padding: 10 } }
+                labels: { font: { size: 10, family: 'Manrope' }, color: TICK_COLOR, padding: 10,
+                          boxWidth: 16, boxHeight: 2 } }
             : { display: false },
           tooltip: { mode: 'index', intersect: false },
         },

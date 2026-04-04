@@ -645,17 +645,71 @@ tr.incentive-zero td { opacity: 0.45; }
   margin-bottom: 12px;
 }
 
-/* Profile: comparison hero row */
+/* Profile: captain selection bar + chips */
+.profile-captain-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--card-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+}
+
+.profile-captain-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.profile-captain-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 4px 8px 4px 8px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.profile-captain-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.profile-captain-chip-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 0 0 2px;
+  line-height: 1;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+}
+
+.profile-captain-chip-remove:hover { color: #ff6b6b; }
+
+/* Profile: multi-captain hero row (auto-fit for 1–6 captains) */
 .profile-heroes-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
   margin-bottom: 20px;
 }
 
 .profile-heroes-row .profile-hero { margin-bottom: 0; }
-
-.profile-avatar-b { background: rgba(255,202,40,0.12); color: #ffca28; }
 
 /* ── Config Panel ─────────────────────────────────────────────────── */
 .config-grid {

@@ -10,8 +10,17 @@ const ui = (() => {
   // ── Sort State (persists across re-renders) ───────────────────────────
   let _sortState = { col: null, dir: 'desc' };
 
-  // ── Captain Profile Date Mode ─────────────────────────────────────────
+  // ── Captain Profile State ─────────────────────────────────────────────
   let _cpDateMode = false; // false = preset active, true = custom date range
+  const _CAPTAIN_COLORS = ['#adc6ff', '#ffca28', '#4edea3', '#c084fc', '#f9a8d4', '#c6c6ca'];
+  let _selectedCaptains = []; // [{ id, name, color }]
+
+  function _colorAlpha(hex, a) {
+    const r = parseInt(hex.slice(1,3), 16);
+    const g = parseInt(hex.slice(3,5), 16);
+    const b = parseInt(hex.slice(5,7), 16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
 
   // ── Deep Dive Captain Filter ───────────────────────────────────────────
   // 'all' | 'flagged' | 'ok'
@@ -1618,11 +1627,40 @@ const ui = (() => {
       .map(([id, name]) => `<option value="${_esc(id)}">${_esc(name)} (${_esc(id)})</option>`)
       .join('');
 
-    const selA = document.getElementById('profile-captain');
-    if (selA) selA.innerHTML = '<option value="">— Select Captain —</option>' + options;
+    const sel = document.getElementById('profile-captain-add');
+    if (sel) sel.innerHTML = '<option value="">— Select captain —</option>' + options;
+  }
 
-    const selB = document.getElementById('profile-captain-b');
-    if (selB) selB.innerHTML = '<option value="">— (none) —</option>' + options;
+  function onProfileCaptainAdd(selectEl) {
+    const id = selectEl.value;
+    if (!id) return;
+    selectEl.value = '';
+    if (_selectedCaptains.find(c => c.id === id)) return;
+    if (_selectedCaptains.length >= _CAPTAIN_COLORS.length) return;
+    const data = app.getFlaggedData();
+    const name = data.find(r => r.employee_id === id)?.employee_name || id;
+    _selectedCaptains.push({ id, name, color: _CAPTAIN_COLORS[_selectedCaptains.length] });
+    _renderCaptainChips();
+    renderCaptainProfile();
+  }
+
+  function removeCaptain(id) {
+    _selectedCaptains = _selectedCaptains.filter(c => c.id !== id);
+    _selectedCaptains.forEach((c, i) => { c.color = _CAPTAIN_COLORS[i]; });
+    _renderCaptainChips();
+    renderCaptainProfile();
+  }
+
+  function _renderCaptainChips() {
+    const chips = document.getElementById('profile-captain-chips');
+    if (!chips) return;
+    chips.innerHTML = _selectedCaptains.map(c => `
+      <span class="profile-captain-chip">
+        <span class="profile-captain-chip-dot" style="background:${c.color}"></span>
+        ${_esc(c.name)}
+        <button class="profile-captain-chip-remove" onclick="ui.removeCaptain('${_esc(c.id)}')" title="Remove">×</button>
+      </span>
+    `).join('');
   }
 
   function initCaptainProfilePeriods() {
@@ -1722,15 +1760,10 @@ const ui = (() => {
   function renderCaptainProfile() {
     const data = app.getFlaggedData();
     const container = document.getElementById('profile-content');
-
     if (!container) return;
 
-    const captainAId = document.getElementById('profile-captain')?.value;
-    const captainBId = document.getElementById('profile-captain-b')?.value || null;
-    const isComparison = !!captainBId && captainBId !== captainAId;
-
-    if (!captainAId) {
-      container.innerHTML = '<p class="placeholder-text">Select a captain to view their performance profile.</p>';
+    if (_selectedCaptains.length === 0) {
+      container.innerHTML = '<p class="placeholder-text">Add a captain above to view their performance profile.</p>';
       return;
     }
 
@@ -1739,43 +1772,33 @@ const ui = (() => {
     const startMs = startInput?.value ? new Date(startInput.value).setHours(0,0,0,0)   : -Infinity;
     const endMs   = endInput?.value   ? new Date(endInput.value).setHours(23,59,59,999) :  Infinity;
 
-    const allRowsA = data.filter(r => r.employee_id === captainAId).sort((a, b) => a.date - b.date);
-    if (allRowsA.length === 0) {
-      container.innerHTML = '<p class="placeholder-text">No data for this captain.</p>';
+    // Build per-captain data
+    const captainData = _selectedCaptains.map(({ id, name, color }) => {
+      const allRows = data.filter(r => r.employee_id === id).sort((a, b) => a.date - b.date);
+      const rows    = allRows.filter(r => r.date >= startMs && r.date <= endMs);
+      const rowMap  = new Map(rows.map(r => [_isoDateStr(r.date), r]));
+      return { id, name, color, allRows, rows, rowMap };
+    });
+
+    // Union date axis across all captains
+    const allDates = [...new Set(captainData.flatMap(c => [...c.rowMap.keys()]))].sort();
+
+    if (allDates.length === 0) {
+      container.innerHTML = '<p class="placeholder-text">No data for the selected captains in this date range.</p>';
       return;
     }
-    const captainRowsA = allRowsA.filter(r => r.date >= startMs && r.date <= endMs);
-    if (captainRowsA.length === 0) {
-      container.innerHTML = '<p class="placeholder-text">No data for this captain in the selected date range.</p>';
-      return;
-    }
 
-    let captainRowsB = [];
-    if (isComparison) {
-      captainRowsB = data
-        .filter(r => r.employee_id === captainBId && r.date >= startMs && r.date <= endMs)
-        .sort((a, b) => a.date - b.date);
-    }
-
-    // Build union date axis
-    const rowMapA = new Map(captainRowsA.map(r => [_isoDateStr(r.date), r]));
-    const rowMapB = new Map(captainRowsB.map(r => [_isoDateStr(r.date), r]));
-    const allDates = [...new Set([...rowMapA.keys(), ...rowMapB.keys()])].sort();
-
-    const nameA    = captainRowsA[0].employee_name;
-    const nameB    = isComparison ? (captainRowsB[0]?.employee_name || captainBId) : null;
-    const initialsA = nameA.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-    const initialsB = nameB ? nameB.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : '';
-
-    const totalDaysA   = allRowsA.length;
-    const shownDaysA   = captainRowsA.length;
-    const flaggedDaysA = captainRowsA.filter(r => r.composite_slacker_score > 0).length;
-    const isFilteredA  = shownDaysA < totalDaysA;
-
-    function _heroCard(name, id, initials, totalDays, shownDays, flaggedDays, isFiltered, avatarClass = '') {
+    // Hero cards
+    const isMulti = captainData.length > 1;
+    const heroCards = captainData.map(({ id, name, color, allRows, rows }) => {
+      const initials    = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+      const totalDays   = allRows.length;
+      const shownDays   = rows.length;
+      const flaggedDays = rows.filter(r => r.composite_slacker_score > 0).length;
+      const isFiltered  = shownDays < totalDays;
       return `
         <div class="profile-hero">
-          <div class="profile-avatar ${avatarClass}">${initials}</div>
+          <div class="profile-avatar" style="background:${_colorAlpha(color, 0.12)};color:${color}">${initials}</div>
           <div class="profile-hero-info">
             <h3 class="profile-hero-name">${_esc(name)}</h3>
             <p class="profile-hero-id">${_esc(id)}</p>
@@ -1795,57 +1818,34 @@ const ui = (() => {
             </div>
           </div>
         </div>`;
-    }
+    }).join('');
 
-    let heroHTML;
-    if (isComparison) {
-      const allRowsB   = data.filter(r => r.employee_id === captainBId);
-      const totalDaysB   = allRowsB.length;
-      const shownDaysB   = captainRowsB.length;
-      const flaggedDaysB = captainRowsB.filter(r => r.composite_slacker_score > 0).length;
-      const isFilteredB  = shownDaysB < totalDaysB;
-      heroHTML = `<div class="profile-heroes-row">
-        ${_heroCard(nameA, captainAId, initialsA, totalDaysA, shownDaysA, flaggedDaysA, isFilteredA)}
-        ${_heroCard(nameB, captainBId, initialsB, totalDaysB, shownDaysB, flaggedDaysB, isFilteredB, 'profile-avatar-b')}
-      </div>`;
-    } else {
-      heroHTML = _heroCard(nameA, captainAId, initialsA, totalDaysA, shownDaysA, flaggedDaysA, isFilteredA);
-    }
+    const heroHTML = isMulti
+      ? `<div class="profile-heroes-row">${heroCards}</div>`
+      : heroCards;
 
     container.innerHTML = heroHTML + '<div class="profile-metric-grid" id="profile-metric-grid"></div>';
 
     const grid = document.getElementById('profile-metric-grid');
 
     const activeMetrics = CONFIG.METRICS.filter(m =>
-      captainRowsA.some(r => _isActiveInFlow(r, m.flow)) ||
-      (isComparison && captainRowsB.some(r => _isActiveInFlow(r, m.flow)))
+      captainData.some(c => c.rows.some(r => _isActiveInFlow(r, m.flow)))
     );
 
     activeMetrics.forEach((metric, i) => {
-      const valuesA = allDates.map(ds => {
-        const r = rowMapA.get(ds);
-        if (!r) return null;
-        const v = metric.key === 'fnv_audit_rate' ? r.fnv_audit_rate : r[metric.key];
-        return (v && v > 0) ? (metric.isDuration ? +(v/60).toFixed(2) : +v.toFixed(2)) : null;
-      });
-      const flagDaysA = allDates.map(ds => {
-        const r = rowMapA.get(ds);
-        return r ? r.flags?.get(metric.key) === true : false;
-      });
-
-      let valuesB = null, flagDaysB = null;
-      if (isComparison) {
-        valuesB = allDates.map(ds => {
-          const r = rowMapB.get(ds);
+      const series = captainData.map(({ name, color, rowMap }) => {
+        const values  = allDates.map(ds => {
+          const r = rowMap.get(ds);
           if (!r) return null;
           const v = metric.key === 'fnv_audit_rate' ? r.fnv_audit_rate : r[metric.key];
           return (v && v > 0) ? (metric.isDuration ? +(v/60).toFixed(2) : +v.toFixed(2)) : null;
         });
-        flagDaysB = allDates.map(ds => {
-          const r = rowMapB.get(ds);
+        const flagDays = allDates.map(ds => {
+          const r = rowMap.get(ds);
           return r ? r.flags?.get(metric.key) === true : false;
         });
-      }
+        return { label: name, values, flagDays, color };
+      });
 
       const canvasId = `sparkline-${i}`;
       const card = document.createElement('div');
@@ -1857,12 +1857,7 @@ const ui = (() => {
       grid.appendChild(card);
 
       setTimeout(() => {
-        charts.renderSparkline(canvasId, allDates, valuesA, flagDaysA, undefined, {
-          labelA: nameA,
-          valuesB,
-          flagDaysB,
-          labelB: nameB,
-        });
+        charts.renderSparkline(canvasId, allDates, series);
       }, 0);
     });
   }
@@ -3035,6 +3030,8 @@ const ui = (() => {
     resetProfileDates,
     onProfilePresetChange,
     onProfileDateChange,
+    onProfileCaptainAdd,
+    removeCaptain,
     renderConfigPanel,
     initInventoryHealth,
     onInvPeriodChange,

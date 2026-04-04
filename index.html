@@ -293,15 +293,6 @@
         <h2 class="flags-title">Captain Profile</h2>
       </div>
       <div class="flags-date-strip">
-        <span class="dd-control-label">Captain A</span>
-        <select id="profile-captain" onchange="ui.renderCaptainProfile()">
-          <option value="">— Select Captain —</option>
-        </select>
-        <span class="dd-control-label" style="margin-left:6px;">vs</span>
-        <select id="profile-captain-b" onchange="ui.renderCaptainProfile()">
-          <option value="">— (none) —</option>
-        </select>
-        <span class="strip-divider"></span>
         <span class="dd-control-label">Quick select</span>
         <select id="profile-preset" onchange="ui.onProfilePresetChange()"></select>
         <span class="strip-divider"></span>
@@ -311,6 +302,14 @@
         <span class="dd-control-label">To</span>
         <input type="date" id="profile-end" onchange="ui.onProfileDateChange()">
       </div>
+    </div>
+
+    <div class="profile-captain-bar">
+      <span class="dd-control-label" style="flex-shrink:0">Add captain</span>
+      <select id="profile-captain-add" onchange="ui.onProfileCaptainAdd(this)" style="min-width:220px">
+        <option value="">— Select captain —</option>
+      </select>
+      <div id="profile-captain-chips" class="profile-captain-chips"></div>
     </div>
 
     <div id="profile-content">
