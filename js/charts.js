@@ -246,36 +246,62 @@ const charts = (() => {
 
   // ── Sparkline for Captain Profile ─────────────────────────────────────
 
-  function renderSparkline(canvasId, labels, values, flagDays, color = COLORS.accent) {
+  function renderSparkline(canvasId, labels, values, flagDays, color = COLORS.accent, opts = {}) {
     _destroy(canvasId);
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return;
 
-    const pointColors = values.map((_, i) => flagDays[i] ? COLORS.red : ALPHA(color, 0.7));
+    const { labelA = '', valuesB = null, flagDaysB = null, labelB = '' } = opts;
+    const isComparison = !!valuesB;
+
+    const pointColorsA = values.map((_, i) => flagDays[i] ? COLORS.red : ALPHA(color, 0.7));
+    const datasets = [{
+      label: labelA,
+      data: values,
+      borderColor: color,
+      backgroundColor: ALPHA(color, 0.08),
+      fill: true,
+      tension: 0.3,
+      pointRadius: values.map((_, i) => flagDays[i] ? 5 : 3),
+      pointBackgroundColor: pointColorsA,
+      pointBorderColor: pointColorsA,
+    }];
+
+    if (isComparison) {
+      const colB = COLORS.amber;
+      const pointColorsB = valuesB.map((_, i) => (flagDaysB?.[i]) ? COLORS.red : ALPHA(colB, 0.7));
+      datasets.push({
+        label: labelB,
+        data: valuesB,
+        borderColor: colB,
+        backgroundColor: ALPHA(colB, 0.06),
+        fill: false,
+        tension: 0.3,
+        spanGaps: true,
+        pointRadius: valuesB.map((_, i) => (flagDaysB?.[i]) ? 5 : 3),
+        pointBackgroundColor: pointColorsB,
+        pointBorderColor: pointColorsB,
+      });
+    }
 
     _instances[canvasId] = new Chart(ctx, {
       type: 'line',
-      data: {
-        labels,
-        datasets: [{
-          label: '',
-          data: values,
-          borderColor: color,
-          backgroundColor: ALPHA(color, 0.08),
-          fill: true,
-          tension: 0.3,
-          pointRadius: values.map((_, i) => flagDays[i] ? 5 : 3),
-          pointBackgroundColor: pointColors,
-          pointBorderColor: pointColors,
-        }],
-      },
+      data: { labels, datasets },
       options: {
         responsive: true,
         maintainAspectRatio: true,
-        plugins: { legend: { display: false }, tooltip: { mode: 'index' } },
+        plugins: {
+          legend: isComparison
+            ? { display: true, position: 'bottom',
+                labels: { font: { size: 10, family: 'Manrope' }, color: TICK_COLOR, padding: 10 } }
+            : { display: false },
+          tooltip: { mode: 'index', intersect: false },
+        },
         scales: {
-          x: { display: true, grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45 } },
-          y: { display: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 10 } }, beginAtZero: false },
+          x: { display: true, grid: { display: false },
+               ticks: { font: { size: 10 }, maxRotation: 45, color: TICK_COLOR } },
+          y: { display: true, grid: { color: GRID_COLOR },
+               ticks: { font: { size: 10 }, color: TICK_COLOR }, beginAtZero: false },
         },
       },
     });

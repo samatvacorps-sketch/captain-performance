@@ -10,6 +10,9 @@ const ui = (() => {
   // ── Sort State (persists across re-renders) ───────────────────────────
   let _sortState = { col: null, dir: 'desc' };
 
+  // ── Captain Profile Date Mode ─────────────────────────────────────────
+  let _cpDateMode = false; // false = preset active, true = custom date range
+
   // ── Deep Dive Captain Filter ───────────────────────────────────────────
   // 'all' | 'flagged' | 'ok'
   let _ddFilter = 'all';
@@ -1594,6 +1597,16 @@ const ui = (() => {
 
   // ── Captain Profile ────────────────────────────────────────────────────
 
+  function _isActiveInFlow(r, flow) {
+    switch (flow) {
+      case 'picking': return r.flows?.is_picking;
+      case 'putting': return r.flows?.is_putting;
+      case 'audit':   return r.flows?.is_audit;
+      case 'fnv':     return r.flows?.is_fnv;
+    }
+    return false;
+  }
+
   function initCaptainDropdown() {
     const data = app.getFlaggedData();
     if (!data || data.length === 0) return;
@@ -1601,118 +1614,240 @@ const ui = (() => {
     const captains = [...new Map(data.map(r => [r.employee_id, r.employee_name])).entries()]
       .sort((a, b) => a[1].localeCompare(b[1]));
 
-    const sel = document.getElementById('profile-captain');
-    if (!sel) return;
+    const options = captains
+      .map(([id, name]) => `<option value="${_esc(id)}">${_esc(name)} (${_esc(id)})</option>`)
+      .join('');
 
-    sel.innerHTML = '<option value="">— Select Captain —</option>' +
-      captains.map(([id, name]) => `<option value="${_esc(id)}">${_esc(name)} (${_esc(id)})</option>`).join('');
+    const selA = document.getElementById('profile-captain');
+    if (selA) selA.innerHTML = '<option value="">— Select Captain —</option>' + options;
+
+    const selB = document.getElementById('profile-captain-b');
+    if (selB) selB.innerHTML = '<option value="">— (none) —</option>' + options;
+  }
+
+  function initCaptainProfilePeriods() {
+    const data = app.getFlaggedData();
+    const sel  = document.getElementById('profile-preset');
+    if (!sel || !data || data.length === 0) return;
+
+    const weekly  = compute.aggregateWeekly(data);
+    const monthly = compute.aggregateMonthly(data);
+
+    sel.innerHTML = [
+      '<option value="all">All Time</option>',
+      '<option value="t1">T-1 (Yesterday)</option>',
+      '<option value="t2">T-2 (Day before yesterday)</option>',
+      '<optgroup label="Weekly">',
+      ...weekly.slice().reverse().map(d =>
+        `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
+      '</optgroup>',
+      '<optgroup label="Monthly">',
+      ...monthly.slice().reverse().map(d =>
+        `<option value="M:${d.month_key}">${d.label || d.month_key}</option>`),
+      '</optgroup>',
+    ].join('');
+
+    const sortedDates = data.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+    if (sortedDates.length > 0) {
+      document.getElementById('profile-start').value = _isoDateStr(sortedDates[0]);
+      document.getElementById('profile-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
+    }
+    _cpDateMode = false;
+  }
+
+  function onProfilePresetChange() {
+    _cpDateMode = false;
+    const data = app.getFlaggedData();
+    if (!data) return;
+    const periodVal = document.getElementById('profile-preset')?.value;
+    if (!periodVal) return;
+
+    if (periodVal === 't1' || periodVal === 't2') {
+      const d = new Date();
+      d.setDate(d.getDate() - (periodVal === 't1' ? 1 : 2));
+      const ds = _isoDateStr(d);
+      document.getElementById('profile-start').value = ds;
+      document.getElementById('profile-end').value   = ds;
+      _cpDateMode = true;
+      renderCaptainProfile();
+      return;
+    }
+
+    if (periodVal === 'all') {
+      const sortedDates = data.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+      if (sortedDates.length > 0) {
+        document.getElementById('profile-start').value = _isoDateStr(sortedDates[0]);
+        document.getElementById('profile-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
+      }
+    } else {
+      const colonIdx   = periodVal.indexOf(':');
+      const periodType = periodVal.slice(0, colonIdx);
+      const periodKey  = periodVal.slice(colonIdx + 1);
+      const rows = data.filter(row => {
+        if (!row.date) return false;
+        if (periodType === 'W') return compute.aggregateWeekly([row]).some(w => w.week_key === periodKey);
+        const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
+        return ym === periodKey;
+      });
+      if (rows.length > 0) {
+        const dates = rows.map(r => r.date).sort((a, b) => a - b);
+        document.getElementById('profile-start').value = _isoDateStr(dates[0]);
+        document.getElementById('profile-end').value   = _isoDateStr(dates[dates.length - 1]);
+      }
+    }
+    renderCaptainProfile();
+  }
+
+  function onProfileDateChange() {
+    _cpDateMode = true;
+    renderCaptainProfile();
   }
 
   function resetProfileDates() {
-    document.getElementById('profile-start').value = '';
-    document.getElementById('profile-end').value   = '';
+    const data = app.getFlaggedData();
+    const presetSel = document.getElementById('profile-preset');
+    if (presetSel) presetSel.value = 'all';
+    if (data && data.length > 0) {
+      const sortedDates = data.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+      document.getElementById('profile-start').value = _isoDateStr(sortedDates[0]);
+      document.getElementById('profile-end').value   = _isoDateStr(sortedDates[sortedDates.length - 1]);
+    } else {
+      document.getElementById('profile-start').value = '';
+      document.getElementById('profile-end').value   = '';
+    }
+    _cpDateMode = false;
     renderCaptainProfile();
   }
 
   function renderCaptainProfile() {
     const data = app.getFlaggedData();
     const container = document.getElementById('profile-content');
-    const captainId = document.getElementById('profile-captain')?.value;
 
     if (!container) return;
 
-    if (!captainId) {
+    const captainAId = document.getElementById('profile-captain')?.value;
+    const captainBId = document.getElementById('profile-captain-b')?.value || null;
+    const isComparison = !!captainBId && captainBId !== captainAId;
+
+    if (!captainAId) {
       container.innerHTML = '<p class="placeholder-text">Select a captain to view their performance profile.</p>';
       return;
     }
 
-    const allCaptainRows = data
-      .filter(r => r.employee_id === captainId)
-      .sort((a, b) => a.date - b.date);
+    const startInput = document.getElementById('profile-start');
+    const endInput   = document.getElementById('profile-end');
+    const startMs = startInput?.value ? new Date(startInput.value).setHours(0,0,0,0)   : -Infinity;
+    const endMs   = endInput?.value   ? new Date(endInput.value).setHours(23,59,59,999) :  Infinity;
 
-    if (allCaptainRows.length === 0) {
+    const allRowsA = data.filter(r => r.employee_id === captainAId).sort((a, b) => a.date - b.date);
+    if (allRowsA.length === 0) {
       container.innerHTML = '<p class="placeholder-text">No data for this captain.</p>';
       return;
     }
-
-    // Auto-set date range to this captain's full history on first load
-    const startInput = document.getElementById('profile-start');
-    const endInput   = document.getElementById('profile-end');
-    if (startInput && !startInput.value) {
-      startInput.value = _isoDateStr(allCaptainRows[0].date);
-    }
-    if (endInput && !endInput.value) {
-      endInput.value = _isoDateStr(allCaptainRows[allCaptainRows.length - 1].date);
-    }
-
-    // Filter to selected date range
-    const startMs = startInput?.value ? new Date(startInput.value).setHours(0,0,0,0)   : -Infinity;
-    const endMs   = endInput?.value   ? new Date(endInput.value).setHours(23,59,59,999) :  Infinity;
-    const captainRows = allCaptainRows.filter(r => r.date >= startMs && r.date <= endMs);
-
-    if (captainRows.length === 0) {
+    const captainRowsA = allRowsA.filter(r => r.date >= startMs && r.date <= endMs);
+    if (captainRowsA.length === 0) {
       container.innerHTML = '<p class="placeholder-text">No data for this captain in the selected date range.</p>';
       return;
     }
 
-    const name        = captainRows[0].employee_name;
-    const totalDays   = allCaptainRows.length;          // always total, not filtered
-    const shownDays   = captainRows.length;
-    const flaggedDays = captainRows.filter(r => r.composite_slacker_score > 0).length;
-    const isFiltered  = shownDays < totalDays;
+    let captainRowsB = [];
+    if (isComparison) {
+      captainRowsB = data
+        .filter(r => r.employee_id === captainBId && r.date >= startMs && r.date <= endMs)
+        .sort((a, b) => a.date - b.date);
+    }
 
-    const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    // Build union date axis
+    const rowMapA = new Map(captainRowsA.map(r => [_isoDateStr(r.date), r]));
+    const rowMapB = new Map(captainRowsB.map(r => [_isoDateStr(r.date), r]));
+    const allDates = [...new Set([...rowMapA.keys(), ...rowMapB.keys()])].sort();
 
-    container.innerHTML = `
-      <div class="profile-hero">
-        <div class="profile-avatar">${initials}</div>
-        <div class="profile-hero-info">
-          <h3 class="profile-hero-name">${_esc(name)}</h3>
-          <p class="profile-hero-id">${_esc(captainId)}</p>
-        </div>
-        <div class="profile-hero-stats">
-          <div class="profile-stat">
-            <span class="profile-stat-value">${totalDays}</span>
-            <span class="profile-stat-label">Total Days</span>
+    const nameA    = captainRowsA[0].employee_name;
+    const nameB    = isComparison ? (captainRowsB[0]?.employee_name || captainBId) : null;
+    const initialsA = nameA.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    const initialsB = nameB ? nameB.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : '';
+
+    const totalDaysA   = allRowsA.length;
+    const shownDaysA   = captainRowsA.length;
+    const flaggedDaysA = captainRowsA.filter(r => r.composite_slacker_score > 0).length;
+    const isFilteredA  = shownDaysA < totalDaysA;
+
+    function _heroCard(name, id, initials, totalDays, shownDays, flaggedDays, isFiltered, avatarClass = '') {
+      return `
+        <div class="profile-hero">
+          <div class="profile-avatar ${avatarClass}">${initials}</div>
+          <div class="profile-hero-info">
+            <h3 class="profile-hero-name">${_esc(name)}</h3>
+            <p class="profile-hero-id">${_esc(id)}</p>
           </div>
-          ${isFiltered ? `<div class="profile-stat">
-            <span class="profile-stat-value" style="color:#adc6ff">${shownDays}</span>
-            <span class="profile-stat-label">In Range</span>
-          </div>` : ''}
-          <div class="profile-stat">
-            <span class="profile-stat-value" style="color:${flaggedDays > 0 ? '#ff5c5c' : '#4edea3'}">${flaggedDays}</span>
-            <span class="profile-stat-label">Flagged Days</span>
+          <div class="profile-hero-stats">
+            <div class="profile-stat">
+              <span class="profile-stat-value">${totalDays}</span>
+              <span class="profile-stat-label">Total Days</span>
+            </div>
+            ${isFiltered ? `<div class="profile-stat">
+              <span class="profile-stat-value" style="color:#adc6ff">${shownDays}</span>
+              <span class="profile-stat-label">In Range</span>
+            </div>` : ''}
+            <div class="profile-stat">
+              <span class="profile-stat-value" style="color:${flaggedDays > 0 ? '#ff5c5c' : '#4edea3'}">${flaggedDays}</span>
+              <span class="profile-stat-label">Flagged Days</span>
+            </div>
           </div>
-        </div>
-      </div>
-      <div class="profile-metric-grid" id="profile-metric-grid"></div>
-    `;
+        </div>`;
+    }
+
+    let heroHTML;
+    if (isComparison) {
+      const allRowsB   = data.filter(r => r.employee_id === captainBId);
+      const totalDaysB   = allRowsB.length;
+      const shownDaysB   = captainRowsB.length;
+      const flaggedDaysB = captainRowsB.filter(r => r.composite_slacker_score > 0).length;
+      const isFilteredB  = shownDaysB < totalDaysB;
+      heroHTML = `<div class="profile-heroes-row">
+        ${_heroCard(nameA, captainAId, initialsA, totalDaysA, shownDaysA, flaggedDaysA, isFilteredA)}
+        ${_heroCard(nameB, captainBId, initialsB, totalDaysB, shownDaysB, flaggedDaysB, isFilteredB, 'profile-avatar-b')}
+      </div>`;
+    } else {
+      heroHTML = _heroCard(nameA, captainAId, initialsA, totalDaysA, shownDaysA, flaggedDaysA, isFilteredA);
+    }
+
+    container.innerHTML = heroHTML + '<div class="profile-metric-grid" id="profile-metric-grid"></div>';
 
     const grid = document.getElementById('profile-metric-grid');
-    const labels = captainRows.map(r => _isoDateStr(r.date));
 
-    // Active metrics for this captain
-    const activeMetrics = CONFIG.METRICS.filter(metric => {
-      return captainRows.some(r => {
-        switch (metric.flow) {
-          case 'picking': return r.flows?.is_picking;
-          case 'putting': return r.flows?.is_putting;
-          case 'audit':   return r.flows?.is_audit;
-          case 'fnv':     return r.flows?.is_fnv;
-        }
-        return false;
-      });
-    });
+    const activeMetrics = CONFIG.METRICS.filter(m =>
+      captainRowsA.some(r => _isActiveInFlow(r, m.flow)) ||
+      (isComparison && captainRowsB.some(r => _isActiveInFlow(r, m.flow)))
+    );
 
     activeMetrics.forEach((metric, i) => {
-      const values = captainRows.map(r => {
+      const valuesA = allDates.map(ds => {
+        const r = rowMapA.get(ds);
+        if (!r) return null;
         const v = metric.key === 'fnv_audit_rate' ? r.fnv_audit_rate : r[metric.key];
         return (v && v > 0) ? (metric.isDuration ? +(v/60).toFixed(2) : +v.toFixed(2)) : null;
       });
+      const flagDaysA = allDates.map(ds => {
+        const r = rowMapA.get(ds);
+        return r ? r.flags?.get(metric.key) === true : false;
+      });
 
-      const flagDays = captainRows.map(r => r.flags?.get(metric.key) === true);
+      let valuesB = null, flagDaysB = null;
+      if (isComparison) {
+        valuesB = allDates.map(ds => {
+          const r = rowMapB.get(ds);
+          if (!r) return null;
+          const v = metric.key === 'fnv_audit_rate' ? r.fnv_audit_rate : r[metric.key];
+          return (v && v > 0) ? (metric.isDuration ? +(v/60).toFixed(2) : +v.toFixed(2)) : null;
+        });
+        flagDaysB = allDates.map(ds => {
+          const r = rowMapB.get(ds);
+          return r ? r.flags?.get(metric.key) === true : false;
+        });
+      }
+
       const canvasId = `sparkline-${i}`;
-
       const card = document.createElement('div');
       card.className = 'profile-metric-card';
       card.innerHTML = `
@@ -1721,9 +1856,13 @@ const ui = (() => {
       `;
       grid.appendChild(card);
 
-      // Render after DOM insertion
       setTimeout(() => {
-        charts.renderSparkline(canvasId, labels, values, flagDays);
+        charts.renderSparkline(canvasId, allDates, valuesA, flagDaysA, undefined, {
+          labelA: nameA,
+          valuesB,
+          flagDaysB,
+          labelB: nameB,
+        });
       }, 0);
     });
   }
@@ -2891,8 +3030,11 @@ const ui = (() => {
     initFlagsDate,
     renderDailyFlags,
     initCaptainDropdown,
+    initCaptainProfilePeriods,
     renderCaptainProfile,
     resetProfileDates,
+    onProfilePresetChange,
+    onProfileDateChange,
     renderConfigPanel,
     initInventoryHealth,
     onInvPeriodChange,
@@ -2954,6 +3096,7 @@ const app = (() => {
       ui.initDeepDivePeriods();
       ui.initFlagsDate();
       ui.initCaptainDropdown();
+      ui.initCaptainProfilePeriods();
       ui.initOverviewPeriods();
       ui.initTiersView();
       ui.initInventoryHealth();
