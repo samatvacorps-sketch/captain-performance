@@ -1623,8 +1623,18 @@ const ui = (() => {
     const captains = [...new Map(data.map(r => [r.employee_id, r.employee_name])).entries()]
       .sort((a, b) => a[1].localeCompare(b[1]));
 
+    // Count unique active days per captain
+    const dayCount = new Map();
+    data.forEach(r => {
+      if (!dayCount.has(r.employee_id)) dayCount.set(r.employee_id, new Set());
+      dayCount.get(r.employee_id).add(_isoDateStr(r.date));
+    });
+
     const options = captains
-      .map(([id, name]) => `<option value="${_esc(id)}">${_esc(name)} (${_esc(id)})</option>`)
+      .map(([id, name]) => {
+        const days = dayCount.get(id)?.size || 0;
+        return `<option value="${_esc(id)}">${_esc(name)} (${_esc(id)}) — ${days}d</option>`;
+      })
       .join('');
 
     const sel = document.getElementById('profile-captain-add');
