@@ -1143,12 +1143,22 @@ const compute = (() => {
     const keys = new Set();
     for (const row of data) {
       if (!row.date) continue;
-      const ws  = _weekStart(row.date);          // Monday
-      const thu = new Date(ws.getTime() + 3 * 86400000); // Thursday = Mon + 3 days
-      const thuYm = `${thu.getFullYear()}-${String(thu.getMonth() + 1).padStart(2, '0')}`;
-      if (thuYm === monthKey) keys.add(_isoWeekKey(row.date));
+      const ws   = _weekStart(row.date);  // Monday
+      const wsYm = `${ws.getFullYear()}-${String(ws.getMonth() + 1).padStart(2, '0')}`;
+      if (wsYm === monthKey) keys.add(_isoWeekKey(row.date));
     }
     return [...keys].sort();
+  }
+
+  /** Returns the Monday of a given ISO week key (e.g. "2026-W14"). */
+  function weekStartFromKey(weekKey) {
+    const [yearStr, wStr] = weekKey.split('-W');
+    const year = +yearStr, week = +wStr;
+    const jan4    = new Date(year, 0, 4);
+    const jan4Day = jan4.getDay() || 7;
+    const mon     = new Date(jan4.getTime() + (week - 1) * 7 * 86400000 - (jan4Day - 1) * 86400000);
+    mon.setHours(0, 0, 0, 0);
+    return mon;
   }
 
   /**
@@ -1266,6 +1276,7 @@ const compute = (() => {
     formatDuration,
     deviationClass,
     getWeekKeysForMonth,
+    weekStartFromKey,
     computePickingIncentives,
     computeAuditIncentives,
   };

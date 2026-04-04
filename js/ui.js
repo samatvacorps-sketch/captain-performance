@@ -2994,13 +2994,14 @@ const ui = (() => {
 
     const { weekKeys, picking, audit } = _incentiveCache;
 
-    // ── Month label for column headers (e.g. "Mar") ──
-    const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const monthNum = parseInt(monthKey.split('-')[1], 10) - 1;
-    const monthShort = MONTH_SHORT[monthNum];
-
-    // ── Week labels: "Mar W1", "Mar W2", … in sorted order ──
-    const weekLabels = weekKeys.map((wk, i) => ({ key: wk, label: `${monthShort} W${i + 1}` }));
+    // ── Week labels: "Mar 30 – Apr 5 (2026)" style ──
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const weekLabels = weekKeys.map(wk => {
+      const mon = compute.weekStartFromKey(wk);
+      const sun = new Date(mon.getTime() + 6 * 86400000);
+      const label = `${MONTHS[mon.getMonth()]} ${mon.getDate()} – ${MONTHS[sun.getMonth()]} ${sun.getDate()} (${sun.getFullYear()})`;
+      return { key: wk, label };
+    });
 
     // ── Aggregate totals ──
     let totalPicking = 0, totalAudit = 0, earningCount = 0;
@@ -3053,7 +3054,7 @@ const ui = (() => {
     combined.sort((a, b) => b.total - a.total);
 
     // Header
-    const weekHeaders = weekLabels.map(w => `<th>${w.label} Picking</th>`).join('');
+    const weekHeaders = weekLabels.map(w => `<th>${w.label}<br><small style="font-weight:400;opacity:0.8">Picking</small></th>`).join('');
 
     // Rows
     const rows = combined.map(c => {
