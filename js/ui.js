@@ -1651,6 +1651,36 @@ const ui = (() => {
     renderCaptainProfile();
   }
 
+  function onProfileExpGroupLoad(selectEl) {
+    const range = selectEl.value;
+    selectEl.value = '';
+    if (!range) return;
+
+    const data = app.getFlaggedData();
+    if (!data || data.length === 0) return;
+
+    // Count unique active days per captain (all-time, not date-range filtered)
+    const dayCount = new Map();
+    data.forEach(r => {
+      if (!dayCount.has(r.employee_id)) dayCount.set(r.employee_id, { days: new Set(), name: r.employee_name });
+      dayCount.get(r.employee_id).days.add(_isoDateStr(r.date));
+    });
+
+    const [lo, hi] = range === '201+' ? [201, Infinity] : range.split('-').map(Number);
+
+    const matched = [...dayCount.entries()]
+      .filter(([, { days }]) => days.size >= lo && days.size <= hi)
+      .sort((a, b) => b[1].days.size - a[1].days.size) // most experienced first
+      .map(([id, { name }]) => ({ id, name }));
+
+    _selectedCaptains = [];
+    matched.slice(0, _CAPTAIN_COLORS.length).forEach(({ id, name }, i) => {
+      _selectedCaptains.push({ id, name, color: _CAPTAIN_COLORS[i] });
+    });
+    _renderCaptainChips();
+    renderCaptainProfile();
+  }
+
   function _renderCaptainChips() {
     const chips = document.getElementById('profile-captain-chips');
     if (!chips) return;
@@ -3047,6 +3077,7 @@ const ui = (() => {
     onProfilePresetChange,
     onProfileDateChange,
     onProfileCaptainAdd,
+    onProfileExpGroupLoad,
     removeCaptain,
     renderConfigPanel,
     initInventoryHealth,

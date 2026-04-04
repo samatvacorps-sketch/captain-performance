@@ -309,6 +309,15 @@
       <select id="profile-captain-add" onchange="ui.onProfileCaptainAdd(this)" style="min-width:220px">
         <option value="">— Select captain —</option>
       </select>
+      <span class="strip-divider"></span>
+      <span class="dd-control-label" style="flex-shrink:0">Load group</span>
+      <select id="profile-exp-group" onchange="ui.onProfileExpGroupLoad(this)">
+        <option value="">— Experience group —</option>
+        <option value="0-30">New (0–30 active days)</option>
+        <option value="31-100">Learning (31–100 active days)</option>
+        <option value="101-200">Experienced (101–200 active days)</option>
+        <option value="201+">Veteran (201+ active days)</option>
+      </select>
       <div id="profile-captain-chips" class="profile-captain-chips"></div>
     </div>
 
