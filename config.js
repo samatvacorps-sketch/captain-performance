@@ -71,20 +71,20 @@ const CONFIG = {
   //            'LOW'  = low value is bad  (e.g. low throughput)
   METRICS: [
     {
-      key: 'picking_time_per_order',
-      label: 'Picking Time/Order',
-      flow: 'picking',
-      direction: 'HIGH',
-      isDuration: true,
-      col: 'N',
-    },
-    {
       key: 'assigned_to_started_per_order',
       label: 'Delay to Start',
       flow: 'picking',
       direction: 'HIGH',
       isDuration: true,
       col: 'O',
+    },
+    {
+      key: 'picking_time_per_order',
+      label: 'Picking Time/Order',
+      flow: 'picking',
+      direction: 'HIGH',
+      isDuration: true,
+      col: 'N',
     },
     {
       key: 'billing_time_per_order',
@@ -112,7 +112,7 @@ const CONFIG = {
     },
     {
       key: 'audit_hours_per_rack',
-      label: 'Audit Efficiency',
+      label: 'Audit Efficiency (HPR)',
       flow: 'audit',
       direction: 'HIGH',
       isDuration: false,

@@ -618,7 +618,7 @@ tr.incentive-zero td { opacity: 0.45; }
 /* Metric sparkline cards */
 .profile-metric-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
   margin-top: 4px;
 }
@@ -644,6 +644,18 @@ tr.incentive-zero td { opacity: 0.45; }
   color: var(--text-muted);
   margin-bottom: 12px;
 }
+
+/* Profile: comparison hero row */
+.profile-heroes-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.profile-heroes-row .profile-hero { margin-bottom: 0; }
+
+.profile-avatar-b { background: rgba(255,202,40,0.12); color: #ffca28; }
 
 /* ── Config Panel ─────────────────────────────────────────────────── */
 .config-grid {
