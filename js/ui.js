@@ -1791,11 +1791,15 @@ const ui = (() => {
     // Hero cards
     const isMulti = captainData.length > 1;
     const heroCards = captainData.map(({ id, name, color, allRows, rows }) => {
-      const initials    = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-      const totalDays   = allRows.length;
-      const shownDays   = rows.length;
-      const flaggedDays = rows.filter(r => r.composite_slacker_score > 0).length;
-      const isFiltered  = shownDays < totalDays;
+      const initials       = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+      const totalDays      = allRows.length;
+      const shownDays      = rows.length;
+      const flaggedDays    = rows.filter(r => r.composite_slacker_score > 0).length;
+      const isFiltered     = shownDays < totalDays;
+      const totalOrders    = rows.reduce((s, r) => s + (r.checkout_orders || 0), 0);
+      const totalPutaway   = rows.reduce((s, r) => s + (r.putaway_qty || 0), 0);
+      const totalActiveSec = rows.reduce((s, r) => s + (r.total_active_time || 0), 0);
+      const activeHrs      = (totalActiveSec / 3600).toFixed(1);
       return `
         <div class="profile-hero">
           <div class="profile-avatar" style="background:${_colorAlpha(color, 0.12)};color:${color}">${initials}</div>
@@ -1815,6 +1819,18 @@ const ui = (() => {
             <div class="profile-stat">
               <span class="profile-stat-value" style="color:${flaggedDays > 0 ? '#ff5c5c' : '#4edea3'}">${flaggedDays}</span>
               <span class="profile-stat-label">Flagged Days</span>
+            </div>
+            <div class="profile-stat">
+              <span class="profile-stat-value">${totalOrders.toLocaleString()}</span>
+              <span class="profile-stat-label">Orders Picked</span>
+            </div>
+            <div class="profile-stat">
+              <span class="profile-stat-value">${totalPutaway.toLocaleString()}</span>
+              <span class="profile-stat-label">Items Put Away</span>
+            </div>
+            <div class="profile-stat">
+              <span class="profile-stat-value">${activeHrs}h</span>
+              <span class="profile-stat-label">Active Time</span>
             </div>
           </div>
         </div>`;

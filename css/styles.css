@@ -658,6 +658,22 @@ tr.incentive-zero td { opacity: 0.45; }
   margin-bottom: 16px;
 }
 
+.profile-captain-bar select {
+  background: var(--surface-high);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+  cursor: pointer;
+}
+
+.profile-captain-bar select:focus { border-color: rgba(173, 198, 255, 0.45); }
+.profile-captain-bar select option { background: var(--surface-high); color: var(--text); }
+
 .profile-captain-chips {
   display: flex;
   align-items: center;
