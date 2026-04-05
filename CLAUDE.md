@@ -80,6 +80,10 @@ These options set `_xxxDateMode = true` and call the tab's render function direc
 
 Columns: Captain | Score | Putaway Qty | **Putter Hours** | Items Put Away/Hr (actual | personal | store). `captain.total_putter_hours` is computed in `_groupByCaptain` by summing `putter_active_time` for putting-flow rows. Sortable via `put_hours` key in `_getSortValue`.
 
+## Captain Deep Dive — Audit Flow Table
+
+`captain.total_racks_audited` uses `auditRacksMap` with fallback to `row.racks_audited`. After computing `total_racks_audited` and `total_auditor_hours`, `avgValues['audit_hours_per_rack']` is overridden: `total_auditor_hours / total_racks_audited` (null if either is 0). This ensures the actual/store HPR columns populate correctly instead of showing `—`.
+
 ## Inventory Health — Captain Table
 
 `captainPerf` (from `computeAuditAggregations`) now includes captains who had `auditor_active_time > 0` but **zero racks** in the Audits sheet for the period. These appear with `totalRacks: 0`, `hrPerRack: null` (shown as `—`), and are excluded from the efficiency leaderboard (`filter(c => c.totals.hrPerRack !== null)`) but visible in the main table.
@@ -93,11 +97,33 @@ Columns: Captain | Score | Putaway Qty | **Putter Hours** | Items Put Away/Hr (a
 
 **Experience-Based mode:** Same flow-activity guard applies.
 
+**Audit Flow Analysis section:** `_buildTiersHTML` renders a 4-column table (Tier, Total Racks, Audit Hours, Avg Hr/Rack) after the Putting Flow section. `_tierMetrics(rows, auditRacksMap)` computes `totalRacks` via `auditRacksMap` (fallback to `row.racks_audited`), `totalAuditHours` from `auditor_active_time`, and `avgHPR = totalAuditHours / totalRacks`. `renderTiersView` builds `auditRacksMap` from `sheets.getAuditCached()` filtered to the period's date strings, then passes it to each `_tierMetrics` call.
+
 **Shift count popover:** Clicking a Morning/Evening/Night (or New/Experienced/Senior) count opens a dark popover listing all captain names + IDs for that group. Implementation:
 - `_tierGroupRows` module var — snapshot of `groupRows` set each render
 - `_showShiftPopover(anchor, captains, label)` — appends `#tier-shift-popover` to `<body>`, positions below anchor, dismisses on outside click
 - Count span gets class `tier-count-clickable` + `data-group` / `data-label` attributes when `captainCount > 0`
 - Captain name field: `r.employee_name` (not `r.name`)
+
+## Complaints Deep Dive — Period Summary Table
+
+`_renderComplaintSummaryTable(periodData)` renders a sortable 11-column table injected into `#compl-summary-table` (placed between the stat cards and Zone 1 Trends). Columns:
+
+| # | Column | Formula |
+|---|--------|---------|
+| 1 | Period | `d.label` |
+| 2 | Total Orders | `d.totalOrdersPicked` |
+| 3 | Total Complaints | `d.totalComplaints` |
+| 4 | Out-Store Complaints | `d.inStoreNo` |
+| 5 | In-Store Complaints | `d.inStoreYes` |
+| 6 | Complaint % | `totalComplaints / totalOrders` |
+| 7 | Out-Store Complaint % | `inStoreNo / totalOrders` |
+| 8 | In-Store Complaint % | `inStoreYes / totalOrders` |
+| 9 | Out-Store Missing (order level) | `d.missingOutStore` |
+| 10 | In-Store Missing (order level) | `d.missingInStore` |
+| 11 | In-Store Missing % | `missingInStore / totalOrders` |
+
+`missingInStore` / `missingOutStore` — unique order-ID counts for `complaint_category = 'item_missing'` rows split by `in_store`. Pre-computed in `computeComplaintAggregations` using Sets per ISO week / calendar month, then stored on each weekly/monthly bucket and on `storeSummary.totals`.
 
 ## compute.js — Week / Month helpers
 
