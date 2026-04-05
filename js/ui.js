@@ -26,10 +26,32 @@ const ui = (() => {
   // ── Deep Dive Captain Filter ───────────────────────────────────────────
   // 'all' | 'flagged' | 'ok'
   let _ddFilter = 'all';
+  let _ddTierMode = 'off'; // 'off' | 'shift' | 'experience'
 
   function setDDFilter(val) {
     _ddFilter = (_ddFilter === val) ? 'all' : val;   // toggle off if already active
     renderDeepDive();
+  }
+
+  function toggleDDTier() {
+    _ddTierMode = _ddTierMode === 'off' ? 'shift'
+      : _ddTierMode === 'shift' ? 'experience' : 'off';
+    _updateDDTierBtn();
+    renderDeepDive();
+  }
+  function _updateDDTierBtn() {
+    const btn = document.getElementById('dd-tier-toggle');
+    if (!btn) return;
+    if (_ddTierMode === 'off') {
+      btn.textContent = 'Group: Off';
+      btn.className = 'btn tier-mode-btn dd-tier-off';
+    } else if (_ddTierMode === 'shift') {
+      btn.textContent = 'Shift-Based';
+      btn.className = 'btn tier-mode-btn';
+    } else {
+      btn.textContent = 'Experience-Based';
+      btn.className = 'btn tier-mode-btn experience';
+    }
   }
 
   // ── Supervisor Exclusion ─────────────────────────────────────────────
@@ -385,18 +407,25 @@ const ui = (() => {
 
     // Build auditRacksMap for accurate rack counts (Audits sheet over Daily Metrics col H)
     const _auditRaw = sheets.getAuditCached() || [];
-    const _filteredDateStrs = new Set(filtered.map(r => r.dateStr).filter(Boolean));
+    const _filteredDateStrs = new Set(filtered.map(r => r.dateIsoStr).filter(Boolean));
     const auditRacksMap = new Map();
     for (const ar of _auditRaw) {
       if (ar.dateStr && _filteredDateStrs.has(ar.dateStr))
         auditRacksMap.set(`${ar.employee_id}_${ar.dateStr}`, ar.audit_codes.length);
     }
 
+    // Captain-level rack totals directly from Audits sheet (same source as Inventory Health)
+    const captainAuditRacks = new Map();
+    for (const ar of _auditRaw) {
+      if (ar.employee_id && ar.dateStr && _filteredDateStrs.has(ar.dateStr))
+        captainAuditRacks.set(ar.employee_id, (captainAuditRacks.get(ar.employee_id) || 0) + ar.audit_codes.length);
+    }
+
     // Compute period store stats (avg + SD) from the filtered rows
     const periodStoreStats = _computePeriodStoreStats(filtered, auditRacksMap);
 
     // Aggregate per captain for this period
-    const byCaptain = _groupByCaptain(filtered, periodType, periodStoreStats, auditRacksMap);
+    const byCaptain = _groupByCaptain(filtered, periodType, periodStoreStats, auditRacksMap, captainAuditRacks);
 
     // Apply captain filter (set by clicking summary cards)
     const visibleCaptains = _ddFilter === 'flagged'
@@ -434,6 +463,36 @@ const ui = (() => {
       }).join('');
     }
 
+    // Build tier map for captain grouping (if tier mode is active)
+    let tierMap = null;
+    if (_ddTierMode === 'shift') {
+      const startVal = document.getElementById('deep-dive-start')?.value;
+      const refDate = startVal ? new Date(startVal) : new Date();
+      const _rosterSerial = s => { const n = parseFloat(s); return (!isNaN(n) && n > 1000) ? new Date(Math.round((n - 25569) * 86400000)) : null; };
+      const bestEntry = new Map();
+      for (const r of sheets.getRosterCached()) {
+        if (!r.employee_id || !r.shift) continue;
+        const shiftDate = _rosterSerial(r.start);
+        if (!shiftDate || shiftDate > refDate) continue;
+        const prev = bestEntry.get(r.employee_id);
+        const prevDate = prev ? _rosterSerial(prev.start) : null;
+        if (!prev || !prevDate || shiftDate > prevDate) bestEntry.set(r.employee_id, r);
+      }
+      tierMap = new Map([...bestEntry.values()].map(r => [r.employee_id, r.shift.toLowerCase()]));
+    } else if (_ddTierMode === 'experience') {
+      const startVal = document.getElementById('deep-dive-start')?.value;
+      const periodStartMs = startVal ? new Date(startVal).setHours(0,0,0,0) : Infinity;
+      const activeDayMap = {};
+      for (const row of data) {
+        if (!row.employee_id || !row.date || row.date >= periodStartMs) continue;
+        (activeDayMap[row.employee_id] = activeDayMap[row.employee_id] || new Set()).add(row.dateStr);
+      }
+      const activeDayCounts = Object.fromEntries(
+        Object.entries(activeDayMap).map(([id, s]) => [id, s.size])
+      );
+      tierMap = new Map(byCaptain.map(c => [c.employee_id, _classifyExpTier(activeDayCounts, c.employee_id)]));
+    }
+
     container.innerHTML = '';
 
     const flows = flowFilter === 'all'
@@ -456,7 +515,7 @@ const ui = (() => {
       section.className = 'flow-section';
       section.innerHTML = `
         <div class="flow-section-header">${meta.icon} ${meta.label} — ${captains.length} active captains</div>
-        ${_buildDeepDiveTable(captains, meta.metrics, flow, periodStoreStats)}
+        ${_buildDeepDiveTable(captains, meta.metrics, flow, periodStoreStats, tierMap)}
       `;
       container.appendChild(section);
     }
@@ -498,7 +557,7 @@ const ui = (() => {
     });
   }
 
-  function _groupByCaptain(rows, periodType, periodStoreStats, auditRacksMap) {
+  function _groupByCaptain(rows, periodType, periodStoreStats, auditRacksMap, captainAuditRacks) {
     const map = {};
     for (const row of rows) {
       const id = row.employee_id;
@@ -600,14 +659,8 @@ const ui = (() => {
         .filter(r => r.flows?.is_putting)
         .reduce((s, r) => s + (r.putter_active_time || 0), 0) / 3600;
 
-      // Audit extras
-      captain.total_racks_audited = captain.rows
-        .filter(r => r.flows?.is_audit)
-        .reduce((s, r) => {
-          const mapKey = `${r.employee_id}_${r.dateStr}`;
-          const mapRacks = auditRacksMap?.get(mapKey);
-          return s + (mapRacks !== undefined ? mapRacks : (r.racks_audited || 0));
-        }, 0);
+      // Audit extras — racks from Audits sheet directly (same source as Inventory Health)
+      captain.total_racks_audited = captainAuditRacks?.get(captain.employee_id) || 0;
       captain.total_auditor_hours = captain.rows
         .filter(r => r.flows?.is_audit)
         .reduce((s, r) => s + (r.auditor_active_time || 0), 0) / 3600;
@@ -651,7 +704,7 @@ const ui = (() => {
         .map(r => {
           if (metric.key === 'fnv_audit_rate') return r.fnv_audit_rate;
           if (metric.key === 'audit_hours_per_rack') {
-            const mapKey = `${r.employee_id}_${r.dateStr}`;
+            const mapKey = `${r.employee_id}_${r.dateIsoStr}`;
             const racks = auditRacksMap?.get(mapKey) ?? (r.racks_audited || 0);
             return (r.auditor_active_time > 0 && racks > 0)
               ? (r.auditor_active_time / 3600) / racks : null;
@@ -810,16 +863,39 @@ const ui = (() => {
     return `<span class="status-badge status-ok">Stable</span>`;
   }
 
-  function _buildDeepDiveTable(captains, metrics, flow, periodStoreStats) {
-    if (flow === 'picking') return _buildPickingTable(captains, periodStoreStats);
-    if (flow === 'putting') return _buildPuttingTable(captains, periodStoreStats);
-    if (flow === 'audit')   return _buildAuditTable(captains, periodStoreStats);
-    if (flow === 'fnv')     return _buildFNVTable(captains);
+  function _groupAndBuildRows(sorted, tierMap, colCount, buildRowFn) {
+    if (!tierMap) return sorted.map(buildRowFn).join('');
+    const tierOrder = _ddTierMode === 'shift'
+      ? ['morning', 'evening', 'night']
+      : ['new', 'experienced', 'senior'];
+    const tierLabels = _ddTierMode === 'shift'
+      ? { morning: 'Morning', evening: 'Evening', night: 'Night' }
+      : { new: 'New', experienced: 'Experienced', senior: 'Senior' };
+    const tierColors = _ddTierMode === 'shift'
+      ? { morning: '#fb923c', evening: '#adc6ff', night: '#c084fc' }
+      : { new: '#4edea3', experienced: '#adc6ff', senior: '#c084fc' };
+    let html = '';
+    for (const tier of tierOrder) {
+      const group = sorted.filter(c => tierMap.get(c.employee_id) === tier);
+      if (group.length === 0) continue;
+      html += `<tr class="dd-tier-divider"><td colspan="${colCount}">
+        <span class="dd-tier-pip" style="background:${tierColors[tier]}"></span>
+        ${tierLabels[tier]} — ${group.length} captains
+      </td></tr>`;
+      html += group.map(buildRowFn).join('');
+    }
+    return html;
+  }
+
+  function _buildDeepDiveTable(captains, metrics, flow, periodStoreStats, tierMap) {
+    if (flow === 'picking') return _buildPickingTable(captains, periodStoreStats, tierMap);
+    if (flow === 'putting') return _buildPuttingTable(captains, periodStoreStats, tierMap);
+    if (flow === 'audit')   return _buildAuditTable(captains, periodStoreStats, tierMap);
+    if (flow === 'fnv')     return _buildFNVTable(captains, tierMap);
     return '';
   }
 
-  function _buildPickingTable(captains, periodStoreStats) {
-    // Metric order: Delay to Start | Pick Time/Order | Billing Time/Order | Picks Per Interval
+  function _buildPickingTable(captains, periodStoreStats, tierMap) {
     const orderedMetrics = [
       CONFIG.METRICS.find(m => m.key === 'assigned_to_started_per_order'),
       CONFIG.METRICS.find(m => m.key === 'picking_time_per_order'),
@@ -843,9 +919,11 @@ const ui = (() => {
         _thSort(`${m.label}<br/><small style="font-weight:400;opacity:0.8">actual | personal | store</small>`, metricSortKeys[m.key], 'picking')
       ).join('')}
     `;
+    // colCount: Captain + Score + Orders + PPI + 4 metrics + Status = 9
+    const colCount = 4 + orderedMetrics.length + 1;
 
     const sorted = _sortedCaptains(captains, _sortState.col);
-    const rows = sorted.map(captain => {
+    const buildRow = captain => {
       const metricCells = orderedMetrics.map(metric => {
         const dev     = captain.deviations.get(metric.key);
         const cls     = compute.deviationClass(dev);
@@ -868,7 +946,8 @@ const ui = (() => {
         ${metricCells}
         <td>${_statusBadge(captain.picking_score)}</td>
       </tr>`;
-    }).join('');
+    };
+    const rows = _groupAndBuildRows(sorted, tierMap, colCount, buildRow);
 
     return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>${headers}<th></th></tr></thead>
@@ -876,10 +955,10 @@ const ui = (() => {
     </table></div>`;
   }
 
-  function _buildPuttingTable(captains, periodStoreStats) {
+  function _buildPuttingTable(captains, periodStoreStats, tierMap) {
     const metric = CONFIG.METRICS.find(m => m.key === 'iph');
     const sorted = _sortedCaptains(captains, _sortState.col);
-    const rows = sorted.map(captain => {
+    const buildRow = captain => {
       const dev     = metric ? captain.deviations.get(metric.key) : null;
       const cls     = compute.deviationClass(dev);
       const actual  = metric ? captain.avgValues[metric.key] : null;
@@ -898,7 +977,8 @@ const ui = (() => {
         </td>
         <td>${_statusBadge(captain.putting_score)}</td>
       </tr>`;
-    }).join('');
+    };
+    const rows = _groupAndBuildRows(sorted, tierMap, 6, buildRow);
 
     return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>
@@ -913,10 +993,10 @@ const ui = (() => {
     </table></div>`;
   }
 
-  function _buildAuditTable(captains, periodStoreStats) {
+  function _buildAuditTable(captains, periodStoreStats, tierMap) {
     const metric = CONFIG.METRICS.find(m => m.key === 'audit_hours_per_rack');
     const sorted = _sortedCaptains(captains, _sortState.col);
-    const rows = sorted.map(captain => {
+    const buildRow = captain => {
       const dev     = metric ? captain.deviations.get(metric.key) : null;
       const cls     = compute.deviationClass(dev);
       const actual  = metric ? captain.avgValues[metric.key] : null;
@@ -935,7 +1015,8 @@ const ui = (() => {
         </td>
         <td>${_statusBadge(captain.audit_score)}</td>
       </tr>`;
-    }).join('');
+    };
+    const rows = _groupAndBuildRows(sorted, tierMap, 6, buildRow);
 
     return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>
@@ -950,13 +1031,14 @@ const ui = (() => {
     </table></div>`;
   }
 
-  function _buildFNVTable(captains) {
+  function _buildFNVTable(captains, tierMap) {
     const sorted = _sortedCaptains(captains, _sortState.col);
-    const rows = sorted.map(captain => `<tr>
+    const buildRow = captain => `<tr>
       ${_captainCell(captain.employee_name, captain.employee_id)}
       <td>${captain.avg_fnv_rate !== null ? _fmt(captain.avg_fnv_rate, 1) : '—'}</td>
       <td>${_fmt(captain.total_fnv_hours, 1)} h</td>
-    </tr>`).join('');
+    </tr>`;
+    const rows = _groupAndBuildRows(sorted, tierMap, 3, buildRow);
 
     return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>
@@ -1189,7 +1271,7 @@ const ui = (() => {
   function _updateTierModeBtn() {
     const btn = document.getElementById('tier-mode-toggle');
     if (!btn) return;
-    btn.textContent = _tierMode === 'time' ? 'Time-Based Tiers' : 'Experience-Based Tiers';
+    btn.textContent = _tierMode === 'time' ? 'Shift-Based Tiers' : 'Experience-Based Tiers';
     btn.classList.toggle('experience', _tierMode === 'experience');
   }
 
@@ -1253,9 +1335,16 @@ const ui = (() => {
       ? pickRows.reduce((s, r) => s + ((r.ppi > 0 ? r.ppi : 0) * (r.checkout_orders || 0)), 0) / totalPickOrders
       : null;
 
-    const avgDelay = avg(pickRows, 'assigned_to_started_per_order');
-    const avgPick  = avg(pickRows, 'picking_time_per_order');
-    const avgBill  = avg(pickRows, 'billing_time_per_order');
+    // Weighted averages by order count (same pattern as weightedAvgPPI)
+    const wAvg = (rows, key) => {
+      const tot = sum(rows, 'checkout_orders');
+      if (!tot) return null;
+      const s = rows.reduce((acc, r) => acc + ((r[key] > 0 ? r[key] : 0) * (r.checkout_orders || 0)), 0);
+      return s / tot;
+    };
+    const avgDelay = wAvg(pickRows, 'assigned_to_started_per_order');
+    const avgPick  = wAvg(pickRows, 'picking_time_per_order');
+    const avgBill  = wAvg(pickRows, 'billing_time_per_order');
     // Compute total time from components to avoid bad raw data
     const avgTotal = (avgDelay != null && avgPick != null && avgBill != null)
       ? avgDelay + avgPick + avgBill : null;
@@ -1263,7 +1352,7 @@ const ui = (() => {
     const totalPutQty   = sum(putRows,   'putaway_qty');
     const totalPutHrs   = sum(putRows,   'putter_active_time') / 3600;
     const totalRacks    = auditRows.reduce((s, r) => {
-      const mapKey = `${r.employee_id}_${r.dateStr}`;
+      const mapKey = `${r.employee_id}_${r.dateIsoStr}`;
       const mapRacks = auditRacksMap?.get(mapKey);
       return s + (mapRacks !== undefined ? mapRacks : (r.racks_audited || 0));
     }, 0);
@@ -1313,14 +1402,14 @@ const ui = (() => {
 
     // Build auditRacksMap for accurate rack counts (Audits sheet over Daily Metrics col H)
     const _tierAuditRaw = sheets.getAuditCached() || [];
-    const _tierDateStrs = new Set(filtered.map(r => r.dateStr).filter(Boolean));
+    const _tierDateStrs = new Set(filtered.map(r => r.dateIsoStr).filter(Boolean));
     const auditRacksMap = new Map();
     for (const ar of _tierAuditRaw) {
       if (ar.dateStr && _tierDateStrs.has(ar.dateStr))
         auditRacksMap.set(`${ar.employee_id}_${ar.dateStr}`, ar.audit_codes.length);
     }
 
-    let groupDefs, groupRows, groupLabel;
+    let groupDefs, groupRows, groupLabel, rosterMap = new Map();
 
     if (_tierMode === 'time') {
       // Pick each captain's most recent roster entry on or before the period start.
@@ -1338,7 +1427,7 @@ const ui = (() => {
         const prevDate = prev ? _rosterSerial(prev.start) : null;
         if (!prev || !prevDate || shiftDate > prevDate) bestEntry.set(r.employee_id, r);
       }
-      const rosterMap = new Map(
+      rosterMap = new Map(
         [...bestEntry.values()].map(r => [r.employee_id, r.shift.toLowerCase()])
       );
       groupDefs = [
@@ -1371,8 +1460,72 @@ const ui = (() => {
     }
 
     const groupStats = Object.fromEntries(groupDefs.map(g => [g.key, _tierMetrics(groupRows[g.key], auditRacksMap)]));
+
+    // Historical groups: row-level classification (each row classified by captain's tier at that date)
+    // Experience: count active days strictly before each row's date → tier at that point in time
+    // Time: most recent roster entry on or before each row's date
+
+    // Build per-captain sorted unique active-day list (for row-level experience classification)
+    const captainActiveDayMap = new Map();
+    for (const row of data) {
+      if (!row.employee_id || !row.dateIsoStr) continue;
+      if (!captainActiveDayMap.has(row.employee_id)) captainActiveDayMap.set(row.employee_id, new Set());
+      captainActiveDayMap.get(row.employee_id).add(row.dateIsoStr);
+    }
+    const captainSortedDays = new Map();
+    for (const [id, dateSet] of captainActiveDayMap) captainSortedDays.set(id, [...dateSet].sort());
+    // Returns experience tier for captain on a given date (days active strictly before that date)
+    const getExpTierOnDate = (empId, rowDateIsoStr) => {
+      const dates = captainSortedDays.get(empId);
+      if (!dates) return 'new';
+      // Binary search: count dates strictly before rowDateIsoStr
+      let lo = 0, hi = dates.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (dates[mid] < rowDateIsoStr) lo = mid + 1; else hi = mid; }
+      if (lo < 30)  return 'new';
+      if (lo < 120) return 'experienced';
+      return 'senior';
+    };
+
+    // Row-level shift lookup for time-based historical classification
+    const _rosterSerialHist = s => { const n = parseFloat(s); return (!isNaN(n) && n > 1000) ? new Date(Math.round((n - 25569) * 86400000)) : null; };
+    const captainRosterHistory = new Map();
+    for (const r of sheets.getRosterCached()) {
+      if (!r.employee_id || !r.shift) continue;
+      const shiftDate = _rosterSerialHist(r.start);
+      if (!shiftDate) continue;
+      if (!captainRosterHistory.has(r.employee_id)) captainRosterHistory.set(r.employee_id, []);
+      captainRosterHistory.get(r.employee_id).push({ date: shiftDate, shift: r.shift.toLowerCase() });
+    }
+    for (const entries of captainRosterHistory.values()) entries.sort((a, b) => a.date - b.date);
+    const getShiftOnDate = (empId, rowDate) => {
+      const history = captainRosterHistory.get(empId);
+      if (!history) return '';
+      let shift = '';
+      for (const entry of history) { if (entry.date <= rowDate) shift = entry.shift; else break; }
+      return shift;
+    };
+
+    const histGroupRows = Object.fromEntries(groupDefs.map(g => [g.key, []]));
+    for (const row of data) {
+      const f = row.flows;
+      if (!f || (!f.is_picking && !f.is_putting && !f.is_audit && !f.is_fnv)) continue;
+      // Exclude March (2), September (8), October (9) — outlier months (locked)
+      if (row.date) { const m = row.date.getMonth(); if (m === 2 || m === 8 || m === 9) continue; }
+      const key = _tierMode === 'time'
+        ? getShiftOnDate(row.employee_id, row.date)
+        : getExpTierOnDate(row.employee_id, row.dateIsoStr);
+      if (histGroupRows[key]) histGroupRows[key].push(row);
+    }
+    const fullAuditRacksMap = new Map();
+    for (const ar of _tierAuditRaw) {
+      if (ar.dateStr) fullAuditRacksMap.set(`${ar.employee_id}_${ar.dateStr}`, ar.audit_codes.length);
+    }
+    const histGroupStats = Object.fromEntries(
+      groupDefs.map(g => [g.key, _tierMetrics(histGroupRows[g.key] || [], fullAuditRacksMap)])
+    );
+
     _tierGroupRows = groupRows;
-    container.innerHTML = _buildTiersHTML(groupStats, groupDefs, groupLabel);
+    container.innerHTML = _buildTiersHTML(groupStats, groupDefs, groupLabel, histGroupStats);
     container.querySelectorAll('.tiers-table').forEach(t => _initTableSort(t));
 
     container.querySelectorAll('.tier-count-clickable').forEach(span => {
@@ -1429,10 +1582,13 @@ const ui = (() => {
     setTimeout(() => document.addEventListener('click', dismiss, true), 0);
   }
 
-  function _buildTiersHTML(groupStats, groupDefs, groupLabel) {
+  function _buildTiersHTML(groupStats, groupDefs, groupLabel, histGroupStats = null) {
     const fmtDur = v => v !== null ? compute.formatDuration(v) : '—';
     const fmtNum = (v, d=1) => v != null ? _fmt(v, d) : '—';
-    const st = k => groupStats[k];
+    const st  = k => groupStats[k];
+    const hst = k => histGroupStats?.[k] ?? null;
+    const histSub = (val, label) => val !== null
+      ? `<div class="tiers-hist-avg">all-time: ${label}</div>` : '';
 
     const colorCode = (vals, direction) => {
       const valid = vals.filter(v => v !== null && v > 0);
@@ -1482,6 +1638,8 @@ const ui = (() => {
     const totalVals     = groupDefs.map(g => st(g.key).avgTotalTime);
     const pickActVals   = groupDefs.map(g => st(g.key).totalPickerActiveTime);
     const totalOrders   = ordersVals.reduce((a, v) => a + (v || 0), 0);
+    const histOrdersVals   = groupDefs.map(g => hst(g.key)?.totalOrders ?? 0);
+    const totalHistOrders  = histOrdersVals.reduce((a, v) => a + (v || 0), 0);
     const clsOrders     = colorCode(ordersVals, 'LOW');
     const clsPPI        = colorCode(ppiVals,    'HIGH');
     const clsDelay      = colorCode(delayVals,  'HIGH');
@@ -1491,18 +1649,21 @@ const ui = (() => {
 
     const pickTableRows = groupDefs.map((g, i) => {
       const has = st(g.key).captainCount > 0;
+      const h   = hst(g.key);
       const pct = totalOrders > 0 && ordersVals[i]
         ? `<span class="tiers-pct">${((ordersVals[i]/totalOrders)*100).toFixed(1)}%</span>` : '';
+      const histPct = totalHistOrders > 0 && histOrdersVals[i]
+        ? `${((histOrdersVals[i]/totalHistOrders)*100).toFixed(1)}%` : null;
       const pickActHrs = pickActVals[i];
       return `
         <tr class="${has ? '' : 'tiers-row-empty'}">
           <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
-          <td class="${clsOrders[i]}">${has ? `${_fmt(ordersVals[i], 0)} ${pct}` : '—'}</td>
-          <td class="${clsPPI[i]}">${fmtDur(ppiVals[i])}</td>
-          <td class="${clsDelay[i]}">${fmtDur(delayVals[i])}</td>
-          <td class="${clsPick[i]}">${fmtDur(pickVals[i])}</td>
-          <td class="${clsBill[i]}">${fmtDur(billVals[i])}</td>
-          <td class="${clsTotal[i]}">${fmtDur(totalVals[i])}</td>
+          <td class="${clsOrders[i]}">${has ? `${_fmt(ordersVals[i], 0)} ${pct}` : '—'}${histSub(histPct, histPct)}</td>
+          <td class="${clsPPI[i]}">${fmtDur(ppiVals[i])}${histSub(h?.weightedAvgPPI ?? null, fmtDur(h?.weightedAvgPPI ?? null))}</td>
+          <td class="${clsDelay[i]}">${fmtDur(delayVals[i])}${histSub(h?.avgDelayToStart ?? null, fmtDur(h?.avgDelayToStart ?? null))}</td>
+          <td class="${clsPick[i]}">${fmtDur(pickVals[i])}${histSub(h?.avgPickTime ?? null, fmtDur(h?.avgPickTime ?? null))}</td>
+          <td class="${clsBill[i]}">${fmtDur(billVals[i])}${histSub(h?.avgBillingTime ?? null, fmtDur(h?.avgBillingTime ?? null))}</td>
+          <td class="${clsTotal[i]}">${fmtDur(totalVals[i])}${histSub(h?.avgTotalTime ?? null, fmtDur(h?.avgTotalTime ?? null))}</td>
           <td>${has && pickActHrs > 0 ? fmtNum(pickActHrs) + ' hrs' : '—'}</td>
         </tr>`;
     }).join('');
@@ -1534,16 +1695,20 @@ const ui = (() => {
     const putQtyVals  = groupDefs.map(g => st(g.key).totalPutawayQty);
     const iphVals     = groupDefs.map(g => st(g.key).iph);
     const putHrVals   = groupDefs.map(g => st(g.key).totalPutHours);
+    const totalPutQty = putQtyVals.reduce((a, v) => a + (v || 0), 0);
     const clsPutQty   = colorCode(putQtyVals, 'LOW');
     const clsIPH      = colorCode(iphVals,    'LOW');
 
     const putTableRows = groupDefs.map((g, i) => {
       const has = st(g.key).captainCount > 0 && putQtyVals[i] > 0;
+      const h   = hst(g.key);
+      const pct = totalPutQty > 0 && putQtyVals[i]
+        ? `<span class="tiers-pct">${((putQtyVals[i]/totalPutQty)*100).toFixed(1)}%</span>` : '';
       return `
         <tr class="${has ? '' : 'tiers-row-empty'}">
           <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
-          <td class="${clsPutQty[i]}">${has ? _fmt(putQtyVals[i], 0) : '—'}</td>
-          <td class="${clsIPH[i]}">${fmtNum(iphVals[i])}</td>
+          <td class="${clsPutQty[i]}">${has ? `${_fmt(putQtyVals[i], 0)} ${pct}` : '—'}</td>
+          <td class="${clsIPH[i]}">${fmtNum(iphVals[i])}${histSub(h?.iph ?? null, fmtNum(h?.iph ?? null))}</td>
           <td>${has && putHrVals[i] > 0 ? fmtNum(putHrVals[i]) + ' hrs' : '—'}</td>
         </tr>`;
     }).join('');
@@ -1576,11 +1741,12 @@ const ui = (() => {
 
     const auditTableRows = groupDefs.map((g, i) => {
       const has = st(g.key).captainCount > 0 && rackVals[i] > 0;
+      const h   = hst(g.key);
       return `
         <tr class="${has ? '' : 'tiers-row-empty'}">
           <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
           <td class="${clsRacks[i]}">${has ? _fmt(rackVals[i], 0) : '—'}</td>
-          <td class="${clsHPR[i]}">${fmtNum(hprVals[i], 2)}</td>
+          <td class="${clsHPR[i]}">${fmtNum(hprVals[i], 2)}${histSub(h?.hpr ?? null, fmtNum(h?.hpr ?? null, 2))}</td>
           <td>${has && auditHrVals[i] > 0 ? fmtNum(auditHrVals[i]) + ' hrs' : '—'}</td>
         </tr>`;
     }).join('');
@@ -3126,6 +3292,7 @@ const ui = (() => {
     initDeepDivePeriods,
     renderDeepDive,
     setDDFilter,
+    toggleDDTier,
     onDeepDivePresetChange,
     onDeepDiveDateChange,
     initTiersView,

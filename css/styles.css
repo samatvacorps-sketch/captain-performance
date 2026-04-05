@@ -326,6 +326,31 @@ body {
   border-color: rgba(192, 132, 252, 0.3);
 }
 .tier-mode-btn.experience:hover { background: rgba(192, 132, 252, 0.18); }
+.tier-mode-btn.dd-tier-off {
+  background: rgba(150,150,150,0.08);
+  color: #888;
+  border-color: rgba(150,150,150,0.25);
+}
+.tier-mode-btn.dd-tier-off:hover { background: rgba(150,150,150,0.15); }
+
+.dd-tier-divider td {
+  padding: 10px 12px 6px !important;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.dd-tier-pip {
+  display: inline-block;
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
 
 /* ── Loading Overlay ──────────────────────────────────────────────── */
 .loading-overlay {
@@ -1729,6 +1754,13 @@ tr.incentive-zero td { opacity: 0.45; }
 .tiers-cell-worst { color: #ff6b6b; }
 .tiers-cell-mid   { color: #ffca28; }
 .tiers-cell-muted { opacity: 0.35; }
+
+.tiers-hist-avg {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  opacity: 0.65;
+}
 
 /* Putting bento */
 .tiers-putting-bento {

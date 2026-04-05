@@ -210,10 +210,15 @@ const sheets = (() => {
     const dateRaw = raw[c.date];
     if (dateRaw === undefined || dateRaw === null || dateRaw === '') return null;
     const dateStr = String(dateRaw); // always string so Map keys match
+    const date    = _parseDate(dateRaw);
+    if (!date) return null;
+    const _dy = date.getFullYear(), _dm = String(date.getMonth()+1).padStart(2,'0'), _dd = String(date.getDate()).padStart(2,'0');
+    const dateIsoStr = `${_dy}-${_dm}-${_dd}`; // YYYY-MM-DD, matches audit/roster dateStr format
 
     return {
-      date:           _parseDate(dateRaw),
-      dateStr:        dateStr,
+      date,
+      dateStr,
+      dateIsoStr,
       employee_id:    _str(raw[c.employee_id]),
       employee_name:  _str(raw[c.employee_name]),
 
