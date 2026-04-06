@@ -10,10 +10,10 @@ const charts = (() => {
 
   // ── Colour Palette ────────────────────────────────────────────────────
 
-  const COLORS = {
+  const _COLORS_DARK = {
     navy:   '#0f1419',
-    accent: '#adc6ff',   /* blue primary — matches Samatva bento design */
-    teal:   '#4edea3',   /* green secondary */
+    accent: '#adc6ff',
+    teal:   '#4edea3',
     amber:  '#ffca28',
     red:    '#ff6b6b',
     green:  '#4edea3',
@@ -21,6 +21,20 @@ const charts = (() => {
     pink:   '#f9a8d4',
     silver: '#c6c6ca',
   };
+  const _COLORS_LIGHT = {
+    navy:   '#f8f9fc',
+    accent: '#3b82f6',   /* deeper blue for white backgrounds */
+    teal:   '#10b981',
+    amber:  '#f59e0b',
+    red:    '#ef4444',
+    green:  '#10b981',
+    purple: '#8b5cf6',
+    pink:   '#ec4899',
+    silver: '#9ca3af',
+  };
+  const COLORS = new Proxy({}, {
+    get(_, prop) { return (_isLight() ? _COLORS_LIGHT : _COLORS_DARK)[prop]; }
+  });
 
   const ALPHA = (hex, a) => {
     const r = parseInt(hex.slice(1,3),16);
@@ -29,48 +43,83 @@ const charts = (() => {
     return `rgba(${r},${g},${b},${a})`;
   };
 
-  // ── Common Chart Defaults ─────────────────────────────────────────────
+  // ── Theme-aware Chart Defaults ─────────────────────────────────────────
 
-  const GRID_COLOR  = 'rgba(63,73,85,0.25)';
-  const TICK_COLOR  = '#a2acba';
-  const LABEL_COLOR = '#dde6f5';
+  function _isLight() {
+    return document.documentElement.getAttribute('data-theme') === 'light';
+  }
 
-  const BASE_OPTS = {
-    responsive: true,
-    maintainAspectRatio: true,
-    plugins: {
-      legend: {
-        position: 'bottom',
-        labels: { font: { size: 11, family: 'Manrope' }, color: TICK_COLOR, padding: 14 },
+  function _gridColor()  { return _isLight() ? 'rgba(0,0,0,0.06)'   : 'rgba(63,73,85,0.25)'; }
+  function _tickColor()  { return _isLight() ? '#6b7280'             : '#a2acba'; }
+  function _labelColor() { return _isLight() ? '#1a1f2e'             : '#dde6f5'; }
+  function _tooltipBg()  { return _isLight() ? 'rgba(255,255,255,0.96)' : 'rgba(15,20,25,0.95)'; }
+  function _tooltipBdr() { return _isLight() ? 'rgba(0,0,0,0.08)'   : 'rgba(63,73,85,0.4)'; }
+
+  // Theme-aware color accessors — read current theme each time they're accessed.
+  // All chart render functions call these at creation time, so charts
+  // automatically pick up the current theme without a full page reload.
+  const _themeColors = {};
+  Object.defineProperties(_themeColors, {
+    GRID:  { get: _gridColor },
+    TICK:  { get: _tickColor },
+    LABEL: { get: _labelColor },
+  });
+  // Legacy aliases used throughout — redirect to live getters
+  let GRID_COLOR, TICK_COLOR, LABEL_COLOR;
+  // Reassign before each chart build via _refreshThemeVars()
+  function _refreshThemeVars() {
+    GRID_COLOR  = _gridColor();
+    TICK_COLOR  = _tickColor();
+    LABEL_COLOR = _labelColor();
+  }
+  _refreshThemeVars();
+
+  function _baseOpts() {
+    const gc = _gridColor(), tc = _tickColor(), lc = _labelColor();
+    return {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { font: { size: 11, family: 'Manrope' }, color: tc, padding: 14 },
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          backgroundColor: _tooltipBg(),
+          borderColor: _tooltipBdr(),
+          borderWidth: 1,
+          titleColor: lc,
+          bodyColor: tc,
+        },
       },
-      tooltip: {
-        mode: 'index',
-        intersect: false,
-        backgroundColor: 'rgba(15,20,25,0.95)',
-        borderColor: 'rgba(63,73,85,0.4)',
-        borderWidth: 1,
-        titleColor: LABEL_COLOR,
-        bodyColor: TICK_COLOR,
+      scales: {
+        x: {
+          grid: { color: gc },
+          ticks: { font: { size: 11, family: 'Manrope' }, color: tc, maxRotation: 45 },
+        },
+        y: {
+          grid: { color: gc },
+          ticks: { font: { size: 11, family: 'Manrope' }, color: tc },
+          beginAtZero: true,
+        },
       },
-    },
-    scales: {
-      x: {
-        grid: { color: GRID_COLOR },
-        ticks: { font: { size: 11, family: 'Manrope' }, color: TICK_COLOR, maxRotation: 45 },
-      },
-      y: {
-        grid: { color: GRID_COLOR },
-        ticks: { font: { size: 11, family: 'Manrope' }, color: TICK_COLOR },
-        beginAtZero: true,
-      },
-    },
-  };
+    };
+  }
+
+  // Dynamic BASE_OPTS — always reads current theme colors
+  // Uses a Proxy so `BASE_OPTS` and `BASE_OPTS.scales.y` etc. work as before
+  const BASE_OPTS = new Proxy({}, {
+    get(_, prop) { return _baseOpts()[prop]; }
+  });
 
   function _destroy(id) {
     if (_instances[id]) {
       _instances[id].destroy();
       delete _instances[id];
     }
+    _refreshThemeVars(); // pick up current theme colors for the new chart
   }
 
   // ── Chart 1: Orders Picked (left) vs Picking Hours (right) ───────────
@@ -697,7 +746,7 @@ const charts = (() => {
         datasets: [{
           data,
           backgroundColor: sortedRCA.map((_, i) => ALPHA(rcaColors[i % rcaColors.length], 0.8)),
-          borderColor: 'rgba(0,0,0,0.3)',
+          borderColor: _isLight() ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.3)',
           borderWidth: 1,
         }],
       },

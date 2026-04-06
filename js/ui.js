@@ -95,6 +95,9 @@ const ui = (() => {
       document.documentElement.setAttribute('data-theme', 'light');
       localStorage.setItem('theme', 'light');
     }
+    // Re-render current tab so charts pick up new theme colors
+    // Re-render current tab so charts pick up new theme colors
+    try { app.renderCurrentTab?.(); } catch (_) {}
   }
 
   function filterSupervisors(rows) { return _supervisorFilter(rows); }
@@ -3458,5 +3461,5 @@ const app = (() => {
   function getStoreStats()   { return _storeStats; }
   function getPersonalAvgs() { return _personalAvgs; }
 
-  return { init, refresh, switchTab, updateThreshold, getFlaggedData, getStoreStats, getPersonalAvgs };
+  return { init, refresh, switchTab, updateThreshold, getFlaggedData, getStoreStats, getPersonalAvgs, renderCurrentTab: _renderCurrentTab };
 })();
