@@ -77,6 +77,26 @@ const ui = (() => {
     app.refresh();
   }
 
+  // ── Theme Toggle ─────────────────────────────────────────────────────
+  function _initTheme() {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  }
+  _initTheme();
+
+  function toggleTheme() {
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    if (isLight) {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light');
+      localStorage.setItem('theme', 'light');
+    }
+  }
+
   function filterSupervisors(rows) { return _supervisorFilter(rows); }
 
   // ── Tab Switching ─────────────────────────────────────────────────────
@@ -3327,6 +3347,7 @@ const ui = (() => {
     renderComplaintsDeepDive,
     toggleComplQNG,
     toggleSupervisors,
+    toggleTheme,
     filterSupervisors,
     updateSupervisorBtn: _updateSupervisorBtn,
     initIncentivePeriods,
