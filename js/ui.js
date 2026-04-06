@@ -651,6 +651,11 @@ const ui = (() => {
       captain.avg_ppi = ppiVals.length > 0
         ? ppiVals.reduce((a, b) => a + b, 0) / ppiVals.length : null;
 
+      // Picking extras — picker hours
+      captain.total_picker_hours = captain.rows
+        .filter(r => r.flows?.is_picking)
+        .reduce((s, r) => s + (r.picker_active_time || 0), 0) / 3600;
+
       // Putting extras
       captain.total_putaway_qty = captain.rows
         .filter(r => r.flows?.is_putting)
@@ -728,6 +733,7 @@ const ui = (() => {
       case 'name':         return (captain.employee_name || '').toLowerCase();
       case 'id':           return (captain.employee_id || '').toLowerCase();
       case 'score':        return captain.composite_slacker_score ?? 0;
+      case 'pick_hours':   return captain.total_picker_hours ?? 0;
       case 'total_orders': return captain.total_orders_picked ?? 0;
       case 'avg_ppi':               return captain.avg_ppi ?? -Infinity;
       case 'total_time_per_order':  return captain.avgValues?.total_time_per_order ?? -Infinity;
@@ -912,14 +918,14 @@ const ui = (() => {
 
     const headers = `
       ${_thSort('Captain', 'name', 'picking')}
-      ${_thSort('Score<br/><small style="font-weight:400;opacity:0.8">composite</small>', 'score', 'picking')}
+      ${_thSort('Picker Hours', 'pick_hours', 'picking')}
       ${_thSort('Total Orders', 'total_orders', 'picking')}
       ${_thSort('PPI<br/><small style="font-weight:400;opacity:0.8">sec/item</small>', 'avg_ppi', 'picking')}
       ${orderedMetrics.map(m =>
         _thSort(`${m.label}<br/><small style="font-weight:400;opacity:0.8">actual | personal | store</small>`, metricSortKeys[m.key], 'picking')
       ).join('')}
     `;
-    // colCount: Captain + Score + Orders + PPI + 4 metrics + Status = 9
+    // colCount: Captain + Picker Hours + Orders + PPI + 4 metrics + Status = 9
     const colCount = 4 + orderedMetrics.length + 1;
 
     const sorted = _sortedCaptains(captains, _sortState.col);
@@ -940,7 +946,7 @@ const ui = (() => {
 
       return `<tr>
         ${_captainCell(captain.employee_name, captain.employee_id)}
-        <td>${_scoreBadge(captain.picking_score)}</td>
+        <td>${_fmt(captain.total_picker_hours, 1)} h</td>
         <td>${_fmt(captain.total_orders_picked)}</td>
         <td>${captain.avg_ppi !== null ? _fmt(captain.avg_ppi, 2) : '—'}</td>
         ${metricCells}
@@ -969,7 +975,6 @@ const ui = (() => {
 
       return `<tr>
         ${_captainCell(captain.employee_name, captain.employee_id)}
-        <td>${_scoreBadge(captain.putting_score)}</td>
         <td>${_fmt(captain.total_putaway_qty)}</td>
         <td>${_fmt(captain.total_putter_hours, 1)} h</td>
         <td class="${cls}" title="${flagged ? '🚩 Flagged' : ''}">
@@ -978,12 +983,11 @@ const ui = (() => {
         <td>${_statusBadge(captain.putting_score)}</td>
       </tr>`;
     };
-    const rows = _groupAndBuildRows(sorted, tierMap, 6, buildRow);
+    const rows = _groupAndBuildRows(sorted, tierMap, 5, buildRow);
 
     return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>
         ${_thSort('Captain', 'name', 'putting')}
-        ${_thSort('Score', 'score', 'putting')}
         ${_thSort('Putaway Qty', 'putaway_qty', 'putting')}
         ${_thSort('Putter Hours', 'put_hours', 'putting')}
         ${_thSort('Items Put Away/Hr<br/><small style="font-weight:400;opacity:0.7">actual | personal | store</small>', 'iph', 'putting')}
@@ -1007,7 +1011,6 @@ const ui = (() => {
 
       return `<tr>
         ${_captainCell(captain.employee_name, captain.employee_id)}
-        <td>${_scoreBadge(captain.audit_score)}</td>
         <td>${_fmt(captain.total_racks_audited)}</td>
         <td>${_fmt(captain.total_auditor_hours, 1)} h</td>
         <td class="${cls}" title="${flagged ? 'Flagged' : ''}">
@@ -1016,12 +1019,11 @@ const ui = (() => {
         <td>${_statusBadge(captain.audit_score)}</td>
       </tr>`;
     };
-    const rows = _groupAndBuildRows(sorted, tierMap, 6, buildRow);
+    const rows = _groupAndBuildRows(sorted, tierMap, 5, buildRow);
 
     return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>
         ${_thSort('Captain', 'name', 'audit')}
-        ${_thSort('Score', 'score', 'audit')}
         ${_thSort('Racks Audited', 'racks', 'audit')}
         ${_thSort('Auditor Hours', 'audit_hours', 'audit')}
         ${_thSort('Audit Efficiency<br/><small style="font-weight:400;opacity:0.7">actual | personal | store (hr/rack)</small>', 'audit_hours_per_rack', 'audit')}
