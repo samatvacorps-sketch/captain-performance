@@ -30,6 +30,12 @@ css/styles.css      — Full dark theme, CSS variables
 - Durations arrive as fractions of a day. Parsed via `n * 86400` to get seconds.
 - The `_dur()` guard `n < 10` means values >= 10 days are dropped — fine for per-day durations.
 
+**`dateStr` vs `dateIsoStr`:** Each parsed Daily Metrics row includes both:
+- `dateStr` — raw serial number as string (used by period `'D'` filter, active-day tracking, aggregation inputs)
+- `dateIsoStr` — YYYY-MM-DD formatted string (used as key in `auditRacksMap` and any lookup against Audits sheet rows, which store dates as YYYY-MM-DD)
+
+Never use `dateStr` for `auditRacksMap` lookups — it will always miss because Audits rows use YYYY-MM-DD.
+
 ## Tab IDs
 
 `store-overview` | `captain-deep-dive` | `daily-flags` | `captain-profile` | `tier-analysis` | `inventory-health` | `complaints-deep-dive` | `incentives` | `config-panel`
@@ -49,7 +55,7 @@ css/styles.css      — Full dark theme, CSS variables
 
 **Flow detection:** `computeFlowFlags(row)` → `{ is_picking, is_putting, is_audit, is_fnv }` based on whether the corresponding `*_active_time > 0`.
 
-**auditRacksMap pattern:** Wherever audit rack counts are needed (Tier Analysis, Captain Deep Dive, `_computePeriodStoreStats`), a `Map<"employeeId_YYYY-MM-DD", rackCount>` is built from `sheets.getAuditCached()` filtered to the current date window, and used in preference to `row.racks_audited` (Daily Metrics col H). Fallback to `row.racks_audited` only when no Audits-sheet entry exists for that captain+date.
+**auditRacksMap pattern:** Wherever audit rack counts are needed (Tier Analysis, Captain Deep Dive, `_computePeriodStoreStats`), a `Map<"employeeId_YYYY-MM-DD", rackCount>` is built from `sheets.getAuditCached()` filtered to the current date window, and used in preference to `row.racks_audited` (Daily Metrics col H). Fallback to `row.racks_audited` only when no Audits-sheet entry exists for that captain+date. Keys are always built with `r.dateIsoStr` (never `r.dateStr`).
 
 ## Quick Select — T-1 / T-2
 
@@ -76,13 +82,32 @@ These options set `_xxxDateMode = true` and call the tab's render function direc
 
 **`avg_total_time_per_order`** in `_summarise()` uses a weighted average helper: `sum(time × orders) / sum(orders)` over picking-flow rows only. Matches `computePickingIncentives` exactly.
 
+## Captain Deep Dive — Tier Grouping Toggle
+
+A **Group** button in the Deep Dive header cycles through three modes via `_ddTierMode`:
+- `'off'` → `'shift'` → `'experience'` → `'off'`
+- Button labels: `Group: Off` / `Group: Shift-Based` / `Group: Experience-Based`
+- Button style: `.tier-mode-btn.dd-tier-off` (grey/muted) when off; active style otherwise
+
+When a mode is active, each flow table (Picking, Putting, Audit, FNV) inserts colored **divider rows** between tier groups using `_groupAndBuildRows(rows, tierMap, buildRow, colCount)`:
+- Shift mode groups: Morning / Evening / Night (pip colors: `#f59e0b` / `#818cf8` / `#34d399`)
+- Experience mode groups: New / Experienced / Senior (pip colors: `#60a5fa` / `#f59e0b` / `#a78bfa`)
+- Divider row HTML: `.dd-tier-divider td` with `.dd-tier-pip` colored bar + label
+- Column spans: Picking=9, Putting=6, Audit=6, FNV=3
+
+**`captainTierMap`** — built in `renderDeepDive`, a `Map<employee_id, tierLabel>` using the same row-level classification as Tier Analysis:
+- Shift mode: `getShiftOnDate(empId, refDate)` from date-aware roster history
+- Experience mode: `getExpTierOnDate(empId, refDate)` binary search on sorted active-day lists
+
+**`captainAuditRacks`** — `Map<employee_id, totalRacks>` summed directly from `sheets.getAuditCached()` filtered to the period's date range. Used in `_groupByCaptain` for `total_racks_audited` (direct Audits sheet aggregation, not per-row auditRacksMap). Matches Inventory Health behavior. Fallback: `0` if captain not in map.
+
 ## Captain Deep Dive — Putting Flow Table
 
 Columns: Captain | Score | Putaway Qty | **Putter Hours** | Items Put Away/Hr (actual | personal | store). `captain.total_putter_hours` is computed in `_groupByCaptain` by summing `putter_active_time` for putting-flow rows. Sortable via `put_hours` key in `_getSortValue`.
 
 ## Captain Deep Dive — Audit Flow Table
 
-`captain.total_racks_audited` uses `auditRacksMap` with fallback to `row.racks_audited`. After computing `total_racks_audited` and `total_auditor_hours`, `avgValues['audit_hours_per_rack']` is overridden: `total_auditor_hours / total_racks_audited` (null if either is 0). This ensures the actual/store HPR columns populate correctly instead of showing `—`.
+`captain.total_racks_audited` is sourced from `captainAuditRacks` (direct Audits sheet sum) — NOT from per-row auditRacksMap. After computing `total_racks_audited` and `total_auditor_hours`, `avgValues['audit_hours_per_rack']` is overridden: `total_auditor_hours / total_racks_audited` (null if either is 0). This ensures the actual/store HPR columns populate correctly instead of showing `—`.
 
 ## Inventory Health — Captain Table
 
@@ -90,7 +115,7 @@ Columns: Captain | Score | Putaway Qty | **Putter Hours** | Items Put Away/Hr (a
 
 ## Tier Analysis
 
-**Shift grouping (Time-Based mode):**
+**Shift grouping (Shift-Based mode):**
 - Uses a **date-aware rosterMap**: for each captain, picks the most recent roster entry whose `start` (col D, stored as Google Sheets serial string) is on or before the period's reference date. Prevents stale/future assignments from being counted.
 - Only rows with actual flow activity (`is_picking || is_putting || is_audit || is_fnv`) are included. Rows with no flow = captain was present but didn't work — excluded.
 - `_rosterSerial(s)` helper: `parseFloat(s) > 1000 ? new Date(Math.round((n-25569)*86400000)) : null`
@@ -98,6 +123,17 @@ Columns: Captain | Score | Putaway Qty | **Putter Hours** | Items Put Away/Hr (a
 **Experience-Based mode:** Same flow-activity guard applies.
 
 **Audit Flow Analysis section:** `_buildTiersHTML` renders a 4-column table (Tier, Total Racks, Audit Hours, Avg Hr/Rack) after the Putting Flow section. `_tierMetrics(rows, auditRacksMap)` computes `totalRacks` via `auditRacksMap` (fallback to `row.racks_audited`), `totalAuditHours` from `auditor_active_time`, and `avgHPR = totalAuditHours / totalRacks`. `renderTiersView` builds `auditRacksMap` from `sheets.getAuditCached()` filtered to the period's date strings, then passes it to each `_tierMetrics` call.
+
+**Putting Qty percentages:** Total Qty Put shows each tier's share of the store total (same pattern as Total Orders Picked).
+
+**Weighted averages in `_tierMetrics`:** Avg Delay/Pick/Bill Time use `wAvg(rows, valueKey, weightKey)` helper (weighted by `checkout_orders`), not simple mean. Matches `computePickingIncentives` logic.
+
+**Historical averages:** Each metric cell shows an all-time baseline sub-label (`.tiers-hist-avg`) for comparison. Computed in `renderTiersView` via `histGroupStats`:
+- Uses **all data** (not just the selected period) from `sheets.getCached()`, filtered to exclude March (month 2), September (month 8), and October (month 9) as outlier months.
+- Classification is **row-level**: each historical row is classified into a tier at the time of that row using `getExpTierOnDate()` (binary search) or `getShiftOnDate()` (roster lookup). Prevents now-Senior captains' early-career rows from inflating the Senior all-time average.
+- `fullAuditRacksMap` built from all Audits rows (not filtered to period) for historical HPR.
+- Historical stats are locked — they do not change when the period date pickers change.
+- All-time order-share % is also shown under Total Orders Picked for each tier.
 
 **Shift count popover:** Clicking a Morning/Evening/Night (or New/Experienced/Senior) count opens a dark popover listing all captain names + IDs for that group. Implementation:
 - `_tierGroupRows` module var — snapshot of `groupRows` set each render
@@ -139,6 +175,8 @@ Columns: Captain | Score | Putaway Qty | **Putter Hours** | Items Put Away/Hr (a
 - **Week keys**: `_isoWeekKey(date)` returns `"YYYY-Wnn"` (ISO 8601). Weeks can span month boundaries.
 - **Cache invalidation**: Render functions use cache keys like `${startVal}_${endVal}_${dataLength}`. Add all varying inputs to avoid stale renders.
 - **Captain name field**: Daily Metrics rows use `employee_name` (not `name`). Always reference `r.employee_name`.
+- **auditRacksMap keys**: Always use `r.dateIsoStr` (YYYY-MM-DD) when building map keys from Daily Metrics rows. `r.dateStr` is a raw serial number and will never match Audits-sheet date strings.
+- **Historical classification**: Always classify rows at the time of the row (row-level binary search / roster lookup), not at the current period's reference date. Otherwise, now-Senior captains' early rows get mis-bucketed into Senior all-time stats.
 
 ## CSS Quick Reference
 
@@ -149,3 +187,6 @@ Cell colors: `.cell-green`, `.cell-yellow`, `.cell-red`, `.cell-dark-red`.
 Row states: `.row-flagged`, `.row-serial`, `.incentive-zero`.
 Layout: `.flags-page-header` (title + controls), `.flags-date-strip` (filters).
 Tier popover: `.tier-shift-popover`, `.tier-popover-header`, `.tier-popover-count`, `.tier-popover-list`, `.tier-popover-name`, `.tier-popover-id`, `.tier-count-clickable`.
+Historical sub-labels: `.tiers-hist-avg` (font-size 0.68rem, muted color, opacity 0.65).
+Deep Dive tier dividers: `.dd-tier-divider td` (uppercase label row), `.dd-tier-pip` (4×14px colored vertical bar).
+Deep Dive tier toggle: `.tier-mode-btn.dd-tier-off` (grey/muted style when grouping is off).
