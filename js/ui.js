@@ -2901,10 +2901,6 @@ const ui = (() => {
                 <h3 class="bento-card-title">Complaint Trend</h3>
                 <p class="bento-card-subtitle">Total complaints vs in-store fault rate</p>
               </div>
-              <div class="bento-chart-legend">
-                <span class="legend-item"><span class="legend-dot" style="background:#ff6b6b;"></span>Complaints</span>
-                <span class="legend-item"><span class="legend-dot" style="background:#ffca28;"></span>In-Store %</span>
-              </div>
             </div>
             <canvas id="chart-compl-trend"></canvas>
           </div>

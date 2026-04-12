@@ -82,7 +82,15 @@ const charts = (() => {
       plugins: {
         legend: {
           position: 'bottom',
-          labels: { font: { size: 11, family: 'Manrope' }, color: tc, padding: 14 },
+          labels: {
+            font: { size: 11, family: 'Manrope' },
+            color: tc,
+            padding: 16,
+            usePointStyle: true,
+            pointStyle: 'circle',
+            boxWidth: 8,
+            boxHeight: 8,
+          },
         },
         tooltip: {
           mode: 'index',
