@@ -116,10 +116,18 @@ const charts = (() => {
     };
   }
 
-  // Dynamic BASE_OPTS — always reads current theme colors
-  // Uses a Proxy so `BASE_OPTS` and `BASE_OPTS.scales.y` etc. work as before
+  // Dynamic BASE_OPTS — always reads current theme colors.
+  // Proxy intercepts both property access (BASE_OPTS.scales.y) AND spread
+  // (...BASE_OPTS) by implementing ownKeys + getOwnPropertyDescriptor.
   const BASE_OPTS = new Proxy({}, {
-    get(_, prop) { return _baseOpts()[prop]; }
+    get(_, prop) { return _baseOpts()[prop]; },
+    ownKeys()    { return Object.keys(_baseOpts()); },
+    getOwnPropertyDescriptor(_, prop) {
+      const val = _baseOpts()[prop];
+      return val !== undefined
+        ? { value: val, enumerable: true, configurable: true, writable: true }
+        : undefined;
+    },
   });
 
   function _destroy(id) {
@@ -336,8 +344,8 @@ const charts = (() => {
         plugins: {
           legend: isMulti
             ? { display: true, position: 'bottom',
-                labels: { font: { size: 10, family: 'Manrope' }, color: TICK_COLOR, padding: 10,
-                          boxWidth: 16, boxHeight: 2 } }
+                labels: { font: { size: 10, family: 'Manrope' }, color: TICK_COLOR, padding: 12,
+                          usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8 } }
             : { display: false },
           tooltip: { mode: 'index', intersect: false },
         },
@@ -788,7 +796,7 @@ const charts = (() => {
         plugins: {
           legend: {
             position: 'bottom',
-            labels: { font: { size: 11, family: 'Manrope' }, color: TICK_COLOR, padding: 10 },
+            labels: { font: { size: 11, family: 'Manrope' }, color: TICK_COLOR, padding: 12, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8 },
           },
           tooltip: {
             ...BASE_OPTS.plugins.tooltip,
