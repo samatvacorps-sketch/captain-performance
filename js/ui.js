@@ -2870,7 +2870,7 @@ const ui = (() => {
     if (!agg) return;
 
     const period = document.getElementById('compl-period')?.value || 'weekly';
-    const periodData = period === 'daily' ? agg.storeSummary.dailyArray : period === 'monthly' ? agg.storeSummary.monthly : agg.storeSummary.weekly;
+    const periodData = period === 'daily' ? agg.storeSummary.dailyArray : period === 'monthly' ? agg.storeSummary.merchantCycle : agg.storeSummary.weekly;
     const totals = agg.storeSummary.totals;
 
     // Build full HTML

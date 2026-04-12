@@ -884,7 +884,8 @@ const compute = (() => {
       if (!cycleBuckets[ck]) {
         cycleBuckets[ck] = {
           cycleKey: ck, totalComplaints: 0, orders: new Set(),
-          inStoreYes: 0, inStoreNo: 0, days: 0,
+          inStoreYes: 0, inStoreNo: 0,
+          byCategory: {}, byCategoryInStore: {}, byCategoryOutStore: {}, byRCA: {}, days: 0,
         };
       }
       const cb = cycleBuckets[ck];
@@ -892,6 +893,10 @@ const compute = (() => {
       for (const o of v.orders) cb.orders.add(o);
       cb.inStoreYes += v.inStoreYes;
       cb.inStoreNo  += v.inStoreNo;
+      for (const [k, c] of Object.entries(v.byCategory || {})) cb.byCategory[k] = (cb.byCategory[k] || 0) + c;
+      for (const [k, c] of Object.entries(v.byCategoryInStore || {})) cb.byCategoryInStore[k] = (cb.byCategoryInStore[k] || 0) + c;
+      for (const [k, c] of Object.entries(v.byCategoryOutStore || {})) cb.byCategoryOutStore[k] = (cb.byCategoryOutStore[k] || 0) + c;
+      for (const [k, c] of Object.entries(v.byRCA || {})) cb.byRCA[k] = (cb.byRCA[k] || 0) + c;
       cb.days++;
     }
     const cycleOrders = {};
@@ -917,6 +922,7 @@ const compute = (() => {
         uniqueOrders: b.orders.size,
         inStoreYes: b.inStoreYes,
         inStoreNo: b.inStoreNo,
+        byCategory: b.byCategory, byCategoryInStore: b.byCategoryInStore, byCategoryOutStore: b.byCategoryOutStore, byRCA: b.byRCA,
         totalOrdersPicked: cycleOrders[b.cycleKey] || 0,
         missingInStore:  cycleMissingInStore[b.cycleKey]?.size  || 0,
         missingOutStore: cycleMissingOutStore[b.cycleKey]?.size || 0,
