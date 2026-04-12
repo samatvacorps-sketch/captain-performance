@@ -652,6 +652,7 @@ const charts = (() => {
           ...BASE_OPTS.plugins,
           tooltip: {
             ...BASE_OPTS.plugins?.tooltip,
+            itemSort: (a, b) => b.datasetIndex - a.datasetIndex,
             callbacks: {
               label(ctx) {
                 const raw = ctx.dataset._rawCounts?.[ctx.dataIndex] ?? 0;
