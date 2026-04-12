@@ -2715,6 +2715,8 @@ const ui = (() => {
   let _complCacheKey = null;
   let _complIncludeQNG = true;
   let _complDateMode = false;
+  let _complCatMode = 'total';
+  let _complCatPeriodData = null;
 
   function initComplaintsDeepDive() {
     const complData = sheets.getComplaintsCached();
@@ -2816,6 +2818,16 @@ const ui = (() => {
     _complCache = null;
     _complCacheKey = null;
     renderComplaintsDeepDive();
+  }
+
+  function onComplCatModeChange(mode) {
+    _complCatMode = mode;
+    document.querySelectorAll('.compl-cat-mode-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+    if (_complCatPeriodData) {
+      charts.renderComplaintCategoryChart('chart-compl-category', _complCatPeriodData, _complCatMode);
+    }
   }
 
   function renderComplaintsDeepDive() {
@@ -2948,7 +2960,12 @@ const ui = (() => {
             <div class="bento-card-header">
               <div>
                 <h3 class="bento-card-title">Complaint Categories Over Time</h3>
-                <p class="bento-card-subtitle">Stacked by complaint type</p>
+                <p class="bento-card-subtitle">% of total orders picked · stacked by complaint type</p>
+              </div>
+              <div class="compl-cat-mode-toggle">
+                <button class="compl-cat-mode-btn${_complCatMode === 'total'   ? ' active' : ''}" data-mode="total"   onclick="ui.onComplCatModeChange('total')">Total</button>
+                <button class="compl-cat-mode-btn${_complCatMode === 'instore' ? ' active' : ''}" data-mode="instore" onclick="ui.onComplCatModeChange('instore')">In-Store</button>
+                <button class="compl-cat-mode-btn${_complCatMode === 'outstore'? ' active' : ''}" data-mode="outstore" onclick="ui.onComplCatModeChange('outstore')">Out-Store</button>
               </div>
             </div>
             <canvas id="chart-compl-category"></canvas>
@@ -2975,9 +2992,10 @@ const ui = (() => {
     }
 
     // Render charts
+    _complCatPeriodData = periodData;
     charts.renderComplaintTrendChart('chart-compl-trend', periodData);
     charts.renderRCADonutChart('chart-compl-rca', agg.categoryIntel.sorted.rca);
-    charts.renderComplaintCategoryChart('chart-compl-category', periodData);
+    charts.renderComplaintCategoryChart('chart-compl-category', periodData, _complCatMode);
     charts.renderL0CategoryChart('chart-compl-l0', agg.categoryIntel.sorted.l0);
 
     // Render captain scatter
@@ -3349,6 +3367,7 @@ const ui = (() => {
     onComplDateChange,
     renderComplaintsDeepDive,
     toggleComplQNG,
+    onComplCatModeChange,
     toggleSupervisors,
     toggleTheme,
     filterSupervisors,

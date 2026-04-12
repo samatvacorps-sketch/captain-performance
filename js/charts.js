@@ -606,16 +606,21 @@ const charts = (() => {
 
   // ── Chart 10: Complaint Category Stacked Bar ──────────────────────
 
-  function renderComplaintCategoryChart(canvasId, periodData) {
+  function renderComplaintCategoryChart(canvasId, periodData, mode) {
     _destroy(canvasId);
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return;
 
+    const _mode = mode || 'total';
+    const catKey = _mode === 'instore' ? 'byCategoryInStore' : _mode === 'outstore' ? 'byCategoryOutStore' : 'byCategory';
+
     const labels = periodData.map(d => d.label || d.weekKey || d.monthKey);
+
+    // Distinct colors per category — no shared hues
     const catColors = {
       item_missing: COLORS.red,
-      item_damaged: COLORS.amber,
-      wrong_item:   '#facc15',
+      item_damaged: COLORS.accent,   // blue — distinct from amber
+      wrong_item:   COLORS.amber,
       item_expired: COLORS.purple,
       qng:          COLORS.silver,
     };
@@ -623,12 +628,17 @@ const charts = (() => {
     // Collect all category keys across all periods
     const allCats = new Set();
     for (const d of periodData) {
-      for (const k of Object.keys(d.byCategory || {})) allCats.add(k);
+      for (const k of Object.keys(d[catKey] || {})) allCats.add(k);
     }
 
     const datasets = [...allCats].map(cat => ({
       label: cat.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      data: periodData.map(d => (d.byCategory || {})[cat] || 0),
+      data: periodData.map(d => {
+        const count = (d[catKey] || {})[cat] || 0;
+        const orders = d.totalOrdersPicked || 0;
+        return orders > 0 ? +((count / orders) * 100).toFixed(3) : 0;
+      }),
+      _rawCounts: periodData.map(d => (d[catKey] || {})[cat] || 0),
       backgroundColor: ALPHA(catColors[cat] || COLORS.silver, 0.8),
       stack: 'complaints',
     }));
@@ -638,9 +648,21 @@ const charts = (() => {
       data: { labels, datasets },
       options: {
         ...BASE_OPTS,
+        plugins: {
+          ...BASE_OPTS.plugins,
+          tooltip: {
+            ...BASE_OPTS.plugins?.tooltip,
+            callbacks: {
+              label(ctx) {
+                const raw = ctx.dataset._rawCounts?.[ctx.dataIndex] ?? 0;
+                return ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}%  (${raw})`;
+              },
+            },
+          },
+        },
         scales: {
           ...BASE_OPTS.scales,
-          y: { ...BASE_OPTS.scales.y, stacked: true, title: { display: true, text: 'Count', color: TICK_COLOR } },
+          y: { ...BASE_OPTS.scales.y, stacked: true, title: { display: true, text: '% of Total Orders', color: TICK_COLOR } },
           x: { ...BASE_OPTS.scales.x, stacked: true },
         },
       },

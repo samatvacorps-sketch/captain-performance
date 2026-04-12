@@ -425,6 +425,29 @@ body {
 }
 .tier-mode-btn.dd-tier-off:hover { background: rgba(150,150,150,0.15); }
 
+/* Complaint Category chart mode toggle */
+.compl-cat-mode-toggle {
+  display: flex;
+  gap: 4px;
+}
+.compl-cat-mode-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(251, 146, 60, 0.3);
+  background: rgba(251, 146, 60, 0.08);
+  color: #fb923c;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+.compl-cat-mode-btn:hover { background: rgba(251, 146, 60, 0.18); }
+.compl-cat-mode-btn.active {
+  background: rgba(251, 146, 60, 0.22);
+  border-color: rgba(251, 146, 60, 0.6);
+  font-weight: 600;
+}
+
 .dd-tier-divider td {
   padding: 10px 12px 6px !important;
   font-size: 0.75rem;
@@ -2633,6 +2656,16 @@ body,
   background: rgba(0,0,0,0.03);
   color: #9ca3af;
   border-color: rgba(0,0,0,0.1);
+}
+[data-theme="light"] .compl-cat-mode-btn {
+  background: rgba(234, 88, 12, 0.05);
+  color: #ea580c;
+  border-color: rgba(234, 88, 12, 0.2);
+}
+[data-theme="light"] .compl-cat-mode-btn:hover { background: rgba(234, 88, 12, 0.1); }
+[data-theme="light"] .compl-cat-mode-btn.active {
+  background: rgba(234, 88, 12, 0.15);
+  border-color: rgba(234, 88, 12, 0.5);
 }
 
 /* Tier Analysis */

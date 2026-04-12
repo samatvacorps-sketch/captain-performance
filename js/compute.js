@@ -742,7 +742,7 @@ const compute = (() => {
         entry = {
           date: row.date, totalComplaints: 0, orders: new Set(),
           inStoreYes: 0, inStoreNo: 0,
-          byCategory: {}, byRCA: {},
+          byCategory: {}, byCategoryInStore: {}, byCategoryOutStore: {}, byRCA: {},
         };
         dailyMap.set(row.dateStr, entry);
       }
@@ -751,6 +751,8 @@ const compute = (() => {
       if (row.in_store) entry.inStoreYes++; else entry.inStoreNo++;
       const cat = row.complaint_category || 'unknown';
       entry.byCategory[cat] = (entry.byCategory[cat] || 0) + 1;
+      if (row.in_store) entry.byCategoryInStore[cat] = (entry.byCategoryInStore[cat] || 0) + 1;
+      else              entry.byCategoryOutStore[cat] = (entry.byCategoryOutStore[cat] || 0) + 1;
       const rca = row.rca || 'Unknown';
       entry.byRCA[rca] = (entry.byRCA[rca] || 0) + 1;
     }
@@ -760,7 +762,7 @@ const compute = (() => {
       daily.set(ds, {
         date: v.date, totalComplaints: v.totalComplaints,
         uniqueOrders: v.orders.size, inStoreYes: v.inStoreYes, inStoreNo: v.inStoreNo,
-        byCategory: v.byCategory, byRCA: v.byRCA,
+        byCategory: v.byCategory, byCategoryInStore: v.byCategoryInStore, byCategoryOutStore: v.byCategoryOutStore, byRCA: v.byRCA,
       });
     }
 
@@ -801,7 +803,7 @@ const compute = (() => {
         weekBuckets[wk] = {
           weekKey: wk, weekStart: _weekStart(v.date),
           totalComplaints: 0, orders: new Set(), inStoreYes: 0, inStoreNo: 0,
-          byCategory: {}, byRCA: {}, days: 0,
+          byCategory: {}, byCategoryInStore: {}, byCategoryOutStore: {}, byRCA: {}, days: 0,
         };
       }
       const b = weekBuckets[wk];
@@ -810,6 +812,8 @@ const compute = (() => {
       b.inStoreYes += v.inStoreYes;
       b.inStoreNo += v.inStoreNo;
       for (const [k, c] of Object.entries(v.byCategory)) b.byCategory[k] = (b.byCategory[k] || 0) + c;
+      for (const [k, c] of Object.entries(v.byCategoryInStore || {})) b.byCategoryInStore[k] = (b.byCategoryInStore[k] || 0) + c;
+      for (const [k, c] of Object.entries(v.byCategoryOutStore || {})) b.byCategoryOutStore[k] = (b.byCategoryOutStore[k] || 0) + c;
       for (const [k, c] of Object.entries(v.byRCA)) b.byRCA[k] = (b.byRCA[k] || 0) + c;
       b.days++;
     }
@@ -826,7 +830,7 @@ const compute = (() => {
         weekKey: b.weekKey, label: _weekLabel(b.weekStart),
         totalComplaints: b.totalComplaints, uniqueOrders: b.orders.size,
         inStoreYes: b.inStoreYes, inStoreNo: b.inStoreNo,
-        byCategory: b.byCategory, byRCA: b.byRCA,
+        byCategory: b.byCategory, byCategoryInStore: b.byCategoryInStore, byCategoryOutStore: b.byCategoryOutStore, byRCA: b.byRCA,
         totalOrdersPicked: weekOrders[b.weekKey] || 0,
         avgPerDay: b.days > 0 ? +(b.totalComplaints / b.days).toFixed(1) : 0,
         missingInStore:  weekMissingInStore[b.weekKey]?.size  || 0,
@@ -840,7 +844,7 @@ const compute = (() => {
       if (!monthBuckets[mk]) {
         monthBuckets[mk] = {
           monthKey: mk, totalComplaints: 0, orders: new Set(),
-          inStoreYes: 0, inStoreNo: 0, byCategory: {}, byRCA: {}, days: 0,
+          inStoreYes: 0, inStoreNo: 0, byCategory: {}, byCategoryInStore: {}, byCategoryOutStore: {}, byRCA: {}, days: 0,
         };
       }
       const b = monthBuckets[mk];
@@ -849,6 +853,8 @@ const compute = (() => {
       b.inStoreYes += v.inStoreYes;
       b.inStoreNo += v.inStoreNo;
       for (const [k, c] of Object.entries(v.byCategory)) b.byCategory[k] = (b.byCategory[k] || 0) + c;
+      for (const [k, c] of Object.entries(v.byCategoryInStore || {})) b.byCategoryInStore[k] = (b.byCategoryInStore[k] || 0) + c;
+      for (const [k, c] of Object.entries(v.byCategoryOutStore || {})) b.byCategoryOutStore[k] = (b.byCategoryOutStore[k] || 0) + c;
       for (const [k, c] of Object.entries(v.byRCA)) b.byRCA[k] = (b.byRCA[k] || 0) + c;
       b.days++;
     }
@@ -864,7 +870,7 @@ const compute = (() => {
         monthKey: b.monthKey, label: b.monthKey,
         totalComplaints: b.totalComplaints, uniqueOrders: b.orders.size,
         inStoreYes: b.inStoreYes, inStoreNo: b.inStoreNo,
-        byCategory: b.byCategory, byRCA: b.byRCA,
+        byCategory: b.byCategory, byCategoryInStore: b.byCategoryInStore, byCategoryOutStore: b.byCategoryOutStore, byRCA: b.byRCA,
         totalOrdersPicked: monthOrders[b.monthKey] || 0,
         avgPerDay: b.days > 0 ? +(b.totalComplaints / b.days).toFixed(1) : 0,
         missingInStore:  monthMissingInStore[b.monthKey]?.size  || 0,
