@@ -983,6 +983,17 @@ const ui = (() => {
     return `<span class="status-badge status-ok">Stable</span>`;
   }
 
+  // SD-aware badge used in flow tables: maps devSD directly against per-flow thresholds
+  function _statusBadgeByDev(devSD, flow, isZero = false) {
+    if (isZero) return `<span class="status-badge status-flagged">Flagged</span>`;
+    if (devSD === null || devSD === undefined) return `<span class="status-badge status-ok">Stable</span>`;
+    const ft = _getFlowThresholds(flow);
+    if (devSD > ft.critical)   return `<span class="status-badge status-critical">Critical</span>`;
+    if (devSD > ft.flagged)    return `<span class="status-badge status-flagged">Flagged</span>`;
+    if (devSD > ft.borderline) return `<span class="status-badge status-borderline">Borderline</span>`;
+    return `<span class="status-badge status-ok">Stable</span>`;
+  }
+
   function _groupAndBuildRows(sorted, tierMap, colCount, buildRowFn) {
     if (!tierMap) return sorted.map(buildRowFn).join('');
     const tierOrder = _ddTierMode === 'shift'
@@ -1072,7 +1083,13 @@ const ui = (() => {
         <td>${_fmt(captain.total_orders_picked)}</td>
         <td>${captain.avg_ppi !== null ? _fmt(captain.avg_ppi, 2) : '—'}</td>
         ${metricCells}
-        <td>${_statusBadge(captain.picking_score)}</td>
+        <td>${_statusBadgeByDev(
+          orderedMetrics.reduce((max, m) => {
+            const d = captain.deviations.get(m.key);
+            return (d !== null && d !== undefined && d > (max ?? -Infinity)) ? d : max;
+          }, null),
+          'picking'
+        )}</td>
       </tr>`;
     };
     const rows = _groupAndBuildRows(sorted, tierMap, colCount, buildRow);
@@ -1102,7 +1119,7 @@ const ui = (() => {
         <td class="${cls}" title="${flagged ? '🚩 Flagged' : ''}">
           ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ` <span style="opacity:0.7;vertical-align:middle">${ICONS.flagSm}</span>` : ''}
         </td>
-        <td>${_statusBadge(captain.putting_score)}</td>
+        <td>${_statusBadgeByDev(captain.deviations.get('iph'), 'putting', captain.zero_put)}</td>
       </tr>`;
     };
     const rows = _groupAndBuildRows(sorted, tierMap, 5, buildRow);
@@ -1138,7 +1155,7 @@ const ui = (() => {
         <td class="${cls}" title="${flagged ? 'Flagged' : ''}">
           ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ` <span style="opacity:0.7;vertical-align:middle">${ICONS.flagSm}</span>` : ''}
         </td>
-        <td>${_statusBadge(captain.audit_score)}</td>
+        <td>${_statusBadgeByDev(captain.deviations.get('audit_hours_per_rack'), 'audit', captain.zero_audit)}</td>
       </tr>`;
     };
     const rows = _groupAndBuildRows(sorted, tierMap, 5, buildRow);
