@@ -27,6 +27,7 @@ const ui = (() => {
   // 'all' | 'flagged' | 'ok'
   let _ddFilter = 'all';
   let _ddTierMode = 'off'; // 'off' | 'shift' | 'experience'
+  let _ddShowPickingBreakdown = false; // show/hide Delay/Pick/Bill time columns
 
   function setDDFilter(val) {
     _ddFilter = (_ddFilter === val) ? 'all' : val;   // toggle off if already active
@@ -37,6 +38,11 @@ const ui = (() => {
     _ddTierMode = _ddTierMode === 'off' ? 'shift'
       : _ddTierMode === 'shift' ? 'experience' : 'off';
     _updateDDTierBtn();
+    renderDeepDive();
+  }
+
+  function togglePickingBreakdown() {
+    _ddShowPickingBreakdown = !_ddShowPickingBreakdown;
     renderDeepDive();
   }
   function _updateDDTierBtn() {
@@ -556,8 +562,17 @@ const ui = (() => {
 
       const section = document.createElement('div');
       section.className = 'flow-section';
+      const sectionHeader = flow === 'picking'
+        ? `<div class="flow-section-header" style="display:flex;align-items:center;justify-content:space-between">
+            <span>${meta.icon} ${meta.label} — ${captains.length} active captains</span>
+            <button class="btn tier-mode-btn ${_ddShowPickingBreakdown ? '' : 'dd-tier-off'}"
+                    onclick="ui.togglePickingBreakdown()">
+              Breakdown: ${_ddShowPickingBreakdown ? 'On' : 'Off'}
+            </button>
+          </div>`
+        : `<div class="flow-section-header">${meta.icon} ${meta.label} — ${captains.length} active captains</div>`;
       section.innerHTML = `
-        <div class="flow-section-header">${meta.icon} ${meta.label} — ${captains.length} active captains</div>
+        ${sectionHeader}
         ${_buildDeepDiveTable(captains, meta.metrics, flow, periodStoreStats, tierMap)}
       `;
       container.appendChild(section);
@@ -960,12 +975,20 @@ const ui = (() => {
   }
 
   function _buildPickingTable(captains, periodStoreStats, tierMap) {
-    const orderedMetrics = [
+    const allPickingMetrics = [
       CONFIG.METRICS.find(m => m.key === 'assigned_to_started_per_order'),
       CONFIG.METRICS.find(m => m.key === 'picking_time_per_order'),
       CONFIG.METRICS.find(m => m.key === 'billing_time_per_order'),
       CONFIG.METRICS.find(m => m.key === 'total_time_per_order'),
     ].filter(Boolean);
+    const _breakdownKeys = new Set([
+      'assigned_to_started_per_order',
+      'picking_time_per_order',
+      'billing_time_per_order',
+    ]);
+    const orderedMetrics = _ddShowPickingBreakdown
+      ? allPickingMetrics
+      : allPickingMetrics.filter(m => !_breakdownKeys.has(m.key));
 
     const metricSortKeys = {
       'assigned_to_started_per_order': 'assigned_to_started_per_order',
@@ -3540,6 +3563,7 @@ const ui = (() => {
     renderDeepDive,
     setDDFilter,
     toggleDDTier,
+    togglePickingBreakdown,
     onDeepDivePresetChange,
     onDeepDiveDateChange,
     initTiersView,
