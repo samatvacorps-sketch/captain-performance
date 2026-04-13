@@ -672,7 +672,14 @@ const ui = (() => {
             ? (captainAvg - stats.avg) / stats.sd   // positive = slower = worse
             : (stats.avg  - captainAvg) / stats.sd; // positive = lower  = worse
           captain.deviations.set(metric.key, devSD);
-          const flagged = devSD > 0.5; // Weekly/monthly: flag from 0.5 SD (daily keeps CONFIG.THRESHOLD)
+          // Floor check: flag if >FLOOR_DEVIATION worse than store mean, regardless of SD
+          const floor = CONFIG.FLOOR_DEVIATION ?? 0.30;
+          const floorFlagged = stats.avg > 0 && (
+            metric.direction === 'LOW'
+              ? captainAvg < stats.avg * (1 - floor)   // e.g. IPH < 70% of store avg
+              : captainAvg > stats.avg * (1 + floor)   // e.g. HPR > 130% of store avg
+          );
+          const flagged = devSD > 0.5 || floorFlagged;
           captain.flags.set(metric.key, flagged);
           if (flagged) periodScore++;
         }
@@ -2321,11 +2328,18 @@ const ui = (() => {
         </div>
         <p class="config-desc">Standard deviations worse than store average required to flag a captain.</p>
         <div class="config-row">
-          <span class="dd-control-label">Multiplier</span>
+          <span class="dd-control-label">SD Multiplier</span>
           <input type="number" id="threshold-input" min="0.5" max="3" step="0.1" value="${CONFIG.THRESHOLD}"
                  onchange="app.updateThreshold(this.value)" />
         </div>
         <p class="config-hint">Default: 1.0 (= 1 SD). Higher = stricter (fewer flags).</p>
+        <div class="config-row" style="margin-top:10px">
+          <span class="dd-control-label">Floor Deviation</span>
+          <input type="number" id="floor-deviation-input" min="0.05" max="0.95" step="0.05"
+                 value="${CONFIG.FLOOR_DEVIATION ?? 0.30}"
+                 onchange="app.updateFloorDeviation(this.value)" />
+        </div>
+        <p class="config-hint">Also flag if >${Math.round((CONFIG.FLOOR_DEVIATION ?? 0.30) * 100)}% worse than store mean (catches outliers masked by high variance). Default: 0.30.</p>
       </div>
       <div class="config-card">
         <div class="config-card-header">
@@ -3652,6 +3666,11 @@ const app = (() => {
     }
   }
 
+  function updateFloorDeviation(val) {
+    CONFIG.FLOOR_DEVIATION = parseFloat(val) ?? 0.30;
+    _renderCurrentTab();
+  }
+
   function _renderCurrentTab() {
     switch (_currentTab) {
       case 'store-overview':    ui.renderStoreOverview(); break;
@@ -3675,5 +3694,5 @@ const app = (() => {
   function getStoreStats()   { return _storeStats; }
   function getPersonalAvgs() { return _personalAvgs; }
 
-  return { init, refresh, switchTab, updateThreshold, getFlaggedData, getStoreStats, getPersonalAvgs, renderCurrentTab: _renderCurrentTab };
+  return { init, refresh, switchTab, updateThreshold, updateFloorDeviation, getFlaggedData, getStoreStats, getPersonalAvgs, renderCurrentTab: _renderCurrentTab };
 })();

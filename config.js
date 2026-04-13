@@ -66,6 +66,12 @@ const CONFIG = {
   // Editable in the Config tab UI.
   THRESHOLD: 1.0,
 
+  // Percentage floor: flag if captain is more than this fraction worse than
+  // the store mean in the bad direction, regardless of SD (catches outliers
+  // masked by high store variance). 0.30 = flag if >30% below/above mean.
+  // Editable in the Config tab UI.
+  FLOOR_DEVIATION: 0.30,
+
   // ── Metric Definitions ───────────────────────────────────────────────
   // direction: 'HIGH' = high value is bad (e.g. slow time)
   //            'LOW'  = low value is bad  (e.g. low throughput)
