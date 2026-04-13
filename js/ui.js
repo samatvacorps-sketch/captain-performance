@@ -68,7 +68,7 @@ const ui = (() => {
     const btn = document.getElementById('supervisor-toggle');
     if (!btn) return;
     btn.classList.toggle('active', _excludeSupervisors);
-    btn.textContent = _excludeSupervisors ? 'Excl. Supervisors' : 'Incl. Supervisors';
+    btn.textContent = _excludeSupervisors ? 'Excl. Captains' : 'Incl. Captains';
   }
 
   function toggleSupervisors() {
@@ -2335,7 +2335,7 @@ const ui = (() => {
           <div class="config-card-icon stat-icon-purple">${ICONS.person}</div>
           <h3>Excluded Captains</h3>
         </div>
-        <p class="config-desc">Captain IDs excluded from all calculations when "Excl. Supervisors" is active.</p>
+        <p class="config-desc">Captain IDs excluded from all calculations when "Excl. Captains" is active.</p>
         <div class="config-excl-input-row">
           <input type="text" id="excl-id-input" placeholder="e.g. DLES123456"
                  onkeydown="if(event.key==='Enter')ui.addExcludedId()" />
