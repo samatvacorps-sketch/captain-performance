@@ -991,6 +991,137 @@ tr.incentive-zero td { opacity: 0.45; }
 .config-table th { font-size: 10px; }
 .config-table td { font-size: 12px; }
 
+/* ── Excluded Captains card ───────────────────────────────────────── */
+.config-excl-input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.config-excl-input-row input[type="text"] {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-family: 'Manrope', sans-serif;
+  background: var(--surface-high);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+  text-transform: uppercase;
+}
+
+.config-excl-input-row input[type="text"]::placeholder { text-transform: none; }
+.config-excl-input-row input[type="text"]:focus { border-color: rgba(173, 198, 255, 0.45); }
+
+.config-excl-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
+}
+
+.config-excl-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(192, 132, 252, 0.1);
+  color: #c084fc;
+  border: 1px solid rgba(192, 132, 252, 0.25);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.config-excl-tag-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  transition: opacity 0.15s;
+}
+.config-excl-tag-remove:hover { opacity: 1; }
+
+/* ── Slab editor ──────────────────────────────────────────────────── */
+.config-month-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.config-month-row input[type="month"] {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: 'Manrope', sans-serif;
+  background: var(--surface-high);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.config-month-row input[type="month"]:focus { border-color: rgba(173, 198, 255, 0.45); }
+
+.slab-tables-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.slab-editor-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.slab-editor-table th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.slab-editor-table td {
+  padding: 4px 4px;
+}
+
+.slab-time,
+.slab-amount {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: 'Manrope', sans-serif;
+  background: var(--surface-high);
+  color: var(--text);
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+.slab-time   { width: 80px; font-family: 'SF Mono', 'Fira Code', monospace; }
+.slab-amount { width: 80px; }
+.slab-time:focus,
+.slab-amount:focus { border-color: rgba(173, 198, 255, 0.45); }
+
+.slab-saved-msg {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4edea3;
+  align-self: center;
+}
+
 /* ── Inventory Health ─────────────────────────────────────────────── */
 
 .stat-icon-purple { background: rgba(192, 132, 252, 0.1); color: #c084fc; }
