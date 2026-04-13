@@ -60,6 +60,47 @@ const ui = (() => {
     }
   }
 
+  // ── Flow SD Thresholds ───────────────────────────────────────────────
+  const _FT_DEFAULTS = { critical: 2, flagged: 1, borderline: 0.5 };
+  const _FT_FLOWS    = ['picking', 'putting', 'audit', 'fnv'];
+
+  function _getFlowThresholds(flow) {
+    const stored = JSON.parse(localStorage.getItem('flowThresholds') || '{}');
+    return { ..._FT_DEFAULTS, ...(stored[flow] || {}) };
+  }
+
+  function _readFlowThresholdInputs() {
+    const out = {};
+    for (const flow of _FT_FLOWS) {
+      out[flow] = {
+        critical:   parseFloat(document.getElementById(`ft-${flow}-critical`)?.value)   || _FT_DEFAULTS.critical,
+        flagged:    parseFloat(document.getElementById(`ft-${flow}-flagged`)?.value)    || _FT_DEFAULTS.flagged,
+        borderline: parseFloat(document.getElementById(`ft-${flow}-borderline`)?.value) || _FT_DEFAULTS.borderline,
+      };
+    }
+    return out;
+  }
+
+  function saveFlowThresholds() {
+    const out = _readFlowThresholdInputs();
+    localStorage.setItem('flowThresholds', JSON.stringify(out));
+    const raw = sheets.getCached();
+    if (raw.length > 0) {
+      app.updateFlowThresholds(out, ui.filterSupervisors(raw));
+    }
+    const msg = document.getElementById('flow-thresholds-saved-msg');
+    if (msg) { msg.style.display = ''; setTimeout(() => { msg.style.display = 'none'; }, 2000); }
+  }
+
+  function resetFlowThresholds() {
+    localStorage.removeItem('flowThresholds');
+    renderConfigPanel();
+    const raw = sheets.getCached();
+    if (raw.length > 0) {
+      app.updateFlowThresholds({}, ui.filterSupervisors(raw));
+    }
+  }
+
   // ── Supervisor Exclusion ─────────────────────────────────────────────
   let _excludeSupervisors = localStorage.getItem('excludeSupervisors') !== 'false'; // default true
   let _customExcludedIds  = new Set(JSON.parse(localStorage.getItem('customExcludedIds') || '[]'));
@@ -694,7 +735,7 @@ const ui = (() => {
               ? captainAvg < stats.avg * (1 - floor)   // e.g. IPH < 70% of store avg
               : captainAvg > stats.avg * (1 + floor)   // e.g. HPR > 130% of store avg
           );
-          const flagged = devSD > 0.5 || floorFlagged;
+          const flagged = devSD > _getFlowThresholds(metric.flow).borderline || floorFlagged;
           captain.flags.set(metric.key, flagged);
           if (flagged) periodScore++;
         }
@@ -1013,7 +1054,7 @@ const ui = (() => {
     const buildRow = captain => {
       const metricCells = orderedMetrics.map(metric => {
         const dev     = captain.deviations.get(metric.key);
-        const cls     = compute.deviationClass(dev);
+        const cls     = compute.deviationClass(dev, _getFlowThresholds(metric.flow));
         const actual  = captain.avgValues[metric.key];
         const flagged = captain.flags.get(metric.key);
         const personalAvg = app.getPersonalAvgs()?.get(captain.employee_id)?.get(metric.key);
@@ -1047,7 +1088,7 @@ const ui = (() => {
     const sorted = _sortedCaptains(captains, _sortState.col);
     const buildRow = captain => {
       const dev     = metric ? captain.deviations.get(metric.key) : null;
-      const cls     = compute.deviationClass(dev);
+      const cls     = compute.deviationClass(dev, _getFlowThresholds('putting'));
       const actual  = metric ? captain.avgValues[metric.key] : null;
       const flagged = metric ? captain.flags.get(metric.key) : false;
       const personalAvg = metric ? app.getPersonalAvgs()?.get(captain.employee_id)?.get(metric.key) : null;
@@ -1083,7 +1124,7 @@ const ui = (() => {
     const sorted = _sortedCaptains(captains, _sortState.col);
     const buildRow = captain => {
       const dev     = metric ? captain.deviations.get(metric.key) : null;
-      const cls     = compute.deviationClass(dev);
+      const cls     = compute.deviationClass(dev, _getFlowThresholds('audit'));
       const actual  = metric ? captain.avgValues[metric.key] : null;
       const flagged = metric ? captain.flags.get(metric.key) : false;
       const personalAvg = metric ? app.getPersonalAvgs()?.get(captain.employee_id)?.get(metric.key) : null;
@@ -2452,6 +2493,34 @@ const ui = (() => {
         </div>
         <p class="config-hint" style="margin-top:6px">Time is the upper bound (exclusive). Rows without a match earn &#8377;0.</p>
       </div>
+      <div class="config-card config-card-wide">
+        <div class="config-card-header">
+          <div class="config-card-icon stat-icon-red">${ICONS.flag}</div>
+          <h3>Flow SD Thresholds</h3>
+        </div>
+        <p class="config-desc">Per-flow SD thresholds for cell coloring and flagging. Borderline SD also determines when a captain is flagged in weekly/monthly view.</p>
+        <table class="slab-editor-table flow-threshold-table">
+          <thead><tr><th>Flow</th><th>Critical SD</th><th>Flagged SD</th><th>Borderline SD</th></tr></thead>
+          <tbody>
+            ${_FT_FLOWS.map(flow => {
+              const ft = _getFlowThresholds(flow);
+              const label = flow.charAt(0).toUpperCase() + flow.slice(1);
+              return `<tr>
+                <td style="font-weight:600">${label}</td>
+                <td><input class="slab-threshold-input" id="ft-${flow}-critical"   type="number" value="${ft.critical}"   min="0.1" step="0.1" /></td>
+                <td><input class="slab-threshold-input" id="ft-${flow}-flagged"    type="number" value="${ft.flagged}"    min="0.1" step="0.1" /></td>
+                <td><input class="slab-threshold-input" id="ft-${flow}-borderline" type="number" value="${ft.borderline}" min="0.1" step="0.1" /></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        <div class="config-row" style="margin-top:14px;gap:8px">
+          <button class="btn active" onclick="ui.saveFlowThresholds()">Save</button>
+          <button class="btn" onclick="ui.resetFlowThresholds()">Reset to Default</button>
+          <span id="flow-thresholds-saved-msg" class="slab-saved-msg" style="display:none">Saved!</span>
+        </div>
+        <p class="config-hint" style="margin-top:6px">Defaults: Critical 2.0 · Flagged 1.0 · Borderline 0.5 for all flows.</p>
+      </div>
     `;
   }
 
@@ -3602,6 +3671,8 @@ const ui = (() => {
     loadSlabMonth,
     saveSlabOverrides,
     resetSlabOverrides,
+    saveFlowThresholds,
+    resetFlowThresholds,
     toggleTheme,
     filterSupervisors,
     updateSupervisorBtn: _updateSupervisorBtn,
@@ -3639,7 +3710,8 @@ const app = (() => {
       const filteredRaw = ui.filterSupervisors(raw);
       _storeStats   = compute.computeStoreStats(filteredRaw);
       _personalAvgs = compute.computePersonalAvgs(filteredRaw);
-      _flaggedData  = compute.flagSlackers(filteredRaw, _storeStats, _personalAvgs, CONFIG.THRESHOLD);
+      const _storedThresholds = JSON.parse(localStorage.getItem('flowThresholds') || '{}');
+      _flaggedData  = compute.flagSlackers(filteredRaw, _storeStats, _personalAvgs, CONFIG.THRESHOLD, _storedThresholds);
 
       // Update last-refreshed timestamp
       const ts = document.getElementById('last-refreshed');
@@ -3685,13 +3757,19 @@ const app = (() => {
     const raw = sheets.getCached();
     if (raw.length > 0) {
       const filteredRaw = ui.filterSupervisors(raw);
-      _flaggedData = compute.flagSlackers(filteredRaw, _storeStats, _personalAvgs, CONFIG.THRESHOLD);
+      const storedThresholds = JSON.parse(localStorage.getItem('flowThresholds') || '{}');
+      _flaggedData = compute.flagSlackers(filteredRaw, _storeStats, _personalAvgs, CONFIG.THRESHOLD, storedThresholds);
       _renderCurrentTab();
     }
   }
 
   function updateFloorDeviation(val) {
     CONFIG.FLOOR_DEVIATION = parseFloat(val) ?? 0.30;
+    _renderCurrentTab();
+  }
+
+  function updateFlowThresholds(thresholdMap, filteredRaw) {
+    _flaggedData = compute.flagSlackers(filteredRaw, _storeStats, _personalAvgs, CONFIG.THRESHOLD, thresholdMap);
     _renderCurrentTab();
   }
 
@@ -3718,5 +3796,5 @@ const app = (() => {
   function getStoreStats()   { return _storeStats; }
   function getPersonalAvgs() { return _personalAvgs; }
 
-  return { init, refresh, switchTab, updateThreshold, updateFloorDeviation, getFlaggedData, getStoreStats, getPersonalAvgs, renderCurrentTab: _renderCurrentTab };
+  return { init, refresh, switchTab, updateThreshold, updateFloorDeviation, updateFlowThresholds, getFlaggedData, getStoreStats, getPersonalAvgs, renderCurrentTab: _renderCurrentTab };
 })();
