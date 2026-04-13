@@ -2222,25 +2222,32 @@ const ui = (() => {
     const monthKey = document.getElementById('slab-month-picker')?.value;
     if (!monthKey) return;
     const overrides = JSON.parse(localStorage.getItem('incentiveSlabOverrides') || '{}');
-    const slabs400 = overrides[monthKey]?.slabs400 || compute.PICKING_SLABS_400;
-    const slabs800 = overrides[monthKey]?.slabs800 || compute.PICKING_SLABS_800;
+    const ov = overrides[monthKey];
+    const slabs400 = ov?.slabs400 || compute.PICKING_SLABS_400;
+    const slabs800 = ov?.slabs800 || compute.PICKING_SLABS_800;
     _populateSlabTable('slab-table-400', slabs400);
     _populateSlabTable('slab-table-800', slabs800);
+    const t400Input = document.getElementById('order-threshold-400');
+    const t800Input = document.getElementById('order-threshold-800');
+    if (t400Input) t400Input.value = ov?.threshold400 ?? 400;
+    if (t800Input) t800Input.value = ov?.threshold800 ?? 800;
     const resetBtn = document.getElementById('slab-reset-btn');
-    if (resetBtn) resetBtn.style.display = overrides[monthKey] ? '' : 'none';
+    if (resetBtn) resetBtn.style.display = ov ? '' : 'none';
     const savedMsg = document.getElementById('slab-saved-msg');
     if (savedMsg) savedMsg.style.display = 'none';
     const noteEl = document.getElementById('slab-override-note');
-    if (noteEl) noteEl.textContent = overrides[monthKey] ? `Custom criteria active for ${monthKey}` : `Using default criteria for ${monthKey}`;
+    if (noteEl) noteEl.textContent = ov ? `Custom criteria active for ${monthKey}` : `Using default criteria for ${monthKey}`;
   }
 
   function saveSlabOverrides() {
     const monthKey = document.getElementById('slab-month-picker')?.value;
     if (!monthKey) return;
-    const slabs400 = _readSlabTable('slab-table-400');
-    const slabs800 = _readSlabTable('slab-table-800');
+    const slabs400     = _readSlabTable('slab-table-400');
+    const slabs800     = _readSlabTable('slab-table-800');
+    const threshold400 = parseInt(document.getElementById('order-threshold-400')?.value) || 400;
+    const threshold800 = parseInt(document.getElementById('order-threshold-800')?.value) || 800;
     const overrides = JSON.parse(localStorage.getItem('incentiveSlabOverrides') || '{}');
-    overrides[monthKey] = { slabs400, slabs800 };
+    overrides[monthKey] = { slabs400, slabs800, threshold400, threshold800 };
     localStorage.setItem('incentiveSlabOverrides', JSON.stringify(overrides));
     _incentiveCache    = null;
     _incentiveCacheKey = null;
@@ -2371,17 +2378,25 @@ const ui = (() => {
         </div>
         <div class="slab-tables-grid">
           <div>
-            <p class="config-hint" style="margin-bottom:6px;font-weight:600;opacity:1">400+ Orders / Week</p>
+            <div class="slab-threshold-row">
+              <input class="slab-threshold-input" id="order-threshold-400" type="number" min="1" step="50"
+                     value="${existingOverrides[curMonth]?.threshold400 ?? 400}" />
+              <span class="config-hint" style="opacity:1;font-weight:600">+ Orders / Week</span>
+            </div>
             <table class="slab-editor-table" id="slab-table-400">
               <thead><tr><th>Max Time (m:ss)</th><th>Amount (&#8377;)</th></tr></thead>
-              <tbody>${slabRows(defaultSlabs400)}</tbody>
+              <tbody>${slabRows(existingOverrides[curMonth]?.slabs400 || defaultSlabs400)}</tbody>
             </table>
           </div>
           <div>
-            <p class="config-hint" style="margin-bottom:6px;font-weight:600;opacity:1">800+ Orders / Week</p>
+            <div class="slab-threshold-row">
+              <input class="slab-threshold-input" id="order-threshold-800" type="number" min="1" step="50"
+                     value="${existingOverrides[curMonth]?.threshold800 ?? 800}" />
+              <span class="config-hint" style="opacity:1;font-weight:600">+ Orders / Week</span>
+            </div>
             <table class="slab-editor-table" id="slab-table-800">
               <thead><tr><th>Max Time (m:ss)</th><th>Amount (&#8377;)</th></tr></thead>
-              <tbody>${slabRows(defaultSlabs800)}</tbody>
+              <tbody>${slabRows(existingOverrides[curMonth]?.slabs800 || defaultSlabs800)}</tbody>
             </table>
           </div>
         </div>
