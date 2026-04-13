@@ -2387,26 +2387,6 @@ const ui = (() => {
     container.innerHTML = `
       <div class="config-card">
         <div class="config-card-header">
-          <div class="config-card-icon stat-icon-blue">${ICONS.sliders}</div>
-          <h3>Flagging Threshold</h3>
-        </div>
-        <p class="config-desc">Standard deviations worse than store average required to flag a captain.</p>
-        <div class="config-row">
-          <span class="dd-control-label">SD Multiplier</span>
-          <input type="number" id="threshold-input" min="0.5" max="3" step="0.1" value="${CONFIG.THRESHOLD}"
-                 onchange="app.updateThreshold(this.value)" />
-        </div>
-        <p class="config-hint">Default: 1.0 (= 1 SD). Higher = stricter (fewer flags).</p>
-        <div class="config-row" style="margin-top:10px">
-          <span class="dd-control-label">Floor Deviation</span>
-          <input type="number" id="floor-deviation-input" min="0.05" max="0.95" step="0.05"
-                 value="${CONFIG.FLOOR_DEVIATION ?? 0.30}"
-                 onchange="app.updateFloorDeviation(this.value)" />
-        </div>
-        <p class="config-hint">Also flag if >${Math.round((CONFIG.FLOOR_DEVIATION ?? 0.30) * 100)}% worse than store mean (catches outliers masked by high variance). Default: 0.30.</p>
-      </div>
-      <div class="config-card">
-        <div class="config-card-header">
           <div class="config-card-icon stat-icon-teal">${ICONS.layers}</div>
           <h3>Data Source</h3>
         </div>
@@ -2514,12 +2494,27 @@ const ui = (() => {
             }).join('')}
           </tbody>
         </table>
+        <div class="config-row" style="margin-top:16px;gap:24px;flex-wrap:wrap">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span class="dd-control-label">SD Multiplier</span>
+            <input type="number" id="threshold-input" min="0.5" max="3" step="0.1" value="${CONFIG.THRESHOLD}"
+                   style="width:90px" onchange="app.updateThreshold(this.value)" />
+            <span class="config-hint" style="margin-top:2px">Daily flag threshold. Default 1.0.</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span class="dd-control-label">Floor Deviation</span>
+            <input type="number" id="floor-deviation-input" min="0.05" max="0.95" step="0.05"
+                   value="${CONFIG.FLOOR_DEVIATION ?? 0.30}" style="width:90px"
+                   onchange="app.updateFloorDeviation(this.value)" />
+            <span class="config-hint" style="margin-top:2px">Flag if &gt;${Math.round((CONFIG.FLOOR_DEVIATION ?? 0.30) * 100)}% worse than mean. Default 0.30.</span>
+          </div>
+        </div>
         <div class="config-row" style="margin-top:14px;gap:8px">
           <button class="btn active" onclick="ui.saveFlowThresholds()">Save</button>
           <button class="btn" onclick="ui.resetFlowThresholds()">Reset to Default</button>
           <span id="flow-thresholds-saved-msg" class="slab-saved-msg" style="display:none">Saved!</span>
         </div>
-        <p class="config-hint" style="margin-top:6px">Defaults: Critical 2.0 · Flagged 1.0 · Borderline 0.5 for all flows.</p>
+        <p class="config-hint" style="margin-top:6px">SD defaults: Critical 2.0 · Flagged 1.0 · Borderline 0.5 for all flows.</p>
       </div>
     `;
   }
