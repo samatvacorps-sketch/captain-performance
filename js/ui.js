@@ -61,21 +61,28 @@ const ui = (() => {
   }
 
   // ── Flow SD Thresholds ───────────────────────────────────────────────
-  const _FT_DEFAULTS = { critical: 2, flagged: 1, borderline: 0.5 };
-  const _FT_FLOWS    = ['picking', 'putting', 'audit', 'fnv'];
+  const _FT_DEFAULTS = {
+    picking: { critical: 0.5,  flagged: 0.25, borderline: 0.1  },
+    putting: { critical: 0.25, flagged: 0.1,  borderline: 0.01 },
+    audit:   { critical: 0.5,  flagged: 0.25, borderline: 0.1  },
+    fnv:     { critical: 2,    flagged: 1,    borderline: 0.5  },
+  };
+  const _FT_FLOWS = ['picking', 'putting', 'audit', 'fnv'];
 
   function _getFlowThresholds(flow) {
     const stored = JSON.parse(localStorage.getItem('flowThresholds') || '{}');
-    return { ..._FT_DEFAULTS, ...(stored[flow] || {}) };
+    const defaults = _FT_DEFAULTS[flow] || { critical: 2, flagged: 1, borderline: 0.5 };
+    return { ...defaults, ...(stored[flow] || {}) };
   }
 
   function _readFlowThresholdInputs() {
     const out = {};
     for (const flow of _FT_FLOWS) {
+      const def = _FT_DEFAULTS[flow];
       out[flow] = {
-        critical:   parseFloat(document.getElementById(`ft-${flow}-critical`)?.value)   || _FT_DEFAULTS.critical,
-        flagged:    parseFloat(document.getElementById(`ft-${flow}-flagged`)?.value)    || _FT_DEFAULTS.flagged,
-        borderline: parseFloat(document.getElementById(`ft-${flow}-borderline`)?.value) || _FT_DEFAULTS.borderline,
+        critical:   parseFloat(document.getElementById(`ft-${flow}-critical`)?.value)   || def.critical,
+        flagged:    parseFloat(document.getElementById(`ft-${flow}-flagged`)?.value)    || def.flagged,
+        borderline: parseFloat(document.getElementById(`ft-${flow}-borderline`)?.value) || def.borderline,
       };
     }
     return out;
@@ -2525,7 +2532,7 @@ const ui = (() => {
           <button class="btn" onclick="ui.resetFlowThresholds()">Reset to Default</button>
           <span id="flow-thresholds-saved-msg" class="slab-saved-msg" style="display:none">Saved!</span>
         </div>
-        <p class="config-hint" style="margin-top:6px">SD defaults: Critical 2.0 · Flagged 1.0 · Borderline 0.5 for all flows.</p>
+        <p class="config-hint" style="margin-top:6px">Defaults — Picking/Audit: 0.5 · 0.25 · 0.1 &nbsp;|&nbsp; Putting: 0.25 · 0.1 · 0.01 &nbsp;|&nbsp; FNV: 2.0 · 1.0 · 0.5</p>
       </div>
     `;
   }
