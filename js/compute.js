@@ -128,7 +128,7 @@ const compute = (() => {
    * @param {Map} personalAvgs - from computePersonalAvgs()
    * @param {number} threshold - SD multiplier (default 1.0)
    */
-  function flagSlackers(data, storeStats, personalAvgs, threshold = 1.0) {
+  function flagSlackers(data, storeStats, personalAvgs, threshold = 1.0, thresholdMap = null) {
     return data.map(row => {
       const flows = computeFlowFlags(row);
       const fnvRate = computeFNVRate(row);
@@ -177,7 +177,8 @@ const compute = (() => {
         deviations.set(metric.key, devSD);
 
         // Flag if BOTH: devSD > threshold AND worse than personal avg
-        const worseThanStore = devSD > threshold;
+        const flowThreshold = thresholdMap?.[metric.flow]?.borderline ?? threshold;
+        const worseThanStore = devSD > flowThreshold;
         let worseThanPersonal = false;
         if (personalAvg !== null) {
           if (metric.direction === 'HIGH') {
@@ -501,12 +502,15 @@ const compute = (() => {
   }
 
   /** Get CSS class based on deviation SDs */
-  function deviationClass(devSD) {
+  function deviationClass(devSD, thresholds = null) {
     if (devSD === null || devSD === undefined) return '';
-    if (devSD > 2)   return 'cell-dark-red';
-    if (devSD > 1)   return 'cell-red';
-    if (devSD > 0.5) return 'cell-yellow';
-    if (devSD <= 0)  return 'cell-green';
+    const c = thresholds?.critical   ?? 2;
+    const f = thresholds?.flagged    ?? 1;
+    const b = thresholds?.borderline ?? 0.5;
+    if (devSD > c)  return 'cell-dark-red';
+    if (devSD > f)  return 'cell-red';
+    if (devSD > b)  return 'cell-yellow';
+    if (devSD <= 0) return 'cell-green';
     return '';
   }
 
