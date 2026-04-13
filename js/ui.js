@@ -1083,13 +1083,7 @@ const ui = (() => {
         <td>${_fmt(captain.total_orders_picked)}</td>
         <td>${captain.avg_ppi !== null ? _fmt(captain.avg_ppi, 2) : '—'}</td>
         ${metricCells}
-        <td>${_statusBadgeByDev(
-          orderedMetrics.reduce((max, m) => {
-            const d = captain.deviations.get(m.key);
-            return (d !== null && d !== undefined && d > (max ?? -Infinity)) ? d : max;
-          }, null),
-          'picking'
-        )}</td>
+        <td>${_statusBadgeByDev(captain.deviations.get('total_time_per_order'), 'picking')}</td>
       </tr>`;
     };
     const rows = _groupAndBuildRows(sorted, tierMap, colCount, buildRow);
