@@ -716,6 +716,14 @@ const ui = (() => {
       captain.avgValues['audit_hours_per_rack'] = captain.total_racks_audited > 0 && captain.total_auditor_hours > 0
         ? captain.total_auditor_hours / captain.total_racks_audited : null;
 
+      // ── Zero-output flags (time logged but no output) ────────────────────
+      const _isPutter  = captain.rows.some(r => r.flows?.is_putting);
+      const _isAuditor = captain.rows.some(r => r.flows?.is_audit);
+      captain.zero_put   = _isPutter  && captain.total_putaway_qty === 0;
+      captain.zero_audit = _isAuditor && captain.total_racks_audited === 0;
+      if (captain.zero_put)   captain.putting_score++;
+      if (captain.zero_audit) captain.audit_score++;
+
       // FNV extras
       const fnvVals = captain.rows.filter(r => r.flows?.is_fnv)
         .map(r => r.fnv_audit_rate).filter(v => v !== null && v > 0);
@@ -1018,7 +1026,7 @@ const ui = (() => {
 
       return `<tr>
         ${_captainCell(captain.employee_name, captain.employee_id)}
-        <td>${_fmt(captain.total_putaway_qty)}</td>
+        <td class="${captain.zero_put ? 'cell-red' : ''}">${_fmt(captain.total_putaway_qty)}</td>
         <td>${_fmt(captain.total_putter_hours, 1)} h</td>
         <td class="${cls}" title="${flagged ? '🚩 Flagged' : ''}">
           ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ` <span style="opacity:0.7;vertical-align:middle">${ICONS.flagSm}</span>` : ''}
@@ -1054,7 +1062,7 @@ const ui = (() => {
 
       return `<tr>
         ${_captainCell(captain.employee_name, captain.employee_id)}
-        <td>${_fmt(captain.total_racks_audited)}</td>
+        <td class="${captain.zero_audit ? 'cell-red' : ''}">${_fmt(captain.total_racks_audited)}</td>
         <td>${_fmt(captain.total_auditor_hours, 1)} h</td>
         <td class="${cls}" title="${flagged ? 'Flagged' : ''}">
           ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ` <span style="opacity:0.7;vertical-align:middle">${ICONS.flagSm}</span>` : ''}
