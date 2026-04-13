@@ -1002,7 +1002,7 @@ const ui = (() => {
         </td>`;
       }).join('');
 
-      return `<tr>
+      return `<tr class="${captain.picking_score > 0 ? 'row-flagged' : ''}">
         ${_captainCell(captain.employee_name, captain.employee_id)}
         <td>${_fmt(captain.total_picker_hours, 1)} h</td>
         <td>${_fmt(captain.total_orders_picked)}</td>
@@ -1031,7 +1031,7 @@ const ui = (() => {
       const storeAvg    = metric ? (periodStoreStats?.get(metric.key)?.avg ?? null) : null;
       const fmt = v => (v === null || v === undefined) ? '—' : _fmt(v, 1);
 
-      return `<tr>
+      return `<tr class="${captain.putting_score > 0 ? 'row-flagged' : ''}">
         ${_captainCell(captain.employee_name, captain.employee_id)}
         <td class="${captain.zero_put ? 'cell-red' : ''}">${_fmt(captain.total_putaway_qty)}</td>
         <td>${_fmt(captain.total_putter_hours, 1)} h</td>
@@ -1067,7 +1067,7 @@ const ui = (() => {
       const storeAvg    = metric ? (periodStoreStats?.get(metric.key)?.avg ?? null) : null;
       const fmt = v => (v === null || v === undefined) ? '—' : _fmt(v, 2);
 
-      return `<tr>
+      return `<tr class="${captain.audit_score > 0 ? 'row-flagged' : ''}">
         ${_captainCell(captain.employee_name, captain.employee_id)}
         <td class="${captain.zero_audit ? 'cell-red' : ''}">${_fmt(captain.total_racks_audited)}</td>
         <td>${_fmt(captain.total_auditor_hours, 1)} h</td>
@@ -1093,7 +1093,7 @@ const ui = (() => {
 
   function _buildFNVTable(captains, tierMap) {
     const sorted = _sortedCaptains(captains, _sortState.col);
-    const buildRow = captain => `<tr>
+    const buildRow = captain => `<tr class="${captain.fnv_score > 0 ? 'row-flagged' : ''}">
       ${_captainCell(captain.employee_name, captain.employee_id)}
       <td>${captain.avg_fnv_rate !== null ? _fmt(captain.avg_fnv_rate, 1) : '—'}</td>
       <td>${_fmt(captain.total_fnv_hours, 1)} h</td>
