@@ -56,10 +56,11 @@ const ui = (() => {
 
   // ── Supervisor Exclusion ─────────────────────────────────────────────
   let _excludeSupervisors = localStorage.getItem('excludeSupervisors') !== 'false'; // default true
+  let _customExcludedIds  = new Set(JSON.parse(localStorage.getItem('customExcludedIds') || '[]'));
 
   function _supervisorFilter(rows) {
-    if (!_excludeSupervisors || !CONFIG.SUPERVISOR_IDS) return rows;
-    const s = new Set(CONFIG.SUPERVISOR_IDS);
+    if (!_excludeSupervisors) return rows;
+    const s = new Set([...(CONFIG.SUPERVISOR_IDS || []), ..._customExcludedIds]);
     return rows.filter(r => !s.has(r.employee_id));
   }
 
@@ -75,6 +76,25 @@ const ui = (() => {
     localStorage.setItem('excludeSupervisors', String(_excludeSupervisors));
     _updateSupervisorBtn();
     app.refresh();
+  }
+
+  function addExcludedId() {
+    const input = document.getElementById('excl-id-input');
+    if (!input) return;
+    const val = input.value.trim().toUpperCase();
+    if (!val) return;
+    _customExcludedIds.add(val);
+    localStorage.setItem('customExcludedIds', JSON.stringify([..._customExcludedIds]));
+    input.value = '';
+    renderConfigPanel();
+    if (_excludeSupervisors) app.refresh();
+  }
+
+  function removeExcludedId(id) {
+    _customExcludedIds.delete(id);
+    localStorage.setItem('customExcludedIds', JSON.stringify([..._customExcludedIds]));
+    renderConfigPanel();
+    if (_excludeSupervisors) app.refresh();
   }
 
   // ── Theme Toggle ─────────────────────────────────────────────────────
@@ -2165,6 +2185,87 @@ const ui = (() => {
 
   // ── Config Panel ───────────────────────────────────────────────────────
 
+  // ── Slab Config Helpers ───────────────────────────────────────────────
+
+  function _secsToMmss(s) {
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function _mmssToSecs(str) {
+    const parts = String(str).split(':');
+    const m = parseInt(parts[0]) || 0;
+    const s = parseInt(parts[1]) || 0;
+    return m * 60 + s;
+  }
+
+  function _populateSlabTable(tableId, slabs) {
+    const tbody = document.getElementById(tableId)?.querySelector('tbody');
+    if (!tbody) return;
+    const rows = tbody.querySelectorAll('tr');
+    slabs.forEach((slab, i) => {
+      if (!rows[i]) return;
+      rows[i].querySelector('.slab-time').value   = _secsToMmss(slab.maxTime);
+      rows[i].querySelector('.slab-amount').value = slab.amount;
+    });
+  }
+
+  function _readSlabTable(tableId) {
+    const tbody = document.getElementById(tableId)?.querySelector('tbody');
+    if (!tbody) return [];
+    return [...tbody.querySelectorAll('tr')].map(row => ({
+      maxTime: _mmssToSecs(row.querySelector('.slab-time').value),
+      amount:  parseInt(row.querySelector('.slab-amount').value) || 0,
+    }));
+  }
+
+  function loadSlabMonth() {
+    const monthKey = document.getElementById('slab-month-picker')?.value;
+    if (!monthKey) return;
+    const overrides = JSON.parse(localStorage.getItem('incentiveSlabOverrides') || '{}');
+    const slabs400 = overrides[monthKey]?.slabs400 || compute.PICKING_SLABS_400;
+    const slabs800 = overrides[monthKey]?.slabs800 || compute.PICKING_SLABS_800;
+    _populateSlabTable('slab-table-400', slabs400);
+    _populateSlabTable('slab-table-800', slabs800);
+    const resetBtn = document.getElementById('slab-reset-btn');
+    if (resetBtn) resetBtn.style.display = overrides[monthKey] ? '' : 'none';
+    const savedMsg = document.getElementById('slab-saved-msg');
+    if (savedMsg) savedMsg.style.display = 'none';
+    const noteEl = document.getElementById('slab-override-note');
+    if (noteEl) noteEl.textContent = overrides[monthKey] ? `Custom criteria active for ${monthKey}` : `Using default criteria for ${monthKey}`;
+  }
+
+  function saveSlabOverrides() {
+    const monthKey = document.getElementById('slab-month-picker')?.value;
+    if (!monthKey) return;
+    const slabs400 = _readSlabTable('slab-table-400');
+    const slabs800 = _readSlabTable('slab-table-800');
+    const overrides = JSON.parse(localStorage.getItem('incentiveSlabOverrides') || '{}');
+    overrides[monthKey] = { slabs400, slabs800 };
+    localStorage.setItem('incentiveSlabOverrides', JSON.stringify(overrides));
+    _incentiveCache    = null;
+    _incentiveCacheKey = null;
+    const resetBtn = document.getElementById('slab-reset-btn');
+    if (resetBtn) resetBtn.style.display = '';
+    const noteEl = document.getElementById('slab-override-note');
+    if (noteEl) noteEl.textContent = `Custom criteria active for ${monthKey}`;
+    const savedMsg = document.getElementById('slab-saved-msg');
+    if (savedMsg) {
+      savedMsg.style.display = '';
+      setTimeout(() => { savedMsg.style.display = 'none'; }, 2000);
+    }
+  }
+
+  function resetSlabOverrides() {
+    const monthKey = document.getElementById('slab-month-picker')?.value;
+    if (!monthKey) return;
+    const overrides = JSON.parse(localStorage.getItem('incentiveSlabOverrides') || '{}');
+    delete overrides[monthKey];
+    localStorage.setItem('incentiveSlabOverrides', JSON.stringify(overrides));
+    _incentiveCache    = null;
+    _incentiveCacheKey = null;
+    loadSlabMonth();
+  }
+
   function renderConfigPanel() {
     const container = document.getElementById('config-content');
     if (!container) return;
@@ -2178,6 +2279,24 @@ const ui = (() => {
         ? `${ICONS.arrowUp} <span style="vertical-align:middle">High = Bad</span>`
         : `${ICONS.arrowDown} <span style="vertical-align:middle">Low = Bad</span>`}</td>
     </tr>`).join('');
+
+    const exclTags = [..._customExcludedIds].map(id => `
+      <span class="config-excl-tag">
+        ${_esc(id)}
+        <button class="config-excl-tag-remove" onclick="ui.removeExcludedId('${_esc(id)}')" title="Remove">&times;</button>
+      </span>`).join('');
+
+    const defaultSlabs400 = compute.PICKING_SLABS_400;
+    const defaultSlabs800 = compute.PICKING_SLABS_800;
+    const slabRows = (slabs) => slabs.map(s => `
+      <tr>
+        <td><input class="slab-time" type="text" value="${_secsToMmss(s.maxTime)}" placeholder="m:ss" /></td>
+        <td><input class="slab-amount" type="number" value="${s.amount}" min="0" step="25" /></td>
+      </tr>`).join('');
+
+    const curMonth = new Date().toISOString().slice(0, 7);
+    const existingOverrides = JSON.parse(localStorage.getItem('incentiveSlabOverrides') || '{}');
+    const hasOverride = !!existingOverrides[curMonth];
 
     container.innerHTML = `
       <div class="config-card">
@@ -2211,6 +2330,22 @@ const ui = (() => {
           <span class="config-detail-value">${rowCount}</span>
         </div>
       </div>
+      <div class="config-card">
+        <div class="config-card-header">
+          <div class="config-card-icon stat-icon-purple">${ICONS.person}</div>
+          <h3>Excluded Captains</h3>
+        </div>
+        <p class="config-desc">Captain IDs excluded from all calculations when "Excl. Supervisors" is active.</p>
+        <div class="config-excl-input-row">
+          <input type="text" id="excl-id-input" placeholder="e.g. DLES123456"
+                 onkeydown="if(event.key==='Enter')ui.addExcludedId()" />
+          <button class="btn" onclick="ui.addExcludedId()">Add</button>
+        </div>
+        <div class="config-excl-list">
+          ${exclTags || '<span class="config-hint">No custom IDs added yet.</span>'}
+        </div>
+        <p class="config-hint" style="margin-top:8px">Fixed supervisor IDs (${(CONFIG.SUPERVISOR_IDS || []).join(', ')}) are always included in the toggle.</p>
+      </div>
       <div class="config-card config-card-wide">
         <div class="config-card-header">
           <div class="config-card-icon stat-icon-green">${ICONS.barChart}</div>
@@ -2222,6 +2357,40 @@ const ui = (() => {
             <tbody>${metricsRows}</tbody>
           </table>
         </div>
+      </div>
+      <div class="config-card config-card-wide">
+        <div class="config-card-header">
+          <div class="config-card-icon stat-icon-amber">${ICONS.flag}</div>
+          <h3>Picking Incentive Criteria</h3>
+        </div>
+        <p class="config-desc">Configure time-based picking incentive slabs per month. Changes apply to the Incentives tab for the selected month.</p>
+        <div class="config-month-row">
+          <span class="dd-control-label">Month</span>
+          <input type="month" id="slab-month-picker" value="${curMonth}" onchange="ui.loadSlabMonth()" />
+          <span id="slab-override-note" class="config-hint" style="margin-left:8px">${hasOverride ? `Custom criteria active for ${curMonth}` : `Using default criteria for ${curMonth}`}</span>
+        </div>
+        <div class="slab-tables-grid">
+          <div>
+            <p class="config-hint" style="margin-bottom:6px;font-weight:600;opacity:1">400+ Orders / Week</p>
+            <table class="slab-editor-table" id="slab-table-400">
+              <thead><tr><th>Max Time (m:ss)</th><th>Amount (&#8377;)</th></tr></thead>
+              <tbody>${slabRows(defaultSlabs400)}</tbody>
+            </table>
+          </div>
+          <div>
+            <p class="config-hint" style="margin-bottom:6px;font-weight:600;opacity:1">800+ Orders / Week</p>
+            <table class="slab-editor-table" id="slab-table-800">
+              <thead><tr><th>Max Time (m:ss)</th><th>Amount (&#8377;)</th></tr></thead>
+              <tbody>${slabRows(defaultSlabs800)}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="config-row" style="margin-top:14px;gap:8px">
+          <button class="btn active" onclick="ui.saveSlabOverrides()">Save for Month</button>
+          <button class="btn" id="slab-reset-btn" onclick="ui.resetSlabOverrides()" style="${hasOverride ? '' : 'display:none'}">Reset to Default</button>
+          <span id="slab-saved-msg" class="slab-saved-msg" style="display:none">Saved!</span>
+        </div>
+        <p class="config-hint" style="margin-top:6px">Time is the upper bound (exclusive). Rows without a match earn &#8377;0.</p>
       </div>
     `;
   }
@@ -3191,7 +3360,9 @@ const ui = (() => {
     if (_incentiveCacheKey !== cacheKey) {
       // Use any date-bearing data to derive week keys for this month
       const weekKeys = compute.getWeekKeysForMonth(flaggedData, monthKey);
-      const picking = compute.computePickingIncentives(flaggedData, weekKeys);
+      const slabOverrides = JSON.parse(localStorage.getItem('incentiveSlabOverrides') || '{}');
+      const slabOverride  = slabOverrides[monthKey] || null;
+      const picking = compute.computePickingIncentives(flaggedData, weekKeys, slabOverride);
       const audit   = compute.computeAuditIncentives(auditSheetData, monthKey);
       _incentiveCache = { weekKeys, picking, audit };
       _incentiveCacheKey = cacheKey;
@@ -3365,6 +3536,11 @@ const ui = (() => {
     toggleComplQNG,
     onComplCatModeChange,
     toggleSupervisors,
+    addExcludedId,
+    removeExcludedId,
+    loadSlabMonth,
+    saveSlabOverrides,
+    resetSlabOverrides,
     toggleTheme,
     filterSupervisors,
     updateSupervisorBtn: _updateSupervisorBtn,
