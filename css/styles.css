@@ -1122,6 +1122,28 @@ tr.incentive-zero td { opacity: 0.45; }
   align-self: center;
 }
 
+.slab-threshold-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.slab-threshold-input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: 'Manrope', sans-serif;
+  background: var(--surface-high);
+  color: var(--text);
+  outline: none;
+  width: 72px;
+  transition: border-color 0.15s;
+}
+.slab-threshold-input:focus { border-color: rgba(173, 198, 255, 0.45); }
+
 /* ── Inventory Health ─────────────────────────────────────────────── */
 
 .stat-icon-purple { background: rgba(192, 132, 252, 0.1); color: #c084fc; }

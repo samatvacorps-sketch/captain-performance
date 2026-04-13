@@ -1181,8 +1181,10 @@ const compute = (() => {
    * @returns {Map<string, { employee_name, weeks: Map, total }>}
    */
   function computePickingIncentives(data, weekKeys, slabOverride = null) {
-    const slabs400 = (slabOverride && slabOverride.slabs400) ? slabOverride.slabs400 : PICKING_SLABS_400;
-    const slabs800 = (slabOverride && slabOverride.slabs800) ? slabOverride.slabs800 : PICKING_SLABS_800;
+    const slabs400     = (slabOverride && slabOverride.slabs400)     ? slabOverride.slabs400     : PICKING_SLABS_400;
+    const slabs800     = (slabOverride && slabOverride.slabs800)     ? slabOverride.slabs800     : PICKING_SLABS_800;
+    const threshold400 = (slabOverride && slabOverride.threshold400) ? slabOverride.threshold400 : 400;
+    const threshold800 = (slabOverride && slabOverride.threshold800) ? slabOverride.threshold800 : 800;
     const wkSet = new Set(weekKeys);
     // Group by employee → week (only picking-flow rows)
     const empMap = new Map();
@@ -1219,9 +1221,9 @@ const compute = (() => {
       for (const [wk, w] of emp.weeks) {
         const avgTime = w.orderSum > 0 ? w.timeSum / w.orderSum : 0;
         let amount = 0;
-        if (w.orders >= 800) {
+        if (w.orders >= threshold800) {
           amount = _pickingSlabAmount(avgTime, slabs800);
-        } else if (w.orders >= 400) {
+        } else if (w.orders >= threshold400) {
           amount = _pickingSlabAmount(avgTime, slabs400);
         }
         weekResults.set(wk, { orders: w.orders, avgTime, amount });
