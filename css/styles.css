@@ -2448,10 +2448,11 @@ tr.incentive-zero td { opacity: 0.45; }
   letter-spacing: 0.1em;
 }
 
-.status-ok       { background: rgba(78, 222, 163, 0.1); color: #4edea3; }
-.status-warn     { background: rgba(255, 213, 79, 0.1); color: #ffd54f; }
-.status-flagged  { background: rgba(238, 125, 119, 0.1); color: #ee7d77; }
-.status-critical { background: rgba(255, 100, 100, 0.12); color: #ff6b6b; }
+.status-ok         { background: rgba(78, 222, 163, 0.1);  color: #4edea3; }
+.status-warn       { background: rgba(255, 213, 79, 0.1);  color: #ffd54f; }
+.status-borderline { background: rgba(255, 213, 79, 0.12); color: #ffd54f; }
+.status-flagged    { background: rgba(238, 125, 119, 0.1); color: #ee7d77; }
+.status-critical   { background: rgba(255, 100, 100, 0.12); color: #ff6b6b; }
 
 /* DD spaced-row table */
 .dd-table {
@@ -2754,10 +2755,11 @@ body,
 }
 
 /* Status badges */
-[data-theme="light"] .status-ok       { background: rgba(22, 163, 74, 0.08); color: #16a34a; }
-[data-theme="light"] .status-flagged  { background: rgba(220, 38, 38, 0.06); color: #dc2626; }
-[data-theme="light"] .status-critical { background: rgba(220, 38, 38, 0.08); color: #b91c1c; }
-[data-theme="light"] .status-warn     { background: rgba(202, 138, 4, 0.08); color: #ca8a04; }
+[data-theme="light"] .status-ok         { background: rgba(22, 163, 74, 0.08);  color: #16a34a; }
+[data-theme="light"] .status-flagged    { background: rgba(220, 38, 38, 0.06);  color: #dc2626; }
+[data-theme="light"] .status-critical   { background: rgba(220, 38, 38, 0.08);  color: #b91c1c; }
+[data-theme="light"] .status-warn       { background: rgba(202, 138, 4, 0.08);  color: #ca8a04; }
+[data-theme="light"] .status-borderline { background: rgba(202, 138, 4, 0.1);   color: #b45309; }
 
 /* Flags section */
 [data-theme="light"] .flags-metric-value.color-blue  { color: #3b82f6; }
