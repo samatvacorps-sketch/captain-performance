@@ -1080,7 +1080,7 @@ const charts = (() => {
 
     const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
     const data   = aggregated.map(d =>
-      +((d.active_captains || 0) - (d.total_orders_picked || 0) / 68).toFixed(2)
+      +((d.total_active_time || 0) - (d.total_orders_picked || 0) / 6.8).toFixed(2)
     );
 
     _instances[canvasId] = new Chart(ctx, {
@@ -1102,7 +1102,7 @@ const charts = (() => {
         ...BASE_OPTS,
         scales: {
           ...BASE_OPTS.scales,
-          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Captains (surplus / deficit)', color: TICK_COLOR } },
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Hours', color: TICK_COLOR } },
         },
       },
     });
