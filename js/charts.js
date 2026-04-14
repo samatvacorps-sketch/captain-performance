@@ -959,10 +959,10 @@ const charts = (() => {
     if (!ctx) return;
 
     const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
-    const hpr = aggregated.map(d => {
+    const rph = aggregated.map(d => {
       const r = d.total_racks_audited || 0;
       const h = d.total_audit_hours || 0;
-      return r > 0 ? +(h / r).toFixed(3) : null;
+      return h > 0 ? +(r / h).toFixed(2) : null;
     });
 
     _instances[canvasId] = new Chart(ctx, {
@@ -971,8 +971,8 @@ const charts = (() => {
         labels,
         datasets: [
           {
-            label: 'Hours / Rack',
-            data: hpr,
+            label: 'Racks / Hour',
+            data: rph,
             borderColor: COLORS.amber,
             backgroundColor: ALPHA(COLORS.amber, 0.12),
             fill: true,
@@ -986,7 +986,7 @@ const charts = (() => {
         ...BASE_OPTS,
         scales: {
           ...BASE_OPTS.scales,
-          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Hours / Rack', color: TICK_COLOR } },
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Racks / Hour', color: TICK_COLOR } },
         },
       },
     });
