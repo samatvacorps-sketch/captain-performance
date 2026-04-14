@@ -78,7 +78,7 @@ const charts = (() => {
     const gc = _gridColor(), tc = _tickColor(), lc = _labelColor();
     return {
       responsive: true,
-      maintainAspectRatio: false,
+      maintainAspectRatio: true,
       plugins: {
         legend: {
           position: 'bottom',
@@ -340,7 +340,7 @@ const charts = (() => {
       data: { labels, datasets },
       options: {
         responsive: true,
-        maintainAspectRatio: false,
+        maintainAspectRatio: true,
         plugins: {
           legend: isMulti
             ? { display: true, position: 'bottom',
