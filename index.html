@@ -152,7 +152,7 @@
 
     <!-- Bento Chart Grid -->
     <div class="bento-grid">
-      <div class="bento-card bento-full">
+      <div class="bento-card bento-half">
         <div class="bento-card-header">
           <div>
             <h3 class="bento-card-title">Total Active Time vs Productivity</h3>
@@ -160,6 +160,15 @@
           </div>
         </div>
         <canvas id="chart-active-productivity"></canvas>
+      </div>
+      <div class="bento-card bento-half">
+        <div class="bento-card-header">
+          <div>
+            <h3 class="bento-card-title">Productivity Per Hour</h3>
+            <p class="bento-card-subtitle">Item-equivalents produced per active hour</p>
+          </div>
+        </div>
+        <canvas id="chart-productivity-per-hour"></canvas>
       </div>
       <div class="bento-card bento-large">
         <div class="bento-card-header">
@@ -173,11 +182,11 @@
       <div class="bento-card bento-small">
         <div class="bento-card-header">
           <div>
-            <h3 class="bento-card-title">Avg Time Metrics</h3>
-            <p class="bento-card-subtitle">mm:ss cycle distribution</p>
+            <h3 class="bento-card-title">Orders Per Hour</h3>
+            <p class="bento-card-subtitle">Picking throughput rate</p>
           </div>
         </div>
-        <canvas id="chart-time-metrics"></canvas>
+        <canvas id="chart-orders-per-hour"></canvas>
       </div>
       <div class="bento-card bento-large">
         <div class="bento-card-header">
@@ -215,6 +224,24 @@
           </div>
         </div>
         <canvas id="chart-audit-efficiency"></canvas>
+      </div>
+      <div class="bento-card bento-half">
+        <div class="bento-card-header">
+          <div>
+            <h3 class="bento-card-title">Avg Time Metrics</h3>
+            <p class="bento-card-subtitle">mm:ss cycle distribution</p>
+          </div>
+        </div>
+        <canvas id="chart-time-metrics"></canvas>
+      </div>
+      <div class="bento-card bento-half">
+        <div class="bento-card-header">
+          <div>
+            <h3 class="bento-card-title">Staff Availability</h3>
+            <p class="bento-card-subtitle">Active captains vs required staffing level</p>
+          </div>
+        </div>
+        <canvas id="chart-staff-availability"></canvas>
       </div>
     </div>
 

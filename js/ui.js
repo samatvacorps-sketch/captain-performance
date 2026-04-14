@@ -300,6 +300,9 @@ const ui = (() => {
     charts.renderIPHChart('chart-iph', aggregated);
     charts.renderStoreAuditVolumeChart('chart-store-audit-volume', aggregated);
     charts.renderAuditEfficiencyChart('chart-audit-efficiency', aggregated);
+    charts.renderProductivityPerHourChart('chart-productivity-per-hour', aggregated);
+    charts.renderOrdersPerHourChart('chart-orders-per-hour', aggregated);
+    charts.renderStaffAvailabilityChart('chart-staff-availability', aggregated);
 
     // Stat cards
     const totalOrders = aggregated.reduce((s,d) => s + (d.total_orders_picked||0), 0);

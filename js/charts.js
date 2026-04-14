@@ -992,6 +992,132 @@ const charts = (() => {
     });
   }
 
+  // ── Store Overview: Productivity Per Hour (line) ──────────────────
+  function renderProductivityPerHourChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
+    const w = CONFIG.PRODUCTIVITY_WEIGHTS;
+    const data = aggregated.map(d => {
+      const hrs = d.total_active_time || 0;
+      if (hrs === 0) return null;
+      const prod = (d.total_orders_picked || 0) * w.order
+                 + (d.total_putaway_qty    || 0) * w.putaway
+                 + (d.total_racks_audited  || 0) * w.rack;
+      return +((prod / hrs).toFixed(1));
+    });
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Item-Eq / Hour',
+          data,
+          borderColor: COLORS.purple,
+          backgroundColor: ALPHA(COLORS.purple, 0.12),
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          spanGaps: true,
+        }],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Item-Eq / Hr', color: TICK_COLOR } },
+        },
+      },
+    });
+  }
+
+  // ── Store Overview: Orders Per Hour (line) ────────────────────────
+  function renderOrdersPerHourChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
+    const data = aggregated.map(d => {
+      const hrs = d.total_picking_hours || 0;
+      if (hrs === 0) return null;
+      return +((d.total_orders_picked || 0) / hrs).toFixed(1);
+    });
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Orders / Hr',
+          data,
+          borderColor: COLORS.accent,
+          backgroundColor: ALPHA(COLORS.accent, 0.15),
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          spanGaps: true,
+        }],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Orders / Hr', color: TICK_COLOR } },
+        },
+      },
+    });
+  }
+
+  // ── Store Overview: Staff Availability — Active vs Required (dual line) ──
+  function renderStaffAvailabilityChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels   = aggregated.map(d => d.label || d.week_key || d.month_key);
+    const actual   = aggregated.map(d => d.active_captains || 0);
+    const required = aggregated.map(d => +((d.total_orders_picked || 0) / 68).toFixed(2));
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Active Captains',
+            data: actual,
+            borderColor: COLORS.teal,
+            backgroundColor: ALPHA(COLORS.teal, 0.12),
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+          },
+          {
+            label: 'Required (orders ÷ 68)',
+            data: required,
+            borderColor: COLORS.amber,
+            backgroundColor: ALPHA(COLORS.amber, 0.08),
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            borderDash: [5, 4],
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Captains', color: TICK_COLOR } },
+        },
+      },
+    });
+  }
+
   return {
     renderOrdersHoursChart,
     renderTimeMetricsChart,
@@ -1010,5 +1136,8 @@ const charts = (() => {
     renderActiveTimeProductivityChart,
     renderStoreAuditVolumeChart,
     renderAuditEfficiencyChart,
+    renderProductivityPerHourChart,
+    renderOrdersPerHourChart,
+    renderStaffAvailabilityChart,
   };
 })();
