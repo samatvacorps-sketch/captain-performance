@@ -849,6 +849,149 @@ const charts = (() => {
     });
   }
 
+  // ── Store Overview: Active Time vs Productivity (dual-axis line) ────
+
+  function renderActiveTimeProductivityChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
+    const activeTime = aggregated.map(d => +(d.total_active_time || 0).toFixed(1));
+
+    const w = CONFIG.PRODUCTIVITY_WEIGHTS;
+    const productivity = aggregated.map(d =>
+      Math.round((d.total_orders_picked || 0) * w.order
+               + (d.total_putaway_qty || 0) * w.putaway
+               + (d.total_racks_audited || 0) * w.rack)
+    );
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Active Time (hrs)',
+            data: activeTime,
+            borderColor: COLORS.accent,
+            backgroundColor: ALPHA(COLORS.accent, 0.1),
+            fill: true,
+            tension: 0.3,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Productivity (Item-Eq)',
+            data: productivity,
+            borderColor: COLORS.teal,
+            backgroundColor: ALPHA(COLORS.teal, 0.1),
+            fill: true,
+            tension: 0.3,
+            yAxisID: 'y2',
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y:  { ...BASE_OPTS.scales.y, position: 'left',  title: { display: true, text: 'Hours', color: TICK_COLOR } },
+          y2: { ...BASE_OPTS.scales.y, position: 'right', title: { display: true, text: 'Item-Equivalents', color: TICK_COLOR }, grid: { drawOnChartArea: false } },
+        },
+      },
+    });
+  }
+
+  // ── Store Overview: Rack Audit Volume (bar + line, dual-axis) ─────
+
+  function renderStoreAuditVolumeChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
+    const racks  = aggregated.map(d => d.total_racks_audited || 0);
+    const hours  = aggregated.map(d => +(d.total_audit_hours || 0).toFixed(1));
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Racks Audited',
+            data: racks,
+            backgroundColor: ALPHA(COLORS.accent, 0.7),
+            borderColor: COLORS.accent,
+            borderWidth: 1,
+            borderRadius: 4,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Audit Hours',
+            data: hours,
+            type: 'line',
+            borderColor: COLORS.teal,
+            backgroundColor: ALPHA(COLORS.teal, 0.1),
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            yAxisID: 'y2',
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y:  { ...BASE_OPTS.scales.y, position: 'left',  title: { display: true, text: 'Racks', color: TICK_COLOR } },
+          y2: { ...BASE_OPTS.scales.y, position: 'right', title: { display: true, text: 'Hours', color: TICK_COLOR }, grid: { drawOnChartArea: false } },
+        },
+      },
+    });
+  }
+
+  // ── Store Overview: Audit Efficiency — Hours per Rack (line) ──────
+
+  function renderAuditEfficiencyChart(canvasId, aggregated) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
+    const hpr = aggregated.map(d => {
+      const r = d.total_racks_audited || 0;
+      const h = d.total_audit_hours || 0;
+      return r > 0 ? +(h / r).toFixed(3) : null;
+    });
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Hours / Rack',
+            data: hpr,
+            borderColor: COLORS.amber,
+            backgroundColor: ALPHA(COLORS.amber, 0.12),
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            spanGaps: true,
+          },
+        ],
+      },
+      options: {
+        ...BASE_OPTS,
+        scales: {
+          ...BASE_OPTS.scales,
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Hours / Rack', color: TICK_COLOR } },
+        },
+      },
+    });
+  }
+
   return {
     renderOrdersHoursChart,
     renderTimeMetricsChart,
@@ -864,5 +1007,8 @@ const charts = (() => {
     renderCaptainComplaintScatter,
     renderRCADonutChart,
     renderL0CategoryChart,
+    renderActiveTimeProductivityChart,
+    renderStoreAuditVolumeChart,
+    renderAuditEfficiencyChart,
   };
 })();

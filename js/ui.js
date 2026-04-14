@@ -295,9 +295,11 @@ const ui = (() => {
     // Charts
     charts.renderOrdersHoursChart('chart-orders-hours', aggregated);
     charts.renderTimeMetricsChart('chart-time-metrics', aggregated);
+    charts.renderActiveTimeProductivityChart('chart-active-productivity', aggregated);
     charts.renderPutawayChart('chart-putaway-hours', aggregated);
     charts.renderIPHChart('chart-iph', aggregated);
-    charts.renderComplaintsChart('chart-complaints', aggregated);
+    charts.renderStoreAuditVolumeChart('chart-store-audit-volume', aggregated);
+    charts.renderAuditEfficiencyChart('chart-audit-efficiency', aggregated);
 
     // Stat cards
     const totalOrders = aggregated.reduce((s,d) => s + (d.total_orders_picked||0), 0);

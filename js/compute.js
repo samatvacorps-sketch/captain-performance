@@ -436,6 +436,7 @@ const compute = (() => {
       total_picking_hours:    sum('picker_active_time') / 3600,
       total_putting_hours:    sum('putter_active_time') / 3600,
       total_audit_hours:      sum('auditor_active_time') / 3600,
+      total_active_time:      sum('total_active_time') / 3600,
       total_putaway_qty:      sum('putaway_qty'),
       total_racks_audited:    subRacks,
       total_complaints:       compl.total,
