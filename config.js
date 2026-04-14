@@ -72,6 +72,9 @@ const CONFIG = {
   // Editable in the Config tab UI.
   FLOOR_DEVIATION: 0.30,
 
+  // ── Productivity Weights (item-equivalents) ──────────────────────────
+  PRODUCTIVITY_WEIGHTS: { order: 6, putaway: 1, rack: 315 },
+
   // ── Metric Definitions ───────────────────────────────────────────────
   // direction: 'HIGH' = high value is bad (e.g. slow time)
   //            'LOW'  = low value is bad  (e.g. low throughput)
