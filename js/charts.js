@@ -78,7 +78,7 @@ const charts = (() => {
     const gc = _gridColor(), tc = _tickColor(), lc = _labelColor();
     return {
       responsive: true,
-      maintainAspectRatio: true,
+      maintainAspectRatio: false,
       plugins: {
         legend: {
           position: 'bottom',
@@ -340,7 +340,7 @@ const charts = (() => {
       data: { labels, datasets },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
+        maintainAspectRatio: false,
         plugins: {
           legend: isMulti
             ? { display: true, position: 'bottom',
@@ -1072,47 +1072,37 @@ const charts = (() => {
     });
   }
 
-  // ── Store Overview: Staff Availability — Active vs Required (dual line) ──
+  // ── Store Overview: Staff Availability — surplus/deficit (single line) ──
   function renderStaffAvailabilityChart(canvasId, aggregated) {
     _destroy(canvasId);
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return;
 
-    const labels   = aggregated.map(d => d.label || d.week_key || d.month_key);
-    const actual   = aggregated.map(d => d.active_captains || 0);
-    const required = aggregated.map(d => +((d.total_orders_picked || 0) / 68).toFixed(2));
+    const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
+    const data   = aggregated.map(d =>
+      +((d.active_captains || 0) - (d.total_orders_picked || 0) / 68).toFixed(2)
+    );
 
     _instances[canvasId] = new Chart(ctx, {
       type: 'line',
       data: {
         labels,
-        datasets: [
-          {
-            label: 'Active Captains',
-            data: actual,
-            borderColor: COLORS.teal,
-            backgroundColor: ALPHA(COLORS.teal, 0.12),
-            fill: true,
-            tension: 0.3,
-            pointRadius: 4,
-          },
-          {
-            label: 'Required (orders ÷ 68)',
-            data: required,
-            borderColor: COLORS.amber,
-            backgroundColor: ALPHA(COLORS.amber, 0.08),
-            fill: true,
-            tension: 0.3,
-            pointRadius: 4,
-            borderDash: [5, 4],
-          },
-        ],
+        datasets: [{
+          label: 'Staff Availability',
+          data,
+          borderColor: COLORS.teal,
+          backgroundColor: ALPHA(COLORS.teal, 0.12),
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          spanGaps: true,
+        }],
       },
       options: {
         ...BASE_OPTS,
         scales: {
           ...BASE_OPTS.scales,
-          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Captains', color: TICK_COLOR } },
+          y: { ...BASE_OPTS.scales.y, title: { display: true, text: 'Captains (surplus / deficit)', color: TICK_COLOR } },
         },
       },
     });

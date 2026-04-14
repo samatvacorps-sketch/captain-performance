@@ -1650,7 +1650,7 @@ tr.incentive-zero td { opacity: 0.45; }
 .bento-half  { grid-column: span 6; }
 .bento-full  { grid-column: span 12; }
 
-.bento-card canvas { max-height: 260px; }
+.bento-card canvas { height: 260px; }
 
 .bento-card-header {
   display: flex;
