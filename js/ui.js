@@ -209,7 +209,7 @@ const ui = (() => {
       ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
       '</optgroup>',
       '<optgroup label="Monthly">',
-      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${d.label || d.month_key}</option>`),
+      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${_billingMonthLabel(d.month_key)}</option>`),
       '</optgroup>',
     ].join('');
 
@@ -250,16 +250,15 @@ const ui = (() => {
       const colonIdx   = periodVal.indexOf(':');
       const periodType = periodVal.slice(0, colonIdx);
       const periodKey  = periodVal.slice(colonIdx + 1);
-      const rows = data.filter(row => {
-        if (!row.date) return false;
-        if (periodType === 'W') return compute.aggregateWeekly([row]).some(w => w.week_key === periodKey);
-        const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
-        return ym === periodKey;
-      });
-      if (rows.length > 0) {
-        const dates = rows.map(r => r.date).sort((a, b) => a - b);
-        document.getElementById('overview-start').value = _isoDateStr(dates[0]);
-        document.getElementById('overview-end').value   = _isoDateStr(dates[dates.length - 1]);
+      if (periodType === 'W') {
+        const rows = data.filter(row => row.date && compute.aggregateWeekly([row]).some(w => w.week_key === periodKey));
+        if (rows.length > 0) {
+          const dates = rows.map(r => r.date).sort((a, b) => a - b);
+          document.getElementById('overview-start').value = _isoDateStr(dates[0]);
+          document.getElementById('overview-end').value   = _isoDateStr(dates[dates.length - 1]);
+        }
+      } else {
+        _applyBillingMonthDates('overview-start', 'overview-end', periodKey);
       }
     }
     renderStoreOverview();
@@ -396,7 +395,7 @@ const ui = (() => {
       ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
       '</optgroup>',
       '<optgroup label="Monthly">',
-      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${d.label || d.month_key}</option>`),
+      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${_billingMonthLabel(d.month_key)}</option>`),
       '</optgroup>',
     ].join('');
 
@@ -436,20 +435,26 @@ const ui = (() => {
     const colonIdx  = periodVal.indexOf(':');
     const periodType = periodVal.slice(0, colonIdx);
     const periodKey  = periodVal.slice(colonIdx + 1);
-    const rows = data.filter(row => {
-      if (!row.date) return false;
-      if (periodType === 'D') return row.dateStr === periodKey;
-      if (periodType === 'W') {
+    if (periodType === 'D') {
+      const rows = data.filter(row => row.date && row.dateStr === periodKey);
+      if (rows.length > 0) {
+        const dates = rows.map(r => r.date).sort((a, b) => a - b);
+        document.getElementById('deep-dive-start').value = _isoDateStr(dates[0]);
+        document.getElementById('deep-dive-end').value   = _isoDateStr(dates[dates.length - 1]);
+      }
+    } else if (periodType === 'W') {
+      const rows = data.filter(row => {
+        if (!row.date) return false;
         const wk = compute.aggregateWeekly([row]);
         return wk.length > 0 && wk[0].week_key === periodKey;
+      });
+      if (rows.length > 0) {
+        const dates = rows.map(r => r.date).sort((a, b) => a - b);
+        document.getElementById('deep-dive-start').value = _isoDateStr(dates[0]);
+        document.getElementById('deep-dive-end').value   = _isoDateStr(dates[dates.length - 1]);
       }
-      const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
-      return ym === periodKey;
-    });
-    if (rows.length > 0) {
-      const dates = rows.map(r => r.date).sort((a,b) => a - b);
-      document.getElementById('deep-dive-start').value = _isoDateStr(dates[0]);
-      document.getElementById('deep-dive-end').value   = _isoDateStr(dates[dates.length - 1]);
+    } else {
+      _applyBillingMonthDates('deep-dive-start', 'deep-dive-end', periodKey);
     }
     _ddFilter = 'all';   // reset captain filter on preset change
     renderDeepDive();
@@ -1346,7 +1351,7 @@ const ui = (() => {
       ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
       '</optgroup>',
       '<optgroup label="Monthly">',
-      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${d.label || d.month_key}</option>`),
+      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${_billingMonthLabel(d.month_key)}</option>`),
       '</optgroup>',
     ].join('');
 
@@ -1381,20 +1386,19 @@ const ui = (() => {
     const colonIdx   = periodVal.indexOf(':');
     const periodType = periodVal.slice(0, colonIdx);
     const periodKey  = periodVal.slice(colonIdx + 1);
-    const rows = data.filter(row => {
-      if (!row.date) return false;
-      if (periodType === 'D') return row.dateStr === periodKey;
-      if (periodType === 'W') {
+    if (periodType === 'W') {
+      const rows = data.filter(row => {
+        if (!row.date) return false;
         const wk = compute.aggregateWeekly([row]);
         return wk.length > 0 && wk[0].week_key === periodKey;
+      });
+      if (rows.length > 0) {
+        const dates = rows.map(r => r.date).sort((a, b) => a - b);
+        document.getElementById('tiers-start').value = _isoDateStr(dates[0]);
+        document.getElementById('tiers-end').value   = _isoDateStr(dates[dates.length - 1]);
       }
-      const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
-      return ym === periodKey;
-    });
-    if (rows.length > 0) {
-      const dates = rows.map(r => r.date).sort((a, b) => a - b);
-      document.getElementById('tiers-start').value = _isoDateStr(dates[0]);
-      document.getElementById('tiers-end').value   = _isoDateStr(dates[dates.length - 1]);
+    } else {
+      _applyBillingMonthDates('tiers-start', 'tiers-end', periodKey);
     }
     renderTiersView();
   }
@@ -2115,16 +2119,15 @@ const ui = (() => {
       const colonIdx   = periodVal.indexOf(':');
       const periodType = periodVal.slice(0, colonIdx);
       const periodKey  = periodVal.slice(colonIdx + 1);
-      const rows = data.filter(row => {
-        if (!row.date) return false;
-        if (periodType === 'W') return compute.aggregateWeekly([row]).some(w => w.week_key === periodKey);
-        const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
-        return ym === periodKey;
-      });
-      if (rows.length > 0) {
-        const dates = rows.map(r => r.date).sort((a, b) => a - b);
-        document.getElementById('profile-start').value = _isoDateStr(dates[0]);
-        document.getElementById('profile-end').value   = _isoDateStr(dates[dates.length - 1]);
+      if (periodType === 'W') {
+        const rows = data.filter(row => row.date && compute.aggregateWeekly([row]).some(w => w.week_key === periodKey));
+        if (rows.length > 0) {
+          const dates = rows.map(r => r.date).sort((a, b) => a - b);
+          document.getElementById('profile-start').value = _isoDateStr(dates[0]);
+          document.getElementById('profile-end').value   = _isoDateStr(dates[dates.length - 1]);
+        }
+      } else {
+        _applyBillingMonthDates('profile-start', 'profile-end', periodKey);
       }
     }
     renderCaptainProfile();
@@ -2598,6 +2601,23 @@ const ui = (() => {
     return `${y}-${m}-${d}`;
   }
 
+  // Converts "YYYY-MM" month key to billing-cycle label: "Mar 26 – Apr 25, 2026"
+  // Billing cycle: 26th of previous month → 25th of named month
+  function _billingMonthLabel(monthKey) {
+    const [y, mo] = monthKey.split('-').map(Number);
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const startDate = new Date(y, mo - 2, 26); // JS handles mo-2 < 0 → wraps to Dec of y-1
+    const endDate   = new Date(y, mo - 1, 25);
+    return `${MONTHS[startDate.getMonth()]} 26 \u2013 ${MONTHS[endDate.getMonth()]} 25, ${endDate.getFullYear()}`;
+  }
+
+  // Given a billing-cycle month key "YYYY-MM", set start/end date picker values
+  function _applyBillingMonthDates(startElId, endElId, monthKey) {
+    const [y, mo] = monthKey.split('-').map(Number);
+    document.getElementById(startElId).value = _isoDateStr(new Date(y, mo - 2, 26));
+    document.getElementById(endElId).value   = _isoDateStr(new Date(y, mo - 1, 25));
+  }
+
   function _esc(str) {
     if (!str) return '';
     return String(str)
@@ -2630,7 +2650,7 @@ const ui = (() => {
       ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
       '</optgroup>',
       '<optgroup label="Monthly">',
-      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${d.label || d.month_key}</option>`),
+      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${_billingMonthLabel(d.month_key)}</option>`),
       '</optgroup>',
     ].join('');
 
@@ -2689,16 +2709,15 @@ const ui = (() => {
       const colonIdx  = periodVal.indexOf(':');
       const periodType = periodVal.slice(0, colonIdx);
       const periodKey  = periodVal.slice(colonIdx + 1);
-      const rows = auditData.filter(row => {
-        if (!row.date) return false;
-        if (periodType === 'W') return compute.aggregateWeekly([{ date: row.date, dateStr: row.dateStr, employee_id: row.employee_id }]).some(w => w.week_key === periodKey);
-        const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
-        return ym === periodKey;
-      });
-      if (rows.length > 0) {
-        const dates = rows.map(r => r.date).sort((a, b) => a - b);
-        document.getElementById('inv-start').value = _isoDateStr(dates[0]);
-        document.getElementById('inv-end').value   = _isoDateStr(dates[dates.length - 1]);
+      if (periodType === 'W') {
+        const rows = auditData.filter(row => row.date && compute.aggregateWeekly([{ date: row.date, dateStr: row.dateStr, employee_id: row.employee_id }]).some(w => w.week_key === periodKey));
+        if (rows.length > 0) {
+          const dates = rows.map(r => r.date).sort((a, b) => a - b);
+          document.getElementById('inv-start').value = _isoDateStr(dates[0]);
+          document.getElementById('inv-end').value   = _isoDateStr(dates[dates.length - 1]);
+        }
+      } else {
+        _applyBillingMonthDates('inv-start', 'inv-end', periodKey);
       }
     }
     _invCache = null;
@@ -3088,7 +3107,7 @@ const ui = (() => {
       ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
       '</optgroup>',
       '<optgroup label="Monthly">',
-      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${d.label || d.month_key}</option>`),
+      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${_billingMonthLabel(d.month_key)}</option>`),
       '</optgroup>',
     ].join('');
 
@@ -3138,16 +3157,15 @@ const ui = (() => {
       const colonIdx   = periodVal.indexOf(':');
       const periodType = periodVal.slice(0, colonIdx);
       const periodKey  = periodVal.slice(colonIdx + 1);
-      const rows = complData.filter(row => {
-        if (!row.date) return false;
-        if (periodType === 'W') return compute.aggregateWeekly([{ date: row.date, dateStr: row.dateStr, employee_id: row.employee_id }]).some(w => w.week_key === periodKey);
-        const ym = `${row.date.getFullYear()}-${String(row.date.getMonth()+1).padStart(2,'0')}`;
-        return ym === periodKey;
-      });
-      if (rows.length > 0) {
-        const dates = rows.map(r => r.date).sort((a, b) => a - b);
-        document.getElementById('compl-start').value = _isoDateStr(dates[0]);
-        document.getElementById('compl-end').value   = _isoDateStr(dates[dates.length - 1]);
+      if (periodType === 'W') {
+        const rows = complData.filter(row => row.date && compute.aggregateWeekly([{ date: row.date, dateStr: row.dateStr, employee_id: row.employee_id }]).some(w => w.week_key === periodKey));
+        if (rows.length > 0) {
+          const dates = rows.map(r => r.date).sort((a, b) => a - b);
+          document.getElementById('compl-start').value = _isoDateStr(dates[0]);
+          document.getElementById('compl-end').value   = _isoDateStr(dates[dates.length - 1]);
+        }
+      } else {
+        _applyBillingMonthDates('compl-start', 'compl-end', periodKey);
       }
     }
     _complCache = null;
