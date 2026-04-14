@@ -199,7 +199,7 @@ const ui = (() => {
     if (!sel || !data || data.length === 0) return;
 
     const weekly  = compute.aggregateWeekly(data);
-    const monthly = compute.aggregateMonthly(data);
+    const monthly = compute.aggregateBillingMonthly(data);
 
     sel.innerHTML = [
       '<option value="all">All Time</option>',
@@ -290,7 +290,7 @@ const ui = (() => {
       ? compute.aggregateDaily(filtered, filteredAudit, filteredCompl)
       : period === 'weekly'
         ? compute.aggregateWeekly(filtered, filteredAudit, filteredCompl)
-        : compute.aggregateMonthly(filtered, filteredAudit, filteredCompl);
+        : compute.aggregateBillingMonthly(filtered, filteredAudit, filteredCompl);
 
     // Charts
     charts.renderOrdersHoursChart('chart-orders-hours', aggregated);
@@ -383,7 +383,7 @@ const ui = (() => {
     if (!data || data.length === 0) return;
 
     const weekly  = compute.aggregateWeekly(data);
-    const monthly = compute.aggregateMonthly(data);
+    const monthly = compute.aggregateBillingMonthly(data);
 
     const sel = document.getElementById('deep-dive-period');
     if (!sel) return;
@@ -1340,7 +1340,7 @@ const ui = (() => {
     if (!data || data.length === 0) return;
 
     const weekly  = compute.aggregateWeekly(data);
-    const monthly = compute.aggregateMonthly(data);
+    const monthly = compute.aggregateBillingMonthly(data);
     const sel = document.getElementById('tiers-period');
     if (!sel) return;
 
@@ -2067,7 +2067,7 @@ const ui = (() => {
     if (!sel || !data || data.length === 0) return;
 
     const weekly  = compute.aggregateWeekly(data);
-    const monthly = compute.aggregateMonthly(data);
+    const monthly = compute.aggregateBillingMonthly(data);
 
     sel.innerHTML = [
       '<option value="all">All Time</option>',
@@ -2199,7 +2199,7 @@ const ui = (() => {
         labelMap  = new Map(buckets.map(b => [b.week_key, b.label || b.week_key]));
       } else if (_cpView === 'monthly') {
         const captainAudit = auditData.filter(a => a.employee_id === id);
-        const buckets = compute.aggregateMonthly(rows, captainAudit);
+        const buckets = compute.aggregateBillingMonthly(rows, captainAudit);
         bucketMap = new Map(buckets.map(b => [b.month_key, b]));
         labelMap  = new Map(buckets.map(b => [b.month_key, b.label || b.month_key]));
       } else {
@@ -2640,7 +2640,7 @@ const ui = (() => {
 
     // Build preset options from audit data (weekly + monthly)
     const weekly  = compute.aggregateWeekly(auditData.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id })));
-    const monthly = compute.aggregateMonthly(auditData.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id })));
+    const monthly = compute.aggregateBillingMonthly(auditData.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id })));
 
     sel.innerHTML = [
       '<option value="all">All Time</option>',
@@ -3097,7 +3097,7 @@ const ui = (() => {
     if (!sel || !complData || complData.length === 0) return;
 
     const weekly  = compute.aggregateWeekly(complData.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id })));
-    const monthly = compute.aggregateMonthly(complData.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id })));
+    const monthly = compute.aggregateBillingMonthly(complData.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id })));
 
     sel.innerHTML = [
       '<option value="all">All Time</option>',

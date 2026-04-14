@@ -302,6 +302,64 @@ const compute = (() => {
       .map(g => _summarise(g, auditByMonth[g.month_key] || 0, complByMonth[g.month_key] || null));
   }
 
+  // ── 8b. Billing-cycle Monthly Aggregation ───────────────────────────
+  // Groups rows by merchant billing cycle: 26th of month N-1 → 25th of month N.
+  // A date on or after the 26th belongs to the NEXT calendar month's billing cycle.
+
+  function _billingMonthKey(date) {
+    let y = date.getFullYear();
+    let m = date.getMonth() + 1; // 1-12
+    if (date.getDate() >= 26) {
+      m += 1;
+      if (m > 12) { m = 1; y += 1; }
+    }
+    return `${y}-${String(m).padStart(2, '0')}`;
+  }
+
+  function _billingMonthLabel(monthKey) {
+    const [y, mo] = monthKey.split('-').map(Number);
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const startDate = new Date(y, mo - 2, 26); // JS wraps mo-2 < 0 → Dec of y-1
+    const endDate   = new Date(y, mo - 1, 25);
+    return `${MONTHS[startDate.getMonth()]} 26 \u2013 ${MONTHS[endDate.getMonth()]} 25, ${endDate.getFullYear()}`;
+  }
+
+  function aggregateBillingMonthly(data, auditData = [], complaintsData = []) {
+    const auditByMonth = {};
+    for (const row of auditData) {
+      if (!row.date) continue;
+      const mk = _billingMonthKey(row.date);
+      auditByMonth[mk] = (auditByMonth[mk] || 0) + row.audit_codes.length;
+    }
+
+    const complByMonth = {};
+    for (const row of complaintsData) {
+      if (!row.date) continue;
+      const mk = _billingMonthKey(row.date);
+      if (!complByMonth[mk]) complByMonth[mk] = { total: 0, inStoreYes: 0, inStoreNo: 0, byCategory: {} };
+      complByMonth[mk].total++;
+      if (row.in_store) complByMonth[mk].inStoreYes++; else complByMonth[mk].inStoreNo++;
+      const cat = row.complaint_category || 'unknown';
+      complByMonth[mk].byCategory[cat] = (complByMonth[mk].byCategory[cat] || 0) + 1;
+    }
+
+    const byMonth = {};
+    for (const row of data) {
+      if (!row.date) continue;
+      const key = _billingMonthKey(row.date);
+      if (!byMonth[key]) { byMonth[key] = { month_key: key, rows: [] }; }
+      byMonth[key].rows.push(row);
+    }
+
+    return Object.values(byMonth)
+      .sort((a, b) => a.month_key.localeCompare(b.month_key))
+      .map(g => {
+        const s = _summarise(g, auditByMonth[g.month_key] || 0, complByMonth[g.month_key] || null);
+        s.label = _billingMonthLabel(g.month_key);
+        return s;
+      });
+  }
+
   // ── 8. Daily Aggregation ─────────────────────────────────────────────
 
   function aggregateDaily(data, auditData = [], complaintsData = []) {
@@ -1291,6 +1349,7 @@ const compute = (() => {
     flagSlackers,
     aggregateWeekly,
     aggregateMonthly,
+    aggregateBillingMonthly,
     aggregateDaily,
     computeAuditAggregations,
     computeComplaintAggregations,
