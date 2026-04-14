@@ -1115,8 +1115,8 @@ const ui = (() => {
 
       return `<tr>
         ${_captainCell(captain.employee_name, captain.employee_id)}
-        <td class="${captain.zero_put ? 'cell-red' : ''}">${_fmt(captain.total_putaway_qty)}</td>
         <td>${_fmt(captain.total_putter_hours, 1)} h</td>
+        <td class="${captain.zero_put ? 'cell-red' : ''}">${_fmt(captain.total_putaway_qty)}</td>
         <td class="${cls}" title="${flagged ? '🚩 Flagged' : ''}">
           ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ` <span style="opacity:0.7;vertical-align:middle">${ICONS.flagSm}</span>` : ''}
         </td>
@@ -1128,8 +1128,8 @@ const ui = (() => {
     return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>
         ${_thSort('Captain', 'name', 'putting')}
-        ${_thSort('Putaway Qty', 'putaway_qty', 'putting')}
         ${_thSort('Putter Hours', 'put_hours', 'putting')}
+        ${_thSort('Putaway Qty', 'putaway_qty', 'putting')}
         ${_thSort('Items Put Away/Hr<br/><small style="font-weight:400;opacity:0.7">actual | personal | store</small>', 'iph', 'putting')}
         <th></th>
       </tr></thead>
@@ -1151,8 +1151,8 @@ const ui = (() => {
 
       return `<tr>
         ${_captainCell(captain.employee_name, captain.employee_id)}
-        <td class="${captain.zero_audit ? 'cell-red' : ''}">${_fmt(captain.total_racks_audited)}</td>
         <td>${_fmt(captain.total_auditor_hours, 1)} h</td>
+        <td class="${captain.zero_audit ? 'cell-red' : ''}">${_fmt(captain.total_racks_audited)}</td>
         <td class="${cls}" title="${flagged ? 'Flagged' : ''}">
           ${fmt(actual)} | ${fmt(personalAvg)} | ${fmt(storeAvg)}${flagged ? ` <span style="opacity:0.7;vertical-align:middle">${ICONS.flagSm}</span>` : ''}
         </td>
@@ -1164,8 +1164,8 @@ const ui = (() => {
     return `<div class="table-wrapper" style="border-radius:0;border:none;"><table class="dd-table">
       <thead><tr>
         ${_thSort('Captain', 'name', 'audit')}
-        ${_thSort('Racks Audited', 'racks', 'audit')}
         ${_thSort('Auditor Hours', 'audit_hours', 'audit')}
+        ${_thSort('Racks Audited', 'racks', 'audit')}
         ${_thSort('Audit Efficiency<br/><small style="font-weight:400;opacity:0.7">actual | personal | store (hr/rack)</small>', 'audit_hours_per_rack', 'audit')}
         <th></th>
       </tr></thead>
@@ -1515,6 +1515,7 @@ const ui = (() => {
       totalRacks,
       hpr:                   totalRacks > 0 ? totalAuditHrs / totalRacks : null,
       totalAuditHours:       totalAuditHrs,
+      totalActiveTime:       sum(rows, 'total_active_time') / 3600,
       avgScore:              rows.length ? rows.reduce((s, r) => s + (r.composite_slacker_score || 0), 0) / rows.length : null,
     };
   }
@@ -1788,6 +1789,7 @@ const ui = (() => {
     const clsPick       = colorCode(pickVals,   'HIGH');
     const clsBill       = colorCode(billVals,   'HIGH');
     const clsTotal      = colorCode(totalVals,  'HIGH');
+    const totalPickActHrs = pickActVals.reduce((a, v) => a + (v || 0), 0);
 
     const pickTableRows = groupDefs.map((g, i) => {
       const has = st(g.key).captainCount > 0;
@@ -1797,6 +1799,8 @@ const ui = (() => {
       const histPct = totalHistOrders > 0 && histOrdersVals[i]
         ? `${((histOrdersVals[i]/totalHistOrders)*100).toFixed(1)}%` : null;
       const pickActHrs = pickActVals[i];
+      const pickActPct = totalPickActHrs > 0 && pickActHrs > 0
+        ? `<span class="tiers-pct">${((pickActHrs / totalPickActHrs) * 100).toFixed(1)}%</span>` : '';
       return `
         <tr class="${has ? '' : 'tiers-row-empty'}">
           <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
@@ -1806,7 +1810,7 @@ const ui = (() => {
           <td class="${clsPick[i]}">${fmtDur(pickVals[i])}${histSub(h?.avgPickTime ?? null, fmtDur(h?.avgPickTime ?? null))}</td>
           <td class="${clsBill[i]}">${fmtDur(billVals[i])}${histSub(h?.avgBillingTime ?? null, fmtDur(h?.avgBillingTime ?? null))}</td>
           <td class="${clsTotal[i]}">${fmtDur(totalVals[i])}${histSub(h?.avgTotalTime ?? null, fmtDur(h?.avgTotalTime ?? null))}</td>
-          <td>${has && pickActHrs > 0 ? fmtNum(pickActHrs) + ' hrs' : '—'}</td>
+          <td>${has && pickActHrs > 0 ? `${fmtNum(pickActHrs)} hrs ${pickActPct}` : '—'}</td>
         </tr>`;
     }).join('');
 
@@ -1837,7 +1841,8 @@ const ui = (() => {
     const putQtyVals  = groupDefs.map(g => st(g.key).totalPutawayQty);
     const iphVals     = groupDefs.map(g => st(g.key).iph);
     const putHrVals   = groupDefs.map(g => st(g.key).totalPutHours);
-    const totalPutQty = putQtyVals.reduce((a, v) => a + (v || 0), 0);
+    const totalPutQty    = putQtyVals.reduce((a, v) => a + (v || 0), 0);
+    const totalPutHrsAll = putHrVals.reduce((a, v) => a + (v || 0), 0);
     const clsPutQty   = colorCode(putQtyVals, 'LOW');
     const clsIPH      = colorCode(iphVals,    'LOW');
 
@@ -1846,12 +1851,14 @@ const ui = (() => {
       const h   = hst(g.key);
       const pct = totalPutQty > 0 && putQtyVals[i]
         ? `<span class="tiers-pct">${((putQtyVals[i]/totalPutQty)*100).toFixed(1)}%</span>` : '';
+      const putHrPct = totalPutHrsAll > 0 && putHrVals[i] > 0
+        ? `<span class="tiers-pct">${((putHrVals[i] / totalPutHrsAll) * 100).toFixed(1)}%</span>` : '';
       return `
         <tr class="${has ? '' : 'tiers-row-empty'}">
           <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
           <td class="${clsPutQty[i]}">${has ? `${_fmt(putQtyVals[i], 0)} ${pct}` : '—'}</td>
           <td class="${clsIPH[i]}">${fmtNum(iphVals[i])}${histSub(h?.iph ?? null, fmtNum(h?.iph ?? null))}</td>
-          <td>${has && putHrVals[i] > 0 ? fmtNum(putHrVals[i]) + ' hrs' : '—'}</td>
+          <td>${has && putHrVals[i] > 0 ? `${fmtNum(putHrVals[i])} hrs ${putHrPct}` : '—'}</td>
         </tr>`;
     }).join('');
 
@@ -1875,21 +1882,24 @@ const ui = (() => {
       </div>`;
 
     // ── 4. Audit Flow ─────────────────────────────────────────────────
-    const rackVals    = groupDefs.map(g => st(g.key).totalRacks);
-    const hprVals     = groupDefs.map(g => st(g.key).hpr);
-    const auditHrVals = groupDefs.map(g => st(g.key).totalAuditHours);
+    const rackVals       = groupDefs.map(g => st(g.key).totalRacks);
+    const hprVals        = groupDefs.map(g => st(g.key).hpr);
+    const auditHrVals    = groupDefs.map(g => st(g.key).totalAuditHours);
+    const totalAuditHrsAll = auditHrVals.reduce((a, v) => a + (v || 0), 0);
     const clsRacks    = colorCode(rackVals, 'LOW');
     const clsHPR      = colorCode(hprVals,  'HIGH');
 
     const auditTableRows = groupDefs.map((g, i) => {
       const has = st(g.key).captainCount > 0 && rackVals[i] > 0;
       const h   = hst(g.key);
+      const auHrPct = totalAuditHrsAll > 0 && auditHrVals[i] > 0
+        ? `<span class="tiers-pct">${((auditHrVals[i] / totalAuditHrsAll) * 100).toFixed(1)}%</span>` : '';
       return `
         <tr class="${has ? '' : 'tiers-row-empty'}">
           <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
           <td class="${clsRacks[i]}">${has ? _fmt(rackVals[i], 0) : '—'}</td>
           <td class="${clsHPR[i]}">${fmtNum(hprVals[i], 2)}${histSub(h?.hpr ?? null, fmtNum(h?.hpr ?? null, 2))}</td>
-          <td>${has && auditHrVals[i] > 0 ? fmtNum(auditHrVals[i]) + ' hrs' : '—'}</td>
+          <td>${has && auditHrVals[i] > 0 ? `${fmtNum(auditHrVals[i])} hrs ${auHrPct}` : '—'}</td>
         </tr>`;
     }).join('');
 
@@ -1912,7 +1922,40 @@ const ui = (() => {
         </div>
       </div>`;
 
-    return `${bentoGrid}${pickSection}${putSection}${auditSection}`;
+    // ── 5. Total Active Time ──────────────────────────────────────────
+    const actVals     = groupDefs.map(g => st(g.key).totalActiveTime);
+    const totalActHrs = actVals.reduce((a, v) => a + (v || 0), 0);
+    const clsAct      = colorCode(actVals, 'LOW');
+
+    const actTableRows = groupDefs.map((g, i) => {
+      const has = actVals[i] > 0;
+      const pct = totalActHrs > 0 && actVals[i]
+        ? `<span class="tiers-pct">${((actVals[i] / totalActHrs) * 100).toFixed(1)}%</span>` : '';
+      return `
+        <tr class="${has ? '' : 'tiers-row-empty'}">
+          <td class="tiers-tier-name" style="color:${g.color}">${g.label}</td>
+          <td class="${clsAct[i]}">${has ? `${fmtNum(actVals[i])} hrs ${pct}` : '—'}</td>
+        </tr>`;
+    }).join('');
+
+    const actSection = `
+      <div class="tiers-flow-section">
+        <div class="tiers-section-header">
+          <div class="tiers-section-pip" style="background:#f59e0b"></div>
+          <h3 class="tiers-section-title">Total Active Time</h3>
+        </div>
+        <div class="table-wrapper" style="border-radius:12px;">
+          <table class="tiers-table">
+            <thead><tr>
+              <th>${groupLabel}</th>
+              <th>Total Active Time</th>
+            </tr></thead>
+            <tbody>${actTableRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    return `${bentoGrid}${pickSection}${putSection}${auditSection}${actSection}`;
   }
 
   // ── Captain Profile ────────────────────────────────────────────────────
