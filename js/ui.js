@@ -69,6 +69,29 @@ const ui = (() => {
   };
   const _FT_FLOWS = ['picking', 'putting', 'audit', 'fnv'];
 
+  // ── Staff Availability divisor (orders ÷ X = required hours) ─────────
+  const _STAFF_AVAIL_DEFAULT_DIVISOR = 6.8;
+
+  function _getStaffAvailDivisor() {
+    return parseFloat(localStorage.getItem('staffAvailDivisor') || _STAFF_AVAIL_DEFAULT_DIVISOR);
+  }
+
+  function updateStaffAvailDivisor(val) {
+    const v = parseFloat(val);
+    if (!isNaN(v) && v > 0) {
+      localStorage.setItem('staffAvailDivisor', v);
+      const msg = document.getElementById('staff-avail-saved-msg');
+      if (msg) { msg.style.display = ''; setTimeout(() => { msg.style.display = 'none'; }, 2000); }
+      renderStoreOverview();
+    }
+  }
+
+  function resetStaffAvailDivisor() {
+    localStorage.removeItem('staffAvailDivisor');
+    renderConfigPanel();
+    renderStoreOverview();
+  }
+
   function _getFlowThresholds(flow) {
     const stored = JSON.parse(localStorage.getItem('flowThresholds') || '{}');
     const defaults = _FT_DEFAULTS[flow] || { critical: 2, flagged: 1, borderline: 0.5 };
@@ -2585,6 +2608,24 @@ const ui = (() => {
         </div>
         <p class="config-hint" style="margin-top:6px">Defaults — Picking/Audit: 0.5 · 0.25 · 0.1 &nbsp;|&nbsp; Putting: 0.25 · 0.1 · 0.01 &nbsp;|&nbsp; FNV: 2.0 · 1.0 · 0.5</p>
       </div>
+
+      <div class="config-card">
+        <h3 class="config-card-title">Staff Availability</h3>
+        <p class="config-hint" style="margin-bottom:12px">Controls the divisor in the formula: <strong>Active Hours − (Orders ÷ X)</strong>. Adjust X to reflect how many orders one captain-hour of capacity should handle.</p>
+        <div class="config-row" style="align-items:flex-end;gap:16px">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span class="dd-control-label">Orders per Captain-Hour (X)</span>
+            <input type="number" id="staff-avail-divisor-input" min="0.1" step="0.1"
+                   value="${_getStaffAvailDivisor()}" style="width:100px"
+                   onchange="ui.updateStaffAvailDivisor(this.value)" />
+            <span class="config-hint" style="margin-top:2px">Default: ${_STAFF_AVAIL_DEFAULT_DIVISOR}</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn" onclick="ui.resetStaffAvailDivisor()">Reset to Default</button>
+            <span id="staff-avail-saved-msg" class="slab-saved-msg" style="display:none">Saved!</span>
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -3752,6 +3793,8 @@ const ui = (() => {
     resetSlabOverrides,
     saveFlowThresholds,
     resetFlowThresholds,
+    updateStaffAvailDivisor,
+    resetStaffAvailDivisor,
     toggleTheme,
     filterSupervisors,
     updateSupervisorBtn: _updateSupervisorBtn,

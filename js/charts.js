@@ -1078,9 +1078,10 @@ const charts = (() => {
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return;
 
+    const divisor = parseFloat(localStorage.getItem('staffAvailDivisor') || 6.8);
     const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
     const data   = aggregated.map(d =>
-      +((d.total_active_time || 0) - (d.total_orders_picked || 0) / 6.8).toFixed(2)
+      +((d.total_active_time || 0) - (d.total_orders_picked || 0) / divisor).toFixed(2)
     );
 
     _instances[canvasId] = new Chart(ctx, {
