@@ -799,55 +799,60 @@ const charts = (() => {
     });
   }
 
-  // ── Chart 12: RCA Bar ──────────────────────────────────────────────
+  // ── Chart 12: RCA Stacked Bar Over Time ───────────────────────────
 
-  function renderRCADonutChart(canvasId, sortedRCA) {
+  function renderRCADonutChart(canvasId, periodData) {
     _destroy(canvasId);
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return;
 
-    const rcaColors = [COLORS.red, COLORS.amber, '#facc15', COLORS.purple, COLORS.teal, COLORS.pink, COLORS.silver];
-    const labels = sortedRCA.map(r => r.rca);
-    const data   = sortedRCA.map(r => r.count);
-    const total  = data.reduce((s, v) => s + v, 0);
+    const rcaColorList = [COLORS.red, COLORS.amber, '#facc15', COLORS.purple, COLORS.teal, COLORS.pink, COLORS.silver, COLORS.accent];
+
+    const labels = periodData.map(d => d.label || d.weekKey || d.monthKey);
+
+    // Collect all RCA keys across all periods, ordered by total count desc
+    const rcaTotals = {};
+    for (const d of periodData) {
+      for (const [k, v] of Object.entries(d.byRCA || {})) {
+        rcaTotals[k] = (rcaTotals[k] || 0) + v;
+      }
+    }
+    const allRCAs = Object.keys(rcaTotals).sort((a, b) => rcaTotals[b] - rcaTotals[a]);
+
+    const datasets = allRCAs.map((rca, i) => ({
+      label: rca.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      data: periodData.map(d => {
+        const count = (d.byRCA || {})[rca] || 0;
+        const orders = d.totalOrdersPicked || 0;
+        return orders > 0 ? +((count / orders) * 100).toFixed(3) : 0;
+      }),
+      _rawCounts: periodData.map(d => (d.byRCA || {})[rca] || 0),
+      backgroundColor: ALPHA(rcaColorList[i % rcaColorList.length], 0.8),
+      stack: 'rca',
+    }));
 
     _instances[canvasId] = new Chart(ctx, {
       type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          label: 'Complaints',
-          data,
-          backgroundColor: sortedRCA.map((_, i) => ALPHA(rcaColors[i % rcaColors.length], 0.75)),
-          borderColor:     sortedRCA.map((_, i) => rcaColors[i % rcaColors.length]),
-          borderWidth: 1,
-          borderRadius: 4,
-        }],
-      },
+      data: { labels, datasets },
       options: {
         ...BASE_OPTS,
-        indexAxis: 'y',
         plugins: {
           ...BASE_OPTS.plugins,
-          legend: { display: false },
           tooltip: {
-            ...BASE_OPTS.plugins.tooltip,
+            ...BASE_OPTS.plugins?.tooltip,
+            itemSort: (a, b) => b.datasetIndex - a.datasetIndex,
             callbacks: {
-              label: (ctx) => ` ${ctx.raw}  (${total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0}%)`,
+              label(ctx) {
+                const raw = ctx.dataset._rawCounts?.[ctx.dataIndex] ?? 0;
+                return ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}%  (${raw})`;
+              },
             },
           },
         },
         scales: {
-          x: {
-            grid: { color: _gridColor() },
-            ticks: { font: { size: 11, family: 'Manrope' }, color: _tickColor() },
-            beginAtZero: true,
-            title: { display: true, text: 'Complaints', color: _tickColor() },
-          },
-          y: {
-            grid: { display: false },
-            ticks: { font: { size: 11, family: 'Manrope' }, color: _tickColor() },
-          },
+          ...BASE_OPTS.scales,
+          y: { ...BASE_OPTS.scales.y, stacked: true, title: { display: true, text: '% of Total Orders', color: TICK_COLOR } },
+          x: { ...BASE_OPTS.scales.x, stacked: true },
         },
       },
     });

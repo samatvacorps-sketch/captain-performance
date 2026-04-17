@@ -3388,7 +3388,7 @@ const ui = (() => {
             <div class="bento-card-header">
               <div>
                 <h3 class="bento-card-title">RCA Breakdown</h3>
-                <p class="bento-card-subtitle">Root cause distribution</p>
+                <p class="bento-card-subtitle">% of total orders · stacked by root cause</p>
               </div>
             </div>
             <canvas id="chart-compl-rca"></canvas>
@@ -3470,7 +3470,7 @@ const ui = (() => {
     // Render charts
     _complCatPeriodData = periodData;
     charts.renderComplaintTrendChart('chart-compl-trend', periodData);
-    charts.renderRCADonutChart('chart-compl-rca', agg.categoryIntel.sorted.rca);
+    charts.renderRCADonutChart('chart-compl-rca', periodData);
     charts.renderComplaintCategoryChart('chart-compl-category', periodData, _complCatMode);
     charts.renderL0CategoryChart('chart-compl-l0', agg.categoryIntel.sorted.l0);
 
