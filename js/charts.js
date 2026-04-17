@@ -145,6 +145,15 @@ const charts = (() => {
     },
   });
 
+  function _getProductivityWeights() {
+    const stored = JSON.parse(localStorage.getItem('productivityWeights') || '{}');
+    return {
+      order:   +(stored.order   ?? CONFIG.PRODUCTIVITY_WEIGHTS.order),
+      putaway: +(stored.putaway ?? CONFIG.PRODUCTIVITY_WEIGHTS.putaway),
+      rack:    +(stored.rack    ?? CONFIG.PRODUCTIVITY_WEIGHTS.rack),
+    };
+  }
+
   function _destroy(id) {
     if (_instances[id]) {
       _instances[id].destroy();
@@ -883,7 +892,7 @@ const charts = (() => {
     const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
     const activeTime = aggregated.map(d => +(d.total_active_time || 0).toFixed(1));
 
-    const w = CONFIG.PRODUCTIVITY_WEIGHTS;
+    const w = _getProductivityWeights();
     const productivity = aggregated.map(d =>
       Math.round((d.total_orders_picked || 0) * w.order
                + (d.total_putaway_qty || 0) * w.putaway
@@ -1023,7 +1032,7 @@ const charts = (() => {
     if (!ctx) return;
 
     const labels = aggregated.map(d => d.label || d.week_key || d.month_key);
-    const w = CONFIG.PRODUCTIVITY_WEIGHTS;
+    const w = _getProductivityWeights();
     const data = aggregated.map(d => {
       const hrs = d.total_active_time || 0;
       if (hrs === 0) return null;

@@ -69,6 +69,35 @@ const ui = (() => {
   };
   const _FT_FLOWS = ['picking', 'putting', 'audit', 'fnv'];
 
+  // ── Productivity Weights ─────────────────────────────────────────────
+  const _PW_DEFAULTS = { order: 6, putaway: 1, rack: 315 };
+
+  function _getProductivityWeights() {
+    const stored = JSON.parse(localStorage.getItem('productivityWeights') || '{}');
+    return {
+      order:   +(stored.order   ?? _PW_DEFAULTS.order),
+      putaway: +(stored.putaway ?? _PW_DEFAULTS.putaway),
+      rack:    +(stored.rack    ?? _PW_DEFAULTS.rack),
+    };
+  }
+
+  function updateProductivityWeights() {
+    const order   = parseFloat(document.getElementById('pw-order')?.value);
+    const putaway = parseFloat(document.getElementById('pw-putaway')?.value);
+    const rack    = parseFloat(document.getElementById('pw-rack')?.value);
+    if ([order, putaway, rack].some(isNaN)) return;
+    localStorage.setItem('productivityWeights', JSON.stringify({ order, putaway, rack }));
+    const msg = document.getElementById('pw-saved-msg');
+    if (msg) { msg.style.display = ''; setTimeout(() => { msg.style.display = 'none'; }, 2000); }
+    renderStoreOverview();
+  }
+
+  function resetProductivityWeights() {
+    localStorage.removeItem('productivityWeights');
+    renderConfigPanel();
+    renderStoreOverview();
+  }
+
   // ── Staff Availability divisor (orders ÷ X = required hours) ─────────
   const _STAFF_AVAIL_DEFAULT_DIVISOR = 6.8;
 
@@ -2610,6 +2639,39 @@ const ui = (() => {
       </div>
 
       <div class="config-card">
+        <div class="config-card-header">
+          <div class="config-card-icon stat-icon-teal">${ICONS.barChart}</div>
+          <h3>Productivity Weights</h3>
+        </div>
+        <p class="config-hint" style="margin-bottom:12px">Each activity is converted to <strong>item-equivalents</strong> using these multipliers, then summed to compute the Productivity and IPH charts.<br><br><code>Productivity = (Orders × W<sub>order</sub>) + (Putaway Items × W<sub>putaway</sub>) + (Racks Audited × W<sub>rack</sub>)</code></p>
+        <div class="config-row" style="align-items:flex-end;gap:24px;flex-wrap:wrap">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span class="dd-control-label">Order Weight (W<sub>order</sub>)</span>
+            <input type="number" id="pw-order" min="0.1" step="0.5"
+                   value="${_getProductivityWeights().order}" style="width:100px" />
+            <span class="config-hint" style="margin-top:2px">Item-eq per order picked. Default: ${_PW_DEFAULTS.order}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span class="dd-control-label">Putaway Weight (W<sub>putaway</sub>)</span>
+            <input type="number" id="pw-putaway" min="0.1" step="0.1"
+                   value="${_getProductivityWeights().putaway}" style="width:100px" />
+            <span class="config-hint" style="margin-top:2px">Item-eq per putaway item. Default: ${_PW_DEFAULTS.putaway}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span class="dd-control-label">Rack Weight (W<sub>rack</sub>)</span>
+            <input type="number" id="pw-rack" min="1" step="5"
+                   value="${_getProductivityWeights().rack}" style="width:100px" />
+            <span class="config-hint" style="margin-top:2px">Item-eq per rack audited. Default: ${_PW_DEFAULTS.rack}</span>
+          </div>
+        </div>
+        <div class="config-row" style="margin-top:14px;gap:8px">
+          <button class="btn active" onclick="ui.updateProductivityWeights()">Save</button>
+          <button class="btn" onclick="ui.resetProductivityWeights()">Reset to Default</button>
+          <span id="pw-saved-msg" class="slab-saved-msg" style="display:none">Saved!</span>
+        </div>
+      </div>
+
+      <div class="config-card">
         <h3 class="config-card-title">Staff Availability</h3>
         <p class="config-hint" style="margin-bottom:12px">Controls the divisor in the formula: <strong>Active Hours − (Orders ÷ X)</strong>. Adjust X to reflect how many orders one captain-hour of capacity should handle.</p>
         <div class="config-row" style="align-items:flex-end;gap:16px">
@@ -3793,6 +3855,8 @@ const ui = (() => {
     resetSlabOverrides,
     saveFlowThresholds,
     resetFlowThresholds,
+    updateProductivityWeights,
+    resetProductivityWeights,
     updateStaffAvailDivisor,
     resetStaffAvailDivisor,
     toggleTheme,
