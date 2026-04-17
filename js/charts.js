@@ -799,7 +799,7 @@ const charts = (() => {
     });
   }
 
-  // ── Chart 12: RCA Donut ────────────────────────────────────────────
+  // ── Chart 12: RCA Bar ──────────────────────────────────────────────
 
   function renderRCADonutChart(canvasId, sortedRCA) {
     _destroy(canvasId);
@@ -812,30 +812,41 @@ const charts = (() => {
     const total  = data.reduce((s, v) => s + v, 0);
 
     _instances[canvasId] = new Chart(ctx, {
-      type: 'doughnut',
+      type: 'bar',
       data: {
         labels,
         datasets: [{
+          label: 'Complaints',
           data,
-          backgroundColor: sortedRCA.map((_, i) => ALPHA(rcaColors[i % rcaColors.length], 0.8)),
-          borderColor: _isLight() ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.3)',
+          backgroundColor: sortedRCA.map((_, i) => ALPHA(rcaColors[i % rcaColors.length], 0.75)),
+          borderColor:     sortedRCA.map((_, i) => rcaColors[i % rcaColors.length]),
           borderWidth: 1,
+          borderRadius: 4,
         }],
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        cutout: '60%',
+        ...BASE_OPTS,
+        indexAxis: 'y',
         plugins: {
-          legend: {
-            position: 'bottom',
-            labels: { font: { size: 11, family: 'Manrope' }, color: TICK_COLOR, padding: 12, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8 },
-          },
+          ...BASE_OPTS.plugins,
+          legend: { display: false },
           tooltip: {
             ...BASE_OPTS.plugins.tooltip,
             callbacks: {
-              label: (ctx) => `${ctx.label}: ${ctx.raw} (${total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0}%)`,
+              label: (ctx) => ` ${ctx.raw}  (${total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0}%)`,
             },
+          },
+        },
+        scales: {
+          x: {
+            grid: { color: _gridColor() },
+            ticks: { font: { size: 11, family: 'Manrope' }, color: _tickColor() },
+            beginAtZero: true,
+            title: { display: true, text: 'Complaints', color: _tickColor() },
+          },
+          y: {
+            grid: { display: false },
+            ticks: { font: { size: 11, family: 'Manrope' }, color: _tickColor() },
           },
         },
       },
