@@ -3384,7 +3384,7 @@ const ui = (() => {
             </div>
             <canvas id="chart-compl-trend"></canvas>
           </div>
-          <div class="bento-card bento-small">
+          <div class="bento-card bento-large">
             <div class="bento-card-header">
               <div>
                 <h3 class="bento-card-title">RCA Breakdown</h3>
