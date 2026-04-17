@@ -820,7 +820,7 @@ const charts = (() => {
     const allRCAs = Object.keys(rcaTotals).sort((a, b) => rcaTotals[b] - rcaTotals[a]);
 
     const datasets = allRCAs.map((rca, i) => ({
-      label: rca.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      label: rca,
       data: periodData.map(d => {
         const count = (d.byRCA || {})[rca] || 0;
         const orders = d.totalOrdersPicked || 0;

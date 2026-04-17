@@ -488,6 +488,16 @@ const compute = (() => {
     return (val !== undefined && val !== null) ? val : null;
   }
 
+  // Normalize raw RCA strings: trim, strip trailing punctuation, title-case.
+  // Collapses "picker fault", "Picker fault ;", "PICKER FAULT" → "Picker Fault".
+  function _normalizeRCA(raw) {
+    if (!raw) return 'Unknown';
+    return raw.trim()
+      .replace(/[;:,.\s]+$/, '')   // strip trailing punctuation/whitespace
+      .toLowerCase()
+      .replace(/\b\w/g, c => c.toUpperCase()) || 'Unknown';
+  }
+
   function _mean(arr) {
     return arr.reduce((a, b) => a + b, 0) / arr.length;
   }
@@ -823,7 +833,7 @@ const compute = (() => {
       entry.byCategory[cat] = (entry.byCategory[cat] || 0) + 1;
       if (row.in_store) entry.byCategoryInStore[cat] = (entry.byCategoryInStore[cat] || 0) + 1;
       else              entry.byCategoryOutStore[cat] = (entry.byCategoryOutStore[cat] || 0) + 1;
-      const rca = row.rca || 'Unknown';
+      const rca = _normalizeRCA(row.rca);
       entry.byRCA[rca] = (entry.byRCA[rca] || 0) + 1;
     }
 
@@ -1010,7 +1020,7 @@ const compute = (() => {
     for (const row of complaintsData) {
       const cat = row.complaint_category || 'unknown';
       totalsByCategory[cat] = (totalsByCategory[cat] || 0) + 1;
-      const rca = row.rca || 'Unknown';
+      const rca = _normalizeRCA(row.rca);
       totalsByRCA[rca] = (totalsByRCA[rca] || 0) + 1;
     }
 
@@ -1124,7 +1134,7 @@ const compute = (() => {
 
     const byRCA = new Map();
     for (const row of complaintsData) {
-      const rca = row.rca || 'Unknown';
+      const rca = _normalizeRCA(row.rca);
       let entry = byRCA.get(rca);
       if (!entry) { entry = { count: 0 }; byRCA.set(rca, entry); }
       entry.count++;
