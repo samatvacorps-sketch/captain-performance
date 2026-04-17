@@ -8,6 +8,11 @@
 const charts = (() => {
   const _instances = {};
 
+  // Register chartjs-plugin-zoom once (loaded via CDN in index.html).
+  if (typeof window !== 'undefined' && window.Chart && window.ChartZoom) {
+    window.Chart.register(window.ChartZoom);
+  }
+
   // ── Colour Palette ────────────────────────────────────────────────────
 
   const _COLORS_DARK = {
@@ -101,6 +106,16 @@ const charts = (() => {
           titleColor: lc,
           bodyColor: tc,
         },
+        zoom: {
+          zoom: {
+            wheel: { enabled: true, speed: 0.1 },
+            pinch: { enabled: true },
+            mode: 'x',
+          },
+          limits: {
+            x: { minRange: 2 },
+          },
+        },
       },
       scales: {
         x: {
@@ -136,6 +151,15 @@ const charts = (() => {
       delete _instances[id];
     }
     _refreshThemeVars(); // pick up current theme colors for the new chart
+    // Attach dblclick-to-reset-zoom once per canvas (idempotent).
+    const canvas = document.getElementById(id);
+    if (canvas && !canvas.dataset.zoomResetBound) {
+      canvas.addEventListener('dblclick', () => {
+        const inst = _instances[id];
+        if (inst && typeof inst.resetZoom === 'function') inst.resetZoom();
+      });
+      canvas.dataset.zoomResetBound = '1';
+    }
   }
 
   // ── Chart 1: Orders Picked (left) vs Picking Hours (right) ───────────
