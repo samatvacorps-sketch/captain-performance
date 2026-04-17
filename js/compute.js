@@ -363,6 +363,13 @@ const compute = (() => {
   // ── 8. Daily Aggregation ─────────────────────────────────────────────
 
   function aggregateDaily(data, auditData = [], complaintsData = []) {
+    const auditByDate = {};
+    for (const row of auditData) {
+      if (!row.date) continue;
+      const dk = _dk(row.date);
+      auditByDate[dk] = (auditByDate[dk] || 0) + row.audit_codes.length;
+    }
+
     const complByDate = {};
     for (const row of complaintsData) {
       if (!row.date) continue;
@@ -385,7 +392,7 @@ const compute = (() => {
     return Object.values(byDate)
       .sort((a, b) => a.date - b.date)
       .map(g => ({
-        ..._summarise(g, 0, complByDate[g.date_key] || null),
+        ..._summarise(g, auditByDate[g.date_key] || 0, complByDate[g.date_key] || null),
         date_key: g.date_key,
         label: g.date_key,
       }));
