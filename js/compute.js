@@ -490,12 +490,12 @@ const compute = (() => {
 
   // Normalize raw RCA strings: trim, strip trailing punctuation, title-case.
   // Collapses "picker fault", "Picker fault ;", "PICKER FAULT" → "Picker Fault".
+  // Purely numeric values (e.g. order IDs accidentally in rca column) → "Unknown".
   function _normalizeRCA(raw) {
     if (!raw) return 'Unknown';
-    return raw.trim()
-      .replace(/[;:,.\s]+$/, '')   // strip trailing punctuation/whitespace
-      .toLowerCase()
-      .replace(/\b\w/g, c => c.toUpperCase()) || 'Unknown';
+    const trimmed = raw.trim().replace(/[;:,.\s]+$/, '');
+    if (!trimmed || /^\d+$/.test(trimmed)) return 'Unknown';
+    return trimmed.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
   }
 
   function _mean(arr) {
