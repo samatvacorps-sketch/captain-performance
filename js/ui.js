@@ -4022,33 +4022,26 @@ const ui = (() => {
     const monthKey = document.getElementById('incentive-month')?.value;
     if (!monthKey) return;
 
-    // Attendance bonus uses raw daily hours plus effective-dated roster rows.
-    const dailyData = _supervisorFilter(sheets.getCached() || []);
     // Picking: use flagged daily data (has flows.is_picking)
     const flaggedData = _supervisorFilter(app.getFlaggedData() || []);
     // Audit: use Audits sheet (has audit_codes array for correct rack counts)
     const auditSheetData = _supervisorFilter(sheets.getAuditCached() || []);
-    const rosterRows = _supervisorFilter(sheets.getRosterCached() || []);
 
-    if ((!dailyData || dailyData.length === 0) && (!flaggedData || flaggedData.length === 0) && (!auditSheetData || auditSheetData.length === 0) && (!rosterRows || rosterRows.length === 0)) return;
+    if (!flaggedData || flaggedData.length === 0) return;
 
-    const attendanceOverrides = _getAttendanceOverrides();
-    const attendanceOverrideSig = _attendanceOverrideSignature(monthKey, attendanceOverrides);
-    const cacheKey = `${monthKey}_${dailyData.length}_${flaggedData.length}_${auditSheetData.length}_${rosterRows.length}_${attendanceOverrideSig}`;
+    const cacheKey = `${monthKey}_${flaggedData.length}_${auditSheetData.length}`;
     if (_incentiveCacheKey !== cacheKey) {
       // Use any date-bearing data to derive week keys for this month
-      const weekSource = dailyData.length > 0 ? dailyData : flaggedData;
-      const weekKeys = compute.getWeekKeysForMonth(weekSource, monthKey);
+      const weekKeys = compute.getWeekKeysForMonth(flaggedData, monthKey);
       const slabOverrides = JSON.parse(localStorage.getItem('incentiveSlabOverrides') || '{}');
       const slabOverride  = slabOverrides[monthKey] || null;
       const picking = compute.computePickingIncentives(flaggedData, weekKeys, slabOverride);
       const audit   = compute.computeAuditIncentives(auditSheetData, monthKey);
-      const attendance = compute.computeAttendanceBonus(dailyData, rosterRows, monthKey, attendanceOverrides);
-      _incentiveCache = { weekKeys, picking, audit, attendance };
+      _incentiveCache = { weekKeys, picking, audit };
       _incentiveCacheKey = cacheKey;
     }
 
-    const { weekKeys, picking, audit, attendance } = _incentiveCache;
+    const { weekKeys, picking, audit } = _incentiveCache;
 
     // ── Week labels: "Mar 30 – Apr 5 (2026)" style ──
     const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -4060,16 +4053,14 @@ const ui = (() => {
     });
 
     // ── Aggregate totals ──
-    let totalPicking = 0, totalAudit = 0, totalAttendance = 0, earningCount = 0;
-    const allCaptains = new Set([...picking.keys(), ...audit.keys(), ...attendance.keys()]);
+    let totalPicking = 0, totalAudit = 0, earningCount = 0;
+    const allCaptains = new Set([...picking.keys(), ...audit.keys()]);
     for (const empId of allCaptains) {
       const p = picking.get(empId)?.total || 0;
       const a = audit.get(empId)?.amount || 0;
-      const att = attendance.get(empId)?.bonus_amount || 0;
       totalPicking += p;
       totalAudit += a;
-      totalAttendance += att;
-      if (p > 0 || a > 0 || att > 0) earningCount++;
+      if (p > 0 || a > 0) earningCount++;
     }
 
     // ── Stat cards ──
@@ -4085,12 +4076,8 @@ const ui = (() => {
           <div class="stat-value" style="color:var(--green)">\u20B9${_fmt(totalAudit)}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Attendance Bonus</div>
-          <div class="stat-value" style="color:var(--yellow)">\u20B9${_fmt(totalAttendance)}</div>
-        </div>
-        <div class="stat-card">
           <div class="stat-label">Total Payout</div>
-          <div class="stat-value">\u20B9${_fmt(totalPicking + totalAudit + totalAttendance)}</div>
+          <div class="stat-value">\u20B9${_fmt(totalPicking + totalAudit)}</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Captains Earning</div>
@@ -4099,7 +4086,7 @@ const ui = (() => {
     }
 
     // ── Unified table ──
-    // Columns: Captain | [W1 Picking] [W2 Picking] ... | Audit Total | Attendance Bonus | Total Incentive
+    // Columns: Captain | [W1 Picking] [W2 Picking] ... | Audit Total | Total Incentive
     const tableEl = document.getElementById('incentive-table-content');
     if (!tableEl) return;
 
@@ -4108,12 +4095,10 @@ const ui = (() => {
     for (const empId of allCaptains) {
       const cap   = picking.get(empId);
       const aud   = audit.get(empId);
-      const att   = attendance.get(empId);
-      const name  = cap?.employee_name || aud?.employee_name || att?.employee_name || empId;
+      const name  = cap?.employee_name || aud?.employee_name || empId;
       const pTotal = cap?.total || 0;
       const aAmt   = aud?.amount || 0;
-      const attAmt = att?.bonus_amount || 0;
-      combined.push({ empId, name, cap, aud, att, pTotal, aAmt, attAmt, total: pTotal + aAmt + attAmt });
+      combined.push({ empId, name, cap, aud, pTotal, aAmt, total: pTotal + aAmt });
     }
     combined.sort((a, b) => b.total - a.total);
 
@@ -4139,21 +4124,11 @@ const ui = (() => {
         auditCell = `<td style="color:var(--text-muted)">—</td>`;
       }
 
-      let attendanceCell;
-      if (c.att) {
-        const detail = `FT ${_fmt(c.att.ft_days)} / PT ${_fmt(c.att.pt_days)} · offs ${_fmt(c.att.actual_offs)}/${_fmt(c.att.allowed_offs)}`;
-        const missing = c.att.missing_type_days ? ` · missing ${_fmt(c.att.missing_type_days)}` : '';
-        attendanceCell = `<td class="${c.att.bonus_amount > 0 ? 'cell-green' : ''}">\u20B9${_fmt(c.att.bonus_amount)}<div style="font-size:11px;color:var(--text-muted);font-weight:400;margin-top:2px">${detail}${missing}</div><div style="font-size:11px;color:${c.att.eligible ? 'var(--green)' : 'var(--yellow)'};font-weight:700;margin-top:2px">${_esc(c.att.reason)}</div></td>`;
-      } else {
-        attendanceCell = `<td style="color:var(--text-muted)">—</td>`;
-      }
-
       const rowClass = c.total > 0 ? '' : 'incentive-zero';
       return `<tr class="${rowClass}">
         <td><strong>${_esc(c.name)}</strong><br><small style="color:var(--text-muted)">${c.empId}</small></td>
         ${weekCells}
         ${auditCell}
-        ${attendanceCell}
         <td><strong>\u20B9${_fmt(c.total)}</strong></td>
       </tr>`;
     }).join('');
@@ -4172,7 +4147,6 @@ const ui = (() => {
             <th>Captain</th>
             ${weekHeaders}
             <th>Audit Total</th>
-            <th>Attendance Bonus</th>
             <th>Total Incentive</th>
           </tr></thead>
           <tbody>
@@ -4183,8 +4157,7 @@ const ui = (() => {
               <td><strong>TOTAL</strong></td>
               ${weekTotals}
               <td><strong>\u20B9${_fmt(totalAudit)}</strong></td>
-              <td><strong>\u20B9${_fmt(totalAttendance)}</strong></td>
-              <td><strong>\u20B9${_fmt(totalPicking + totalAudit + totalAttendance)}</strong></td>
+              <td><strong>\u20B9${_fmt(totalPicking + totalAudit)}</strong></td>
             </tr>
           </tfoot>
         </table>
