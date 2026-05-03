@@ -2389,17 +2389,41 @@ tr.incentive-zero td { opacity: 0.45; }
   font-weight: 600;
 }
 
-.attendance-table-wrapper {
-  max-height: calc(100vh - 330px);
-  overflow: auto;
-  position: relative;
-}
-
 .attendance-table {
   min-width: max-content;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
+}
+
+.attendance-shell {
+  display: grid;
+  grid-template-columns: 364px minmax(0, 1fr);
+  align-items: start;
+  max-height: calc(100vh - 330px);
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--card-bg);
+}
+
+.attendance-identity-pane {
+  overflow: hidden;
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.attendance-scroll-pane {
+  overflow-x: auto;
+  overflow-y: visible;
+  border: none;
+  border-radius: 0;
+}
+
+.attendance-identity-table,
+.attendance-values-table {
+  width: auto;
 }
 
 .attendance-table th,
@@ -2413,6 +2437,7 @@ tr.incentive-zero td { opacity: 0.45; }
   top: 0;
   z-index: 4;
   cursor: pointer;
+  height: 58px;
 }
 
 .attendance-table tfoot td {
@@ -2422,6 +2447,15 @@ tr.incentive-zero td { opacity: 0.45; }
   background: var(--surface-high);
   border-top: 1px solid var(--border);
   font-weight: 800;
+  height: 48px;
+}
+
+.attendance-table tbody tr {
+  height: 74px;
+}
+
+.attendance-table tbody td {
+  height: 74px;
 }
 
 .attendance-id-col,
@@ -2598,7 +2632,10 @@ td.attendance-name-col {
 
 @media (max-width: 700px) {
   .attendance-summary-grid { grid-template-columns: 1fr; }
-  .attendance-table-wrapper { max-height: calc(100vh - 380px); }
+  .attendance-shell {
+    grid-template-columns: 324px minmax(0, 1fr);
+    max-height: calc(100vh - 380px);
+  }
   th.attendance-name-col,
   td.attendance-name-col {
     width: 196px;
@@ -2822,6 +2859,7 @@ body,
 .config-card,
 .flags-captain-card,
 .flags-metric-card,
+.attendance-shell,
 .attendance-select,
 .attendance-table th,
 .attendance-table td,
@@ -2849,7 +2887,7 @@ body,
 [data-theme="light"] .profile-metric-card,
 [data-theme="light"] .config-card,
 [data-theme="light"] .flags-metric-card,
-[data-theme="light"] .attendance-table-wrapper,
+[data-theme="light"] .attendance-shell,
 [data-theme="light"] .tier-metric-card,
 [data-theme="light"] .tier-iph-card,
 [data-theme="light"] .flow-section,
