@@ -1292,14 +1292,14 @@ const ui = (() => {
     const rosterRows = sheets.getRosterCached();
     const dates = _attendanceMonthDates(year, month);
     const hoursByKey = _attendanceHoursByKey(data);
-    const workedIds = _attendanceWorkedCaptainIds(dates, hoursByKey);
-    const captains = _attendanceCaptains(rosterRows).filter(c => workedIds.has(c.id));
     const rosterByCaptain = _attendanceRosterByCaptain(rosterRows);
+    const fullDayIds = _attendanceFullDayCaptainIds(dates, hoursByKey, rosterByCaptain);
+    const captains = _attendanceCaptains(rosterRows).filter(c => fullDayIds.has(c.id));
     const overrides = _getAttendanceOverrides();
     const summary = { active: 0, full: 0, half: 0, off: 0, na: 0, totalStaff: _attendanceMonthTotalHours(dates, hoursByKey) };
 
     if (captains.length === 0) {
-      gridEl.innerHTML = `<p class="placeholder-text">No captains have Daily Metrics work hours in ${_esc(_attendanceMonthLabel(monthKey))}.</p>`;
+      gridEl.innerHTML = `<p class="placeholder-text">No captains have a full working day in ${_esc(_attendanceMonthLabel(monthKey))}.</p>`;
       _renderAttendanceSummary(summary, monthKey);
       return;
     }
@@ -1497,14 +1497,13 @@ const ui = (() => {
     return out;
   }
 
-  function _attendanceWorkedCaptainIds(dates, hoursByKey) {
-    const dateSet = new Set(dates.map(_isoDateStr));
+  function _attendanceFullDayCaptainIds(dates, hoursByKey, rosterByCaptain) {
     const ids = new Set();
-    for (const [key, hrs] of hoursByKey.entries()) {
-      const i = key.lastIndexOf('_');
-      const id = key.slice(0, i);
-      const iso = key.slice(i + 1);
-      if (id && dateSet.has(iso) && hrs > 0) ids.add(id);
+    for (const date of dates) {
+      for (const id of rosterByCaptain.keys()) {
+        const auto = _computeAttendanceStatus(id, date, hoursByKey, rosterByCaptain);
+        if (_attendanceWorkDayValue(auto.status) >= 1) ids.add(id);
+      }
     }
     return ids;
   }

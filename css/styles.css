@@ -2426,8 +2426,6 @@ tr.incentive-zero td { opacity: 0.45; }
 
 .attendance-id-col,
 .attendance-name-col {
-  position: sticky;
-  z-index: 8;
   background: var(--surface-high);
   text-align: left !important;
   overflow: hidden;
@@ -2455,17 +2453,6 @@ td.attendance-name-col {
 td.attendance-id-col,
 td.attendance-name-col {
   background: var(--card-bg);
-  z-index: 7;
-}
-
-.attendance-table thead th.attendance-id-col,
-.attendance-table thead th.attendance-name-col {
-  z-index: 10;
-}
-
-.attendance-table tfoot td.attendance-id-col,
-.attendance-table tfoot td.attendance-name-col {
-  z-index: 9;
 }
 
 .attendance-table tbody tr:hover td.attendance-id-col,
@@ -2614,7 +2601,6 @@ td.attendance-name-col {
   .attendance-table-wrapper { max-height: calc(100vh - 380px); }
   th.attendance-name-col,
   td.attendance-name-col {
-    left: 128px;
     width: 196px;
     min-width: 196px;
     max-width: 196px;
