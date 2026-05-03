@@ -59,8 +59,8 @@
     <button class="tab-btn" data-tab="captain-deep-dive" onclick="app.switchTab('captain-deep-dive')">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14.5" y2="14.5"/></svg> Captain Deep Dive
     </button>
-    <button class="tab-btn" data-tab="daily-flags" onclick="app.switchTab('daily-flags')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="1" x2="4" y2="15"/><path d="M4 2h8l-3 4 3 4H4"/></svg> Daily Flags
+    <button class="tab-btn" data-tab="attendance" onclick="app.switchTab('attendance')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><line x1="2" y1="6" x2="14" y2="6"/><line x1="5" y1="1.5" x2="5" y2="4.5"/><line x1="11" y1="1.5" x2="11" y2="4.5"/><polyline points="5,10 7,12 11,8"/></svg> Attendance
     </button>
     <button class="tab-btn" data-tab="captain-profile" onclick="app.switchTab('captain-profile')">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2.5"/><path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg> Captain Profile
@@ -261,7 +261,7 @@
   <!-- ── CAPTAIN DEEP DIVE ───────────────────────────────────────────── -->
   <section id="tab-captain-deep-dive" class="tab-content hidden">
 
-    <!-- Header — matches Daily Flags layout -->
+    <!-- Header — matches unified layout -->
     <div class="flags-page-header">
       <div>
         <p class="flags-fleet-label">Captain Analysis</p>
@@ -304,28 +304,33 @@
     <div id="deep-dive-content"></div>
   </section>
 
-  <!-- ── DAILY FLAGS ─────────────────────────────────────────────────── -->
-  <section id="tab-daily-flags" class="tab-content hidden">
+  <!-- ── ATTENDANCE ──────────────────────────────────────────────────── -->
+  <section id="tab-attendance" class="tab-content hidden">
 
     <!-- Page Header -->
     <div class="flags-page-header">
       <div>
-        <p class="flags-fleet-label">Fleet Intelligence</p>
-        <h2 class="flags-title">Daily Flags</h2>
+        <p class="flags-fleet-label">Roster Intelligence</p>
+        <h2 class="flags-title">Attendance</h2>
       </div>
       <div class="flags-date-strip">
-        <span class="dd-control-label">Date</span>
-        <input type="date" id="flags-date" onchange="ui.renderDailyFlags()" />
+        <span class="dd-control-label">Month</span>
+        <input type="month" id="attendance-month" onchange="ui.onAttendanceMonthChange()" />
+        <span class="strip-divider"></span>
+        <button class="btn btn-secondary" onclick="ui.clearAttendanceOverrides()">Reset Overrides</button>
       </div>
     </div>
 
-    <!-- Bento Metrics Grid -->
-    <div id="flags-summary-cards" class="flags-bento-grid"></div>
+    <!-- Attendance Metrics Grid -->
+    <div id="attendance-summary-cards" class="flags-bento-grid attendance-summary-grid"></div>
 
-    <!-- Operational Alerts -->
+    <!-- Attendance Grid -->
     <div class="flags-alerts-section">
-      <h3 class="flags-alerts-title">Operational Alerts</h3>
-      <div id="flags-table-body" class="flags-alert-list"></div>
+      <div class="attendance-section-header">
+        <h3 class="flags-alerts-title">Monthly Attendance Register</h3>
+        <p class="attendance-hint">Manual dropdown changes are saved in this browser only.</p>
+      </div>
+      <div id="attendance-grid"></div>
     </div>
   </section>
 
@@ -382,7 +387,7 @@
   <!-- ── TIER ANALYSIS ───────────────────────────────────────────────── -->
   <section id="tab-tier-analysis" class="tab-content hidden">
 
-    <!-- Header — matches Daily Flags layout -->
+    <!-- Header — matches unified layout -->
     <div class="flags-page-header">
       <div>
         <p class="flags-fleet-label">Operational Intelligence</p>

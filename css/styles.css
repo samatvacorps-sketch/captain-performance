@@ -2100,7 +2100,7 @@ tr.incentive-zero td { opacity: 0.45; }
   .tiers-putting-bento { grid-template-columns: 1fr; }
 }
 
-/* ── Daily Flags Redesign ──────────────────────────────────────────────── */
+/* ── Unified Tab Headers / Attendance ─────────────────────────────────── */
 
 .flags-page-header {
   display: flex;
@@ -2142,6 +2142,7 @@ tr.incentive-zero td { opacity: 0.45; }
 }
 
 .flags-date-strip input[type="date"],
+.flags-date-strip input[type="month"],
 .flags-date-strip select {
   background: var(--surface-high);
   border: 1px solid var(--border);
@@ -2156,6 +2157,7 @@ tr.incentive-zero td { opacity: 0.45; }
 }
 
 .flags-date-strip input[type="date"]:focus,
+.flags-date-strip input[type="month"]:focus,
 .flags-date-strip select:focus {
   border-color: rgba(173, 198, 255, 0.45);
 }
@@ -2368,6 +2370,192 @@ tr.incentive-zero td { opacity: 0.45; }
   .flags-metric-value.small { font-size: 24px; }
 }
 
+.attendance-summary-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.attendance-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.attendance-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.attendance-table-wrapper {
+  max-height: calc(100vh - 330px);
+  overflow: auto;
+}
+
+.attendance-table {
+  min-width: max-content;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.attendance-table th,
+.attendance-table td {
+  text-align: center;
+  padding: 8px 10px;
+}
+
+.attendance-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  cursor: default;
+}
+
+.attendance-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--surface-high);
+  border-top: 1px solid var(--border);
+  font-weight: 800;
+}
+
+.attendance-id-col,
+.attendance-name-col {
+  position: sticky;
+  z-index: 5;
+  background: var(--surface-high);
+  text-align: left !important;
+}
+
+th.attendance-id-col,
+td.attendance-id-col {
+  left: 0;
+  min-width: 118px;
+  max-width: 118px;
+}
+
+th.attendance-name-col,
+td.attendance-name-col {
+  left: 118px;
+  min-width: 220px;
+  max-width: 220px;
+  box-shadow: 1px 0 0 var(--border-subtle);
+}
+
+td.attendance-id-col,
+td.attendance-name-col {
+  background: var(--card-bg);
+}
+
+.attendance-table tbody tr:hover td.attendance-id-col,
+.attendance-table tbody tr:hover td.attendance-name-col {
+  background: var(--surface-bright);
+}
+
+.attendance-date-col {
+  min-width: 112px;
+}
+
+.attendance-date-col span,
+.attendance-date-col strong {
+  display: block;
+}
+
+.attendance-date-col strong {
+  color: var(--text);
+  font-size: 11px;
+  margin-top: 2px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.attendance-status-cell {
+  min-width: 112px;
+}
+
+.attendance-select {
+  width: 96px;
+  min-height: 28px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 22px 4px 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+}
+
+.attendance-select.manual {
+  box-shadow: inset 0 0 0 1px rgba(173, 198, 255, 0.35);
+}
+
+.attendance-select.status-full {
+  background: rgba(129, 199, 132, 0.22);
+  color: var(--green);
+}
+
+.attendance-select.status-half {
+  background: rgba(96, 165, 250, 0.18);
+  color: #93c5fd;
+}
+
+.attendance-select.status-off {
+  background: rgba(255, 213, 79, 0.20);
+  color: var(--yellow);
+}
+
+.attendance-select.status-na {
+  background: rgba(198, 198, 202, 0.16);
+  color: var(--text-muted);
+}
+
+.attendance-select.status-leave {
+  background: rgba(255, 92, 92, 0.16);
+  color: var(--dark-red);
+}
+
+.attendance-select.status-hours {
+  background: rgba(154, 91, 36, 0.55);
+  color: #ffd7b0;
+}
+
+.attendance-total-label {
+  text-align: left !important;
+  color: var(--text);
+}
+
+.attendance-total-cell {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1100px) {
+  .attendance-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .attendance-summary-grid { grid-template-columns: 1fr; }
+  .attendance-table-wrapper { max-height: calc(100vh - 380px); }
+  th.attendance-name-col,
+  td.attendance-name-col {
+    min-width: 190px;
+    max-width: 190px;
+  }
+  .attendance-date-col,
+  .attendance-status-cell {
+    min-width: 104px;
+  }
+  .attendance-select {
+    width: 90px;
+    font-size: 11px;
+  }
+}
+
 /* Captain avatar initials */
 .captain-avatar {
   width: 34px;
@@ -2574,6 +2762,9 @@ body,
 .config-card,
 .flags-captain-card,
 .flags-metric-card,
+.attendance-select,
+.attendance-table th,
+.attendance-table td,
 .tier-metric-card,
 .dd-controls-strip,
 .profile-captain-bar,
@@ -2598,6 +2789,7 @@ body,
 [data-theme="light"] .profile-metric-card,
 [data-theme="light"] .config-card,
 [data-theme="light"] .flags-metric-card,
+[data-theme="light"] .attendance-table-wrapper,
 [data-theme="light"] .tier-metric-card,
 [data-theme="light"] .tier-iph-card,
 [data-theme="light"] .flow-section,
@@ -2707,6 +2899,7 @@ body,
 [data-theme="light"] .dd-controls-strip input[type="date"],
 [data-theme="light"] .flags-date-strip select,
 [data-theme="light"] .flags-date-strip input[type="date"],
+[data-theme="light"] .flags-date-strip input[type="month"],
 [data-theme="light"] .profile-captain-bar select {
   background: #ffffff;
   border-color: rgba(0,0,0,0.12);
@@ -2776,6 +2969,47 @@ body,
   background: rgba(220, 38, 38, 0.08);
   border-color: rgba(220, 38, 38, 0.15);
   color: #dc2626;
+}
+
+[data-theme="light"] td.attendance-id-col,
+[data-theme="light"] td.attendance-name-col {
+  background: #ffffff;
+}
+
+[data-theme="light"] .attendance-id-col,
+[data-theme="light"] .attendance-name-col,
+[data-theme="light"] .attendance-table tfoot td {
+  background: #f8fafc;
+}
+
+[data-theme="light"] .attendance-select.status-full {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+[data-theme="light"] .attendance-select.status-half {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+
+[data-theme="light"] .attendance-select.status-off {
+  background: rgba(202, 138, 4, 0.14);
+  color: #a16207;
+}
+
+[data-theme="light"] .attendance-select.status-na {
+  background: rgba(107, 114, 128, 0.12);
+  color: #4b5563;
+}
+
+[data-theme="light"] .attendance-select.status-leave {
+  background: rgba(220, 38, 38, 0.10);
+  color: #b91c1c;
+}
+
+[data-theme="light"] .attendance-select.status-hours {
+  background: rgba(146, 64, 14, 0.14);
+  color: #92400e;
 }
 
 /* Deep Dive filter badge */

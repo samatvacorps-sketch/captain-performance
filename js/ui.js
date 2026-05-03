@@ -1254,136 +1254,332 @@ const ui = (() => {
     </table></div>`;
   }
 
-  // ── Daily Flags ────────────────────────────────────────────────────────
+  // ── Attendance ────────────────────────────────────────────────────────
 
-  function initFlagsDate() {
-    const input = document.getElementById('flags-date');
+  const _ATTENDANCE_OVERRIDE_KEY = 'attendanceOverrides';
+  const _ATTENDANCE_MANUAL_OPTIONS = [
+    'Full-day',
+    'Half-day',
+    'Off',
+    'N/A',
+    'Unplanned Leave',
+    ...Array.from({ length: 13 }, (_, i) => `${i + 1} hrs`),
+  ];
+
+  function initAttendance() {
+    const input = document.getElementById('attendance-month');
     if (!input) return;
-    // Default to the most recent date available in the dataset
-    const data = app.getFlaggedData();
-    if (data && data.length > 0) {
-      const dates = data.map(r => r.date).filter(Boolean).sort((a, b) => b - a);
-      if (dates.length > 0) {
-        input.value = _isoDateStr(dates[0]);
-        renderDailyFlags();
-        return;
-      }
-    }
-    // Fallback to yesterday
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    input.value = _isoDateStr(yesterday);
-    renderDailyFlags();
+    if (!input.value) input.value = _latestAttendanceMonth();
+    renderAttendance();
   }
 
-  function renderDailyFlags() {
-    const data = app.getFlaggedData();
-    if (!data || data.length === 0) return;
+  function onAttendanceMonthChange() {
+    renderAttendance();
+  }
 
-    const dateInput = document.getElementById('flags-date');
-    const selectedDate = dateInput?.value;
-    if (!selectedDate) return;
+  function renderAttendance() {
+    const monthInput = document.getElementById('attendance-month');
+    const gridEl = document.getElementById('attendance-grid');
+    if (!monthInput || !gridEl) return;
 
-    const dayRows = data.filter(r => r.date && _isoDateStr(r.date) === selectedDate);
+    if (!monthInput.value) monthInput.value = _latestAttendanceMonth();
+    const monthKey = monthInput.value;
+    const [year, month] = monthKey.split('-').map(Number);
+    if (!year || !month) return;
 
-    // ── Bento metric counts ────────────────────────────────────────────
-    const totalActive  = new Set(dayRows.map(r => r.employee_id)).size;
-    const flaggedCount = new Set(dayRows.filter(r => r.composite_slacker_score > 0).map(r => r.employee_id)).size;
-    const serialCount  = new Set(dayRows.filter(r => r.composite_slacker_score >= 2).map(r => r.employee_id)).size;
-    const pickSlackers = new Set(dayRows.filter(r =>
-      r.flags?.get('picking_time_per_order') || r.flags?.get('assigned_to_started_per_order') ||
-      r.flags?.get('billing_time_per_order') || r.flags?.get('ppi')
-    ).map(r => r.employee_id)).size;
-    const putSlackers  = new Set(dayRows.filter(r => r.flags?.get('iph')).map(r => r.employee_id)).size;
-    const okCount      = totalActive - flaggedCount;
+    const data = sheets.getCached();
+    const rosterRows = sheets.getRosterCached();
+    const captains = _attendanceCaptains(rosterRows);
+    const dates = _attendanceMonthDates(year, month);
+    const hoursByKey = _attendanceHoursByKey(data);
+    const rosterByCaptain = _attendanceRosterByCaptain(rosterRows);
+    const overrides = _getAttendanceOverrides();
+    const summary = { active: 0, full: 0, half: 0, off: 0, na: 0, totalStaff: _attendanceMonthTotalHours(dates, hoursByKey) };
 
-    const cardsEl = document.getElementById('flags-summary-cards');
-    if (cardsEl) {
-      cardsEl.innerHTML = `
-        <div class="flags-metric-card accent-blue">
-          <div class="flags-metric-label">Active Captains</div>
-          <div class="flags-metric-row">
-            <span class="flags-metric-value small color-blue">${totalActive}</span>
-            <span class="flags-metric-sub" style="color:#4edea3">▲ ${okCount} Stable</span>
-          </div>
-        </div>
-        <div class="flags-metric-card accent-amber">
-          <div class="flags-metric-label">Flagged</div>
-          <div class="flags-metric-row">
-            <span class="flags-metric-value small color-amber">${flaggedCount}</span>
-          </div>
-          <div class="flags-metric-sub">${pickSlackers} picking · ${putSlackers} putting</div>
-        </div>
-        <div class="flags-metric-card accent-red">
-          <div class="flags-metric-label">Serial Slackers</div>
-          <div class="flags-metric-row">
-            <span class="flags-metric-value small color-red">${String(serialCount).padStart(2,'0')}</span>
-          </div>
-          <div class="flags-metric-sub">2+ flags today</div>
-        </div>
-      `;
-    }
-
-    // ── Flagged captain cards ──────────────────────────────────────────
-    const byCaptain = {};
-    for (const row of dayRows) {
-      if (row.composite_slacker_score === 0) continue;
-      const id = row.employee_id;
-      if (!byCaptain[id] || row.composite_slacker_score > byCaptain[id].composite_slacker_score) {
-        byCaptain[id] = row;
-      }
-    }
-
-    const sortedFlagged = Object.values(byCaptain)
-      .sort((a, b) => b.composite_slacker_score - a.composite_slacker_score);
-
-    const listEl = document.getElementById('flags-table-body');
-    if (!listEl) return;
-
-    if (sortedFlagged.length === 0) {
-      listEl.innerHTML = `<p class="placeholder-text">No flagged captains on ${selectedDate}.</p>`;
+    if (captains.length === 0) {
+      gridEl.innerHTML = `<p class="placeholder-text">No roster rows available for attendance.</p>`;
+      _renderAttendanceSummary(summary, monthKey);
       return;
     }
 
-    listEl.innerHTML = sortedFlagged.map(row => {
-      const score    = row.composite_slacker_score;
-      const isCrit   = score >= 2;
-      const severity = isCrit ? 'severity-critical' : 'severity-flagged';
-      const avCls    = isCrit ? 'critical' : '';
-      const worstDev = row.worst_deviation !== null ? row.worst_deviation.toFixed(1) + ' SD' : '—';
+    const headDays = dates.map(date => {
+      const day = date.toLocaleDateString(undefined, { weekday: 'short' });
+      const label = date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+      return `<th class="attendance-date-col"><span>${day}</span><strong>${label}</strong></th>`;
+    }).join('');
 
-      // Active flows as small tags
-      const flows = (row.active_flows || '').split(',').map(f => f.trim()).filter(Boolean);
-      const flowTags = flows.map(f => `<span class="flags-tag flow">${_esc(f)}</span>`).join('');
+    const bodyRows = captains.map(captain => {
+      const cellHtml = dates.map(date => {
+        const iso = _isoDateStr(date);
+        const auto = _computeAttendanceStatus(captain.id, date, hoursByKey, rosterByCaptain);
+        const key = _attendanceOverrideKey(captain.id, iso);
+        const override = overrides[key] || '';
+        const value = override || auto.status;
+        _addAttendanceSummary(summary, value);
 
-      // Flagged metrics as alert tags
-      const flaggedMetrics = (row.flagged_metrics_list || '').split(',').map(m => m.trim()).filter(Boolean);
-      const metricTags = flaggedMetrics.map(m =>
-        `<span class="flags-tag ${isCrit ? 'alert' : 'warn'}">${_esc(m)}</span>`
-      ).join('');
+        return `
+          <td class="attendance-status-cell">
+            <select class="attendance-select status-${_attendanceStatusClass(value)} ${override ? 'manual' : ''}"
+                    data-emp-id="${_esc(captain.id)}"
+                    data-date="${iso}"
+                    data-auto="${_esc(auto.status)}"
+                    onchange="ui.onAttendanceOverrideChange(this)">
+              <option value="" ${override ? '' : 'selected'}>Auto: ${_esc(auto.status)}</option>
+              ${_ATTENDANCE_MANUAL_OPTIONS.map(opt =>
+                `<option value="${_esc(opt)}" ${override === opt ? 'selected' : ''}>${_esc(opt)}</option>`
+              ).join('')}
+            </select>
+          </td>`;
+      }).join('');
 
       return `
-        <div class="flags-captain-card ${severity}">
-          <div class="flags-captain-avatar ${avCls}">${_initials(row.employee_name)}</div>
-          <div class="flags-captain-body">
-            <div class="flags-captain-top">
+        <tr>
+          <td class="attendance-id-col">${_esc(captain.id)}</td>
+          <td class="attendance-name-col">
+            <div class="captain-cell">
+              <div class="captain-avatar">${_initials(captain.name || captain.id)}</div>
               <div>
-                <div class="flags-captain-name">${_esc(row.employee_name)}</div>
-                <div class="flags-captain-meta">${_esc(row.employee_id)} · ${flows.length || 0} flow${flows.length !== 1 ? 's' : ''}</div>
+                <div class="captain-name">${_esc(captain.name || 'Unknown')}</div>
+                <div class="captain-id">${_esc(captain.id)}</div>
               </div>
-              ${_statusBadge(score)}
             </div>
-            <div class="flags-tag-row">
-              ${flowTags}
-              ${metricTags || `<span class="flags-tag warn">No metric detail</span>`}
-            </div>
-          </div>
-          <div class="flags-score-col">
-            ${_scoreBadge(score)}
-            <div class="flags-dev-label">${worstDev}</div>
-          </div>
-        </div>`;
+          </td>
+          ${cellHtml}
+        </tr>`;
     }).join('');
+
+    const totalRow = dates.map(date => {
+      const iso = _isoDateStr(date);
+      let totalHours = 0;
+      for (const [key, hrs] of hoursByKey.entries()) {
+        if (key.endsWith(`_${iso}`)) totalHours += hrs;
+      }
+      return `<td class="attendance-total-cell">${_fmt(Math.round(totalHours) / 10, 1)}</td>`;
+    }).join('');
+
+    gridEl.innerHTML = `
+      <div class="table-wrapper attendance-table-wrapper">
+        <table class="data-table attendance-table">
+          <thead>
+            <tr>
+              <th class="attendance-id-col">employee_id</th>
+              <th class="attendance-name-col">Employee Name</th>
+              ${headDays}
+            </tr>
+          </thead>
+          <tbody>${bodyRows}</tbody>
+          <tfoot>
+            <tr>
+              <td class="attendance-id-col"></td>
+              <td class="attendance-name-col attendance-total-label">Total Staff</td>
+              ${totalRow}
+            </tr>
+          </tfoot>
+        </table>
+      </div>`;
+
+    _renderAttendanceSummary(summary, monthKey);
+  }
+
+  function onAttendanceOverrideChange(selectEl) {
+    const empId = _cleanAttendanceId(selectEl.dataset.empId);
+    const date = selectEl.dataset.date;
+    if (!empId || !date) return;
+    const key = _attendanceOverrideKey(empId, date);
+    const overrides = _getAttendanceOverrides();
+    if (selectEl.value) overrides[key] = selectEl.value;
+    else delete overrides[key];
+    localStorage.setItem(_ATTENDANCE_OVERRIDE_KEY, JSON.stringify(overrides));
+    renderAttendance();
+  }
+
+  function clearAttendanceOverrides() {
+    const month = document.getElementById('attendance-month')?.value;
+    if (!month) return;
+    const overrides = _getAttendanceOverrides();
+    const prefix = `${month}-`;
+    let changed = false;
+    for (const key of Object.keys(overrides)) {
+      const datePart = key.split('_').pop();
+      if (datePart && datePart.startsWith(prefix)) {
+        delete overrides[key];
+        changed = true;
+      }
+    }
+    if (changed) localStorage.setItem(_ATTENDANCE_OVERRIDE_KEY, JSON.stringify(overrides));
+    renderAttendance();
+  }
+
+  function _latestAttendanceMonth() {
+    const dates = sheets.getCached().map(r => r.date).filter(Boolean).sort((a, b) => b - a);
+    const d = dates[0] || new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function _attendanceMonthDates(year, month) {
+    const last = new Date(year, month, 0).getDate();
+    return Array.from({ length: last }, (_, i) => new Date(year, month - 1, i + 1));
+  }
+
+  function _attendanceCaptains(rosterRows) {
+    const captains = new Map();
+    for (const r of rosterRows || []) {
+      const id = _cleanAttendanceId(r.employee_id);
+      if (!id || captains.has(id)) continue;
+      captains.set(id, { id, name: r.employee_name || '' });
+    }
+    return [...captains.values()];
+  }
+
+  function _attendanceRosterByCaptain(rosterRows) {
+    const out = new Map();
+    for (const r of rosterRows || []) {
+      const id = _cleanAttendanceId(r.employee_id);
+      if (!id) continue;
+      if (!out.has(id)) out.set(id, []);
+      out.get(id).push(r);
+    }
+    return out;
+  }
+
+  function _attendanceHoursByKey(data) {
+    const out = new Map();
+    for (const row of data || []) {
+      const id = _cleanAttendanceId(row.employee_id);
+      const iso = row.dateIsoStr || _isoDateStr(row.date);
+      const hrs = (row.total_active_time || 0) / 3600;
+      if (!id || !iso || isNaN(hrs) || hrs <= 0) continue;
+      const key = _attendanceOverrideKey(id, iso);
+      out.set(key, (out.get(key) || 0) + hrs);
+    }
+    return out;
+  }
+
+  function _attendanceMonthTotalHours(dates, hoursByKey) {
+    const dateSet = new Set(dates.map(_isoDateStr));
+    let total = 0;
+    for (const [key, hrs] of hoursByKey.entries()) {
+      const iso = key.split('_').pop();
+      if (dateSet.has(iso)) total += hrs;
+    }
+    return total;
+  }
+
+  function _computeAttendanceStatus(empId, date, hoursByKey, rosterByCaptain) {
+    const id = _cleanAttendanceId(empId);
+    if (!_isRosterActiveOnDate(rosterByCaptain.get(id) || [], date)) return { status: 'N/A', rawHours: 0 };
+    const rawHours = hoursByKey.get(_attendanceOverrideKey(id, _isoDateStr(date))) || 0;
+    if (!rawHours) return { status: 'Off', rawHours: 0 };
+    const adjusted = rawHours >= 5 ? rawHours + 1 : rawHours + 0.5;
+    const rounded = Math.round(adjusted);
+    if (rounded >= 9 && rounded <= 11) return { status: 'Full-day', rawHours };
+    if (rounded >= 4 && rounded <= 6) return { status: 'Half-day', rawHours };
+    return { status: `${rounded} hrs`, rawHours };
+  }
+
+  function _isRosterActiveOnDate(rows, date) {
+    const target = _dateOnly(date).getTime();
+    return rows.some(r => {
+      const start = _rosterDate(r.start);
+      if (!start || _dateOnly(start).getTime() > target) return false;
+      const end = _rosterDate(r.end);
+      return !end || _dateOnly(end).getTime() >= target;
+    });
+  }
+
+  function _rosterDate(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const str = String(value).trim();
+    const n = parseFloat(str);
+    if (/^-?\d+(\.\d+)?$/.test(str) && !isNaN(n) && n > 1000) {
+      return new Date(Math.round((n - 25569) * 86400000));
+    }
+    const d = new Date(str);
+    return isNaN(d) ? null : d;
+  }
+
+  function _dateOnly(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  function _cleanAttendanceId(value) {
+    return String(value || '').replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, '').toUpperCase();
+  }
+
+  function _attendanceOverrideKey(empId, isoDate) {
+    return `${_cleanAttendanceId(empId)}_${isoDate}`;
+  }
+
+  function _getAttendanceOverrides() {
+    try {
+      return JSON.parse(localStorage.getItem(_ATTENDANCE_OVERRIDE_KEY) || '{}') || {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function _addAttendanceSummary(summary, status) {
+    if (status === 'N/A') {
+      summary.na++;
+      return;
+    }
+    if (status === 'Full-day') summary.full++;
+    else if (status === 'Half-day') summary.half++;
+    else if (status === 'Off') summary.off++;
+    if (status !== 'Off') summary.active++;
+  }
+
+  function _renderAttendanceSummary(summary, monthKey) {
+    const el = document.getElementById('attendance-summary-cards');
+    if (!el) return;
+    const staff = Math.round(summary.totalStaff) / 10;
+    el.innerHTML = `
+      <div class="flags-metric-card accent-blue">
+        <div class="flags-metric-label">Active Marks</div>
+        <div class="flags-metric-row"><span class="flags-metric-value small color-blue">${_fmt(summary.active)}</span></div>
+        <div class="flags-metric-sub">${_esc(_attendanceMonthLabel(monthKey))}</div>
+      </div>
+      <div class="flags-metric-card accent-green">
+        <div class="flags-metric-label">Full-day</div>
+        <div class="flags-metric-row"><span class="flags-metric-value small color-teal">${_fmt(summary.full)}</span></div>
+        <div class="flags-metric-sub">Computed and manual values</div>
+      </div>
+      <div class="flags-metric-card accent-amber">
+        <div class="flags-metric-label">Half-day</div>
+        <div class="flags-metric-row"><span class="flags-metric-value small color-amber">${_fmt(summary.half)}</span></div>
+        <div class="flags-metric-sub">4-6 rounded hours</div>
+      </div>
+      <div class="flags-metric-card accent-red">
+        <div class="flags-metric-label">Off</div>
+        <div class="flags-metric-row"><span class="flags-metric-value small color-red">${_fmt(summary.off)}</span></div>
+        <div class="flags-metric-sub">Roster-active with no hours</div>
+      </div>
+      <div class="flags-metric-card">
+        <div class="flags-metric-label">N/A</div>
+        <div class="flags-metric-row"><span class="flags-metric-value small">${_fmt(summary.na)}</span></div>
+        <div class="flags-metric-sub">Outside roster period</div>
+      </div>
+      <div class="flags-metric-card accent-blue">
+        <div class="flags-metric-label">Total Staff</div>
+        <div class="flags-metric-row"><span class="flags-metric-value small color-blue">${_fmt(staff, 1)}</span></div>
+        <div class="flags-metric-sub">Total active hours divided by 10</div>
+      </div>`;
+  }
+
+  function _attendanceMonthLabel(monthKey) {
+    const [y, m] = monthKey.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  }
+
+  function _attendanceStatusClass(status) {
+    const s = String(status || '').toLowerCase();
+    if (s === 'full-day') return 'full';
+    if (s === 'half-day') return 'half';
+    if (s === 'off') return 'off';
+    if (s === 'n/a') return 'na';
+    if (s === 'unplanned leave') return 'leave';
+    if (s.includes('hrs')) return 'hours';
+    return 'other';
   }
 
   // ── Tier Analysis ──────────────────────────────────────────────────────
@@ -3822,8 +4018,11 @@ const ui = (() => {
     onTierPresetChange,
     onTierDateChange,
     toggleTierMode,
-    initFlagsDate,
-    renderDailyFlags,
+    initAttendance,
+    onAttendanceMonthChange,
+    renderAttendance,
+    onAttendanceOverrideChange,
+    clearAttendanceOverrides,
     initCaptainDropdown,
     initCaptainProfilePeriods,
     renderCaptainProfile,
@@ -3907,7 +4106,7 @@ const app = (() => {
 
       // Init dynamic dropdowns
       ui.initDeepDivePeriods();
-      ui.initFlagsDate();
+      ui.initAttendance();
       ui.initCaptainDropdown();
       ui.initCaptainProfilePeriods();
       ui.initOverviewPeriods();
@@ -3963,7 +4162,7 @@ const app = (() => {
     switch (_currentTab) {
       case 'store-overview':    ui.renderStoreOverview(); break;
       case 'captain-deep-dive': ui.renderDeepDive(); break;
-      case 'daily-flags':       ui.renderDailyFlags(); break;
+      case 'attendance':         ui.renderAttendance(); break;
       case 'captain-profile':   ui.renderCaptainProfile(); break;
       case 'tier-analysis':     ui.renderTiersView(); break;
       case 'inventory-health':       ui.renderInventoryHealth(); break;
