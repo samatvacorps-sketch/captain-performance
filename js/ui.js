@@ -1316,14 +1316,13 @@ const ui = (() => {
       );
     }).join('');
 
-    const rows = captains.map(captain => {
+    const candidateRows = captains.map(captain => {
       const cells = dates.map(date => {
         const iso = _isoDateStr(date);
         const auto = _computeAttendanceStatus(captain.id, date, hoursByKey, rosterByCaptain);
         const key = _attendanceOverrideKey(captain.id, iso);
         const override = overrides[key] || '';
         const value = override || auto.status;
-        _addAttendanceSummary(summary, value);
 
         return { iso, auto, override, value };
       });
@@ -1331,6 +1330,19 @@ const ui = (() => {
       const weekOffs = cells.filter(cell => cell.value === 'Off').length;
       return { captain, cells, workDays, weekOffs, bonus: bonusResults.get(captain.id) || null };
     });
+    const rows = candidateRows.filter(row =>
+      row.cells.some(cell => _attendanceWorkDayValue(cell.value) > 0)
+    );
+
+    if (rows.length === 0) {
+      gridEl.innerHTML = `<p class="placeholder-text">No captains have at least 1 active working day in ${_esc(_attendanceMonthLabel(monthKey))}.</p>`;
+      _renderAttendanceSummary(summary, monthKey);
+      return;
+    }
+
+    for (const row of rows) {
+      for (const cell of row.cells) _addAttendanceSummary(summary, cell.value);
+    }
 
     rows.sort(_attendanceRowSorter);
 
