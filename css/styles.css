@@ -2392,12 +2392,14 @@ tr.incentive-zero td { opacity: 0.45; }
 .attendance-table-wrapper {
   max-height: calc(100vh - 330px);
   overflow: auto;
+  position: relative;
 }
 
 .attendance-table {
   min-width: max-content;
   border-collapse: separate;
   border-spacing: 0;
+  table-layout: fixed;
 }
 
 .attendance-table th,
@@ -2410,7 +2412,7 @@ tr.incentive-zero td { opacity: 0.45; }
   position: sticky;
   top: 0;
   z-index: 4;
-  cursor: default;
+  cursor: pointer;
 }
 
 .attendance-table tfoot td {
@@ -2425,29 +2427,45 @@ tr.incentive-zero td { opacity: 0.45; }
 .attendance-id-col,
 .attendance-name-col {
   position: sticky;
-  z-index: 5;
+  z-index: 8;
   background: var(--surface-high);
   text-align: left !important;
+  overflow: hidden;
 }
 
 th.attendance-id-col,
 td.attendance-id-col {
   left: 0;
-  min-width: 118px;
-  max-width: 118px;
+  width: 128px;
+  min-width: 128px;
+  max-width: 128px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 th.attendance-name-col,
 td.attendance-name-col {
-  left: 118px;
-  min-width: 220px;
-  max-width: 220px;
+  left: 128px;
+  width: 236px;
+  min-width: 236px;
+  max-width: 236px;
   box-shadow: 1px 0 0 var(--border-subtle);
 }
 
 td.attendance-id-col,
 td.attendance-name-col {
   background: var(--card-bg);
+  z-index: 7;
+}
+
+.attendance-table thead th.attendance-id-col,
+.attendance-table thead th.attendance-name-col {
+  z-index: 10;
+}
+
+.attendance-table tfoot td.attendance-id-col,
+.attendance-table tfoot td.attendance-name-col {
+  z-index: 9;
 }
 
 .attendance-table tbody tr:hover td.attendance-id-col,
@@ -2456,7 +2474,8 @@ td.attendance-name-col {
 }
 
 .attendance-date-col {
-  min-width: 112px;
+  width: 132px;
+  min-width: 132px;
 }
 
 .attendance-date-col span,
@@ -2473,26 +2492,60 @@ td.attendance-name-col {
 }
 
 .attendance-status-cell {
-  min-width: 112px;
+  width: 132px;
+  min-width: 132px;
+  vertical-align: middle;
+}
+
+.attendance-cell-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 
 .attendance-select {
-  width: 96px;
-  min-height: 28px;
+  width: 116px;
+  min-height: 30px;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 4px 22px 4px 10px;
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   font-family: inherit;
   outline: none;
   cursor: pointer;
 }
 
+.attendance-select.status-manual {
+  background: var(--surface-high);
+  color: var(--text);
+  border-color: var(--border);
+}
+
 .attendance-select.manual {
   box-shadow: inset 0 0 0 1px rgba(173, 198, 255, 0.35);
 }
+
+.attendance-auto-line {
+  max-width: 118px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1.15;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  opacity: 0.92;
+}
+
+.attendance-auto-line.status-full { color: var(--green); }
+.attendance-auto-line.status-half { color: #93c5fd; }
+.attendance-auto-line.status-off  { color: var(--yellow); }
+.attendance-auto-line.status-na   { color: var(--text-muted); }
+.attendance-auto-line.status-leave { color: var(--dark-red); }
+.attendance-auto-line.status-hours { color: #ffd7b0; }
 
 .attendance-select.status-full {
   background: rgba(129, 199, 132, 0.22);
@@ -2534,6 +2587,24 @@ td.attendance-name-col {
   font-variant-numeric: tabular-nums;
 }
 
+.attendance-summary-col,
+.attendance-summary-head {
+  width: 112px;
+  min-width: 112px;
+  text-align: center !important;
+}
+
+.attendance-sort-icon {
+  color: var(--accent);
+  font-size: 10px;
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+
+.attendance-sortable:hover {
+  color: var(--text);
+}
+
 @media (max-width: 1100px) {
   .attendance-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -2543,15 +2614,18 @@ td.attendance-name-col {
   .attendance-table-wrapper { max-height: calc(100vh - 380px); }
   th.attendance-name-col,
   td.attendance-name-col {
-    min-width: 190px;
-    max-width: 190px;
+    left: 128px;
+    width: 196px;
+    min-width: 196px;
+    max-width: 196px;
   }
   .attendance-date-col,
   .attendance-status-cell {
-    min-width: 104px;
+    width: 122px;
+    min-width: 122px;
   }
   .attendance-select {
-    width: 90px;
+    width: 106px;
     font-size: 11px;
   }
 }

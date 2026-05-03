@@ -1265,6 +1265,7 @@ const ui = (() => {
     'Unplanned Leave',
     ...Array.from({ length: 13 }, (_, i) => `${i + 1} hrs`),
   ];
+  let _attendanceSort = { key: 'name', dir: 'asc' };
 
   function initAttendance() {
     const input = document.getElementById('attendance-month');
@@ -1289,27 +1290,33 @@ const ui = (() => {
 
     const data = sheets.getCached();
     const rosterRows = sheets.getRosterCached();
-    const captains = _attendanceCaptains(rosterRows);
     const dates = _attendanceMonthDates(year, month);
     const hoursByKey = _attendanceHoursByKey(data);
+    const workedIds = _attendanceWorkedCaptainIds(dates, hoursByKey);
+    const captains = _attendanceCaptains(rosterRows).filter(c => workedIds.has(c.id));
     const rosterByCaptain = _attendanceRosterByCaptain(rosterRows);
     const overrides = _getAttendanceOverrides();
     const summary = { active: 0, full: 0, half: 0, off: 0, na: 0, totalStaff: _attendanceMonthTotalHours(dates, hoursByKey) };
 
     if (captains.length === 0) {
-      gridEl.innerHTML = `<p class="placeholder-text">No roster rows available for attendance.</p>`;
+      gridEl.innerHTML = `<p class="placeholder-text">No captains have Daily Metrics work hours in ${_esc(_attendanceMonthLabel(monthKey))}.</p>`;
       _renderAttendanceSummary(summary, monthKey);
       return;
     }
 
     const headDays = dates.map(date => {
+      const iso = _isoDateStr(date);
       const day = date.toLocaleDateString(undefined, { weekday: 'short' });
       const label = date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-      return `<th class="attendance-date-col"><span>${day}</span><strong>${label}</strong></th>`;
+      return _attendanceTh(
+        `<span>${day}</span><strong>${label}</strong>`,
+        `date:${iso}`,
+        'attendance-date-col'
+      );
     }).join('');
 
-    const bodyRows = captains.map(captain => {
-      const cellHtml = dates.map(date => {
+    const rows = captains.map(captain => {
+      const cells = dates.map(date => {
         const iso = _isoDateStr(date);
         const auto = _computeAttendanceStatus(captain.id, date, hoursByKey, rosterByCaptain);
         const key = _attendanceOverrideKey(captain.id, iso);
@@ -1317,37 +1324,59 @@ const ui = (() => {
         const value = override || auto.status;
         _addAttendanceSummary(summary, value);
 
+        return { iso, auto, override, value };
+      });
+      const workDays = cells.reduce((sum, cell) => sum + _attendanceWorkDayValue(cell.value), 0);
+      const weekOffs = cells.filter(cell => cell.value === 'Off').length;
+      return { captain, cells, workDays, weekOffs };
+    });
+
+    rows.sort(_attendanceRowSorter);
+
+    const bodyRows = rows.map(row => {
+      const cellHtml = row.cells.map(cell => {
+        const statusCls = _attendanceStatusClass(cell.value);
+        const autoCls = _attendanceStatusClass(cell.auto.status);
+        const autoHours = cell.auto.rawHours > 0 ? ` · ${_fmt(cell.auto.rawHours, 1)}h` : '';
+
         return `
           <td class="attendance-status-cell">
-            <select class="attendance-select status-${_attendanceStatusClass(value)} ${override ? 'manual' : ''}"
-                    data-emp-id="${_esc(captain.id)}"
-                    data-date="${iso}"
-                    data-auto="${_esc(auto.status)}"
+            <div class="attendance-cell-stack">
+              <select class="attendance-select ${cell.override ? `status-${statusCls} manual` : 'status-manual'}"
+                    data-emp-id="${_esc(row.captain.id)}"
+                    data-date="${cell.iso}"
+                    data-auto="${_esc(cell.auto.status)}"
                     onchange="ui.onAttendanceOverrideChange(this)">
-              <option value="" ${override ? '' : 'selected'}>Auto: ${_esc(auto.status)}</option>
+              <option value="" ${cell.override ? '' : 'selected'}>Use auto</option>
               ${_ATTENDANCE_MANUAL_OPTIONS.map(opt =>
-                `<option value="${_esc(opt)}" ${override === opt ? 'selected' : ''}>${_esc(opt)}</option>`
+                `<option value="${_esc(opt)}" ${cell.override === opt ? 'selected' : ''}>${_esc(opt)}</option>`
               ).join('')}
             </select>
+              <div class="attendance-auto-line status-${autoCls}">Auto: ${_esc(cell.auto.status)}${autoHours}</div>
+            </div>
           </td>`;
       }).join('');
 
       return `
         <tr>
-          <td class="attendance-id-col">${_esc(captain.id)}</td>
+          <td class="attendance-id-col">${_esc(row.captain.id)}</td>
           <td class="attendance-name-col">
             <div class="captain-cell">
-              <div class="captain-avatar">${_initials(captain.name || captain.id)}</div>
+              <div class="captain-avatar">${_initials(row.captain.name || row.captain.id)}</div>
               <div>
-                <div class="captain-name">${_esc(captain.name || 'Unknown')}</div>
-                <div class="captain-id">${_esc(captain.id)}</div>
+                <div class="captain-name">${_esc(row.captain.name || 'Unknown')}</div>
+                <div class="captain-id">${_esc(row.captain.id)}</div>
               </div>
             </div>
           </td>
           ${cellHtml}
+          <td class="attendance-total-cell attendance-summary-col">${_fmt(row.workDays, 1)}</td>
+          <td class="attendance-total-cell attendance-summary-col">${_fmt(row.weekOffs)}</td>
         </tr>`;
     }).join('');
 
+    const totalWorkDays = rows.reduce((sum, row) => sum + row.workDays, 0);
+    const totalWeekOffs = rows.reduce((sum, row) => sum + row.weekOffs, 0);
     const totalRow = dates.map(date => {
       const iso = _isoDateStr(date);
       let totalHours = 0;
@@ -1362,9 +1391,11 @@ const ui = (() => {
         <table class="data-table attendance-table">
           <thead>
             <tr>
-              <th class="attendance-id-col">employee_id</th>
-              <th class="attendance-name-col">Employee Name</th>
+              ${_attendanceTh('employee_id', 'id', 'attendance-id-col')}
+              ${_attendanceTh('Employee Name', 'name', 'attendance-name-col')}
               ${headDays}
+              ${_attendanceTh('Work Days', 'workDays', 'attendance-summary-head')}
+              ${_attendanceTh('Week Offs', 'weekOffs', 'attendance-summary-head')}
             </tr>
           </thead>
           <tbody>${bodyRows}</tbody>
@@ -1373,6 +1404,8 @@ const ui = (() => {
               <td class="attendance-id-col"></td>
               <td class="attendance-name-col attendance-total-label">Total Staff</td>
               ${totalRow}
+              <td class="attendance-total-cell attendance-summary-col">${_fmt(totalWorkDays, 1)}</td>
+              <td class="attendance-total-cell attendance-summary-col">${_fmt(totalWeekOffs)}</td>
             </tr>
           </tfoot>
         </table>
@@ -1407,6 +1440,15 @@ const ui = (() => {
       }
     }
     if (changed) localStorage.setItem(_ATTENDANCE_OVERRIDE_KEY, JSON.stringify(overrides));
+    renderAttendance();
+  }
+
+  function sortAttendance(key) {
+    if (_attendanceSort.key === key) {
+      _attendanceSort.dir = _attendanceSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      _attendanceSort = { key, dir: key === 'name' || key === 'id' ? 'asc' : 'desc' };
+    }
     renderAttendance();
   }
 
@@ -1453,6 +1495,18 @@ const ui = (() => {
       out.set(key, (out.get(key) || 0) + hrs);
     }
     return out;
+  }
+
+  function _attendanceWorkedCaptainIds(dates, hoursByKey) {
+    const dateSet = new Set(dates.map(_isoDateStr));
+    const ids = new Set();
+    for (const [key, hrs] of hoursByKey.entries()) {
+      const i = key.lastIndexOf('_');
+      const id = key.slice(0, i);
+      const iso = key.slice(i + 1);
+      if (id && dateSet.has(iso) && hrs > 0) ids.add(id);
+    }
+    return ids;
   }
 
   function _attendanceMonthTotalHours(dates, hoursByKey) {
@@ -1527,6 +1581,58 @@ const ui = (() => {
     else if (status === 'Half-day') summary.half++;
     else if (status === 'Off') summary.off++;
     if (status !== 'Off') summary.active++;
+  }
+
+  function _attendanceWorkDayValue(status) {
+    if (status === 'Full-day') return 1;
+    if (status === 'Half-day') return 0.5;
+    const m = String(status || '').match(/^(\d+)\s*hrs?$/i);
+    if (!m) return 0;
+    const hrs = parseInt(m[1], 10);
+    if (hrs >= 7) return 1;
+    if (hrs > 0) return 0.5;
+    return 0;
+  }
+
+  function _attendanceStatusRank(status) {
+    if (status === 'N/A') return 0;
+    if (status === 'Off') return 1;
+    if (status === 'Unplanned Leave') return 2;
+    if (status === 'Half-day') return 3;
+    const m = String(status || '').match(/^(\d+)\s*hrs?$/i);
+    if (m) return 4 + (parseInt(m[1], 10) / 100);
+    if (status === 'Full-day') return 6;
+    return 0;
+  }
+
+  function _attendanceRowSorter(a, b) {
+    const dir = _attendanceSort.dir === 'asc' ? 1 : -1;
+    const key = _attendanceSort.key;
+    const av = _attendanceSortValue(a, key);
+    const bv = _attendanceSortValue(b, key);
+    if (typeof av === 'number' && typeof bv === 'number') {
+      return (av - bv || a.captain.name.localeCompare(b.captain.name)) * dir;
+    }
+    return (String(av).localeCompare(String(bv)) || a.captain.id.localeCompare(b.captain.id)) * dir;
+  }
+
+  function _attendanceSortValue(row, key) {
+    if (key === 'id') return row.captain.id;
+    if (key === 'name') return row.captain.name || row.captain.id;
+    if (key === 'workDays') return row.workDays;
+    if (key === 'weekOffs') return row.weekOffs;
+    if (key.startsWith('date:')) {
+      const iso = key.slice(5);
+      const cell = row.cells.find(c => c.iso === iso);
+      return cell ? _attendanceStatusRank(cell.value) : 0;
+    }
+    return '';
+  }
+
+  function _attendanceTh(labelHtml, key, cls = '') {
+    const active = _attendanceSort.key === key;
+    const icon = active ? (_attendanceSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+    return `<th class="${cls} attendance-sortable" onclick="ui.sortAttendance('${_esc(key)}')">${labelHtml}<span class="attendance-sort-icon">${icon}</span></th>`;
   }
 
   function _renderAttendanceSummary(summary, monthKey) {
@@ -4023,6 +4129,7 @@ const ui = (() => {
     renderAttendance,
     onAttendanceOverrideChange,
     clearAttendanceOverrides,
+    sortAttendance,
     initCaptainDropdown,
     initCaptainProfilePeriods,
     renderCaptainProfile,
