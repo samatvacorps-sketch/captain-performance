@@ -23,7 +23,7 @@ css/styles.css      — Full dark theme, CSS variables
 | Daily Metrics | A:V | date(A), employee_id(B), name(C), checkout_orders(D), putaway_qty(F), racks_audited(H), total_active_time(I), picker/putter/auditor_active_time(J-L), total_time_per_order(Q), ppi(R), iph(S), complaints(T-V) |
 | Audits | A:E | employee_id(A), name(B), date(C), month(D), audit_codes(E, comma-separated rack codes) |
 | Complaints | A:O | cycle, dates, order/employee IDs, product info, complaint_category, rca, in_store |
-| Roster | A:F | employee_id(A), name(B), shift(C), start(D), end(E), assigned_off(F) |
+| Roster | A:G | employee_id(A), name(B), shift(C), start(D), end(E), assigned_off(F), employment_type(G: FT/PT) |
 
 **API options**: `valueRenderOption=UNFORMATTED_VALUE, dateTimeRenderOption=SERIAL_NUMBER`
 - Dates arrive as serial numbers (days since 1899-12-30). Parsed via `(n - 25569) * 86400 * 1000` ms.
@@ -73,6 +73,14 @@ These options set `_xxxDateMode = true` and call the tab's render function direc
 
 **Audit (monthly):** Uses `sheets.getAuditCached()` with `audit_codes.length` for rack counts. Cumulative tiers:
 - First 40 racks: ₹30/rack, next 40 (41-80): ₹40/rack, beyond 80: ₹50/rack
+
+**Attendance bonus (monthly):** Uses Daily Metrics active hours + effective-dated Roster rows. Roster col G `employment_type` must be `FT` or `PT`; missing type pays ₹0 with reason `Needs roster type`.
+- Base amounts: FT=₹1000/month, PT=₹500/month.
+- Prorated by roster-active days: `sum(baseForType / daysInMonth)` over active days, rounded after summing.
+- Minimum tenure: 7 roster-active days.
+- Allowed offs: `round(4 * activeDays / daysInMonth)`. Actual `Off` days must be <= allowed offs.
+- `Unplanned Leave` disqualifies the month. FT working days require full-day credit; PT working days require half-day-or-better credit.
+- Mixed FT/PT months are split by effective-dated roster segments, e.g. 15 PT days + 15 FT days in a 30-day month = ₹750 if eligible.
 
 **Incentives table:** TOTAL row lives in `<tfoot>` (not `<tbody>`) so `_initTableSort` never touches it.
 

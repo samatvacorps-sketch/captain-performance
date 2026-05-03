@@ -1293,13 +1293,14 @@ const ui = (() => {
     const dates = _attendanceMonthDates(year, month);
     const hoursByKey = _attendanceHoursByKey(data);
     const rosterByCaptain = _attendanceRosterByCaptain(rosterRows);
-    const fullDayIds = _attendanceFullDayCaptainIds(dates, hoursByKey, rosterByCaptain);
-    const captains = _attendanceCaptains(rosterRows).filter(c => fullDayIds.has(c.id));
     const overrides = _getAttendanceOverrides();
+    const activeIds = _attendanceActiveCaptainIds(dates, rosterByCaptain);
+    const captains = _attendanceCaptains(rosterRows).filter(c => activeIds.has(c.id));
+    const bonusResults = compute.computeAttendanceBonus(data, rosterRows, monthKey, overrides);
     const summary = { active: 0, full: 0, half: 0, off: 0, na: 0, totalStaff: _attendanceMonthTotalHours(dates, hoursByKey) };
 
     if (captains.length === 0) {
-      gridEl.innerHTML = `<p class="placeholder-text">No captains have a full working day in ${_esc(_attendanceMonthLabel(monthKey))}.</p>`;
+      gridEl.innerHTML = `<p class="placeholder-text">No roster-active captains found in ${_esc(_attendanceMonthLabel(monthKey))}.</p>`;
       _renderAttendanceSummary(summary, monthKey);
       return;
     }
@@ -1328,7 +1329,7 @@ const ui = (() => {
       });
       const workDays = cells.reduce((sum, cell) => sum + _attendanceWorkDayValue(cell.value), 0);
       const weekOffs = cells.filter(cell => cell.value === 'Off').length;
-      return { captain, cells, workDays, weekOffs };
+      return { captain, cells, workDays, weekOffs, bonus: bonusResults.get(captain.id) || null };
     });
 
     rows.sort(_attendanceRowSorter);
@@ -1376,11 +1377,19 @@ const ui = (() => {
           ${cellHtml}
           <td class="attendance-total-cell attendance-summary-col">${_fmt(row.workDays, 1)}</td>
           <td class="attendance-total-cell attendance-summary-col">${_fmt(row.weekOffs)}</td>
+          <td class="attendance-total-cell attendance-type-col">${_attendanceTypeDaysLabel(row.bonus)}</td>
+          <td class="attendance-total-cell attendance-summary-col">${_fmt(row.bonus?.allowed_offs ?? 0)}</td>
+          <td class="attendance-total-cell attendance-bonus-col">${row.bonus?.bonus_amount > 0 ? '&#8377;' + _fmt(row.bonus.bonus_amount) : '&#8377;0'}</td>
+          <td class="attendance-total-cell attendance-reason-col ${row.bonus?.eligible ? 'attendance-bonus-ok' : 'attendance-bonus-blocked'}">${_esc(row.bonus?.reason || '—')}</td>
         </tr>`;
     }).join('');
 
     const totalWorkDays = rows.reduce((sum, row) => sum + row.workDays, 0);
     const totalWeekOffs = rows.reduce((sum, row) => sum + row.weekOffs, 0);
+    const totalFtDays = rows.reduce((sum, row) => sum + (row.bonus?.ft_days || 0), 0);
+    const totalPtDays = rows.reduce((sum, row) => sum + (row.bonus?.pt_days || 0), 0);
+    const totalAllowedOffs = rows.reduce((sum, row) => sum + (row.bonus?.allowed_offs || 0), 0);
+    const totalAttendanceBonus = rows.reduce((sum, row) => sum + (row.bonus?.bonus_amount || 0), 0);
     const totalRow = dates.map(date => {
       const iso = _isoDateStr(date);
       let totalHours = 0;
@@ -1416,6 +1425,10 @@ const ui = (() => {
                 ${headDays}
                 ${_attendanceTh('Work Days', 'workDays', 'attendance-summary-head')}
                 ${_attendanceTh('Week Offs', 'weekOffs', 'attendance-summary-head')}
+                ${_attendanceTh('FT / PT Days', 'typeDays', 'attendance-type-head')}
+                ${_attendanceTh('Allowed Offs', 'allowedOffs', 'attendance-summary-head')}
+                ${_attendanceTh('Att. Bonus', 'bonus', 'attendance-bonus-head')}
+                ${_attendanceTh('Reason', 'reason', 'attendance-reason-head')}
               </tr>
             </thead>
             <tbody>${attendanceRows}</tbody>
@@ -1424,6 +1437,10 @@ const ui = (() => {
                 ${totalRow}
                 <td class="attendance-total-cell attendance-summary-col">${_fmt(totalWorkDays, 1)}</td>
                 <td class="attendance-total-cell attendance-summary-col">${_fmt(totalWeekOffs)}</td>
+                <td class="attendance-total-cell attendance-type-col">FT ${_fmt(totalFtDays)} / PT ${_fmt(totalPtDays)}</td>
+                <td class="attendance-total-cell attendance-summary-col">${_fmt(totalAllowedOffs)}</td>
+                <td class="attendance-total-cell attendance-bonus-col">&#8377;${_fmt(totalAttendanceBonus)}</td>
+                <td class="attendance-total-cell attendance-reason-col"></td>
               </tr>
             </tfoot>
           </table>
@@ -1442,6 +1459,8 @@ const ui = (() => {
     if (selectEl.value) overrides[key] = selectEl.value;
     else delete overrides[key];
     localStorage.setItem(_ATTENDANCE_OVERRIDE_KEY, JSON.stringify(overrides));
+    _incentiveCache = null;
+    _incentiveCacheKey = null;
     renderAttendance();
   }
 
@@ -1459,6 +1478,8 @@ const ui = (() => {
       }
     }
     if (changed) localStorage.setItem(_ATTENDANCE_OVERRIDE_KEY, JSON.stringify(overrides));
+    _incentiveCache = null;
+    _incentiveCacheKey = null;
     renderAttendance();
   }
 
@@ -1516,12 +1537,11 @@ const ui = (() => {
     return out;
   }
 
-  function _attendanceFullDayCaptainIds(dates, hoursByKey, rosterByCaptain) {
+  function _attendanceActiveCaptainIds(dates, rosterByCaptain) {
     const ids = new Set();
     for (const date of dates) {
       for (const id of rosterByCaptain.keys()) {
-        const auto = _computeAttendanceStatus(id, date, hoursByKey, rosterByCaptain);
-        if (_attendanceWorkDayValue(auto.status) >= 1) ids.add(id);
+        if (_isRosterActiveOnDate(rosterByCaptain.get(id) || [], date)) ids.add(id);
       }
     }
     return ids;
@@ -1590,6 +1610,18 @@ const ui = (() => {
     }
   }
 
+  function _attendanceOverrideSignature(monthKey, overrides = _getAttendanceOverrides()) {
+    const prefix = `${monthKey}-`;
+    return Object.keys(overrides || {})
+      .filter(key => {
+        const datePart = key.split('_').pop();
+        return datePart && datePart.startsWith(prefix);
+      })
+      .sort()
+      .map(key => `${key}:${overrides[key]}`)
+      .join('|');
+  }
+
   function _addAttendanceSummary(summary, status) {
     if (status === 'N/A') {
       summary.na++;
@@ -1639,12 +1671,22 @@ const ui = (() => {
     if (key === 'name') return row.captain.name || row.captain.id;
     if (key === 'workDays') return row.workDays;
     if (key === 'weekOffs') return row.weekOffs;
+    if (key === 'typeDays') return (row.bonus?.ft_days || 0) + (row.bonus?.pt_days || 0);
+    if (key === 'allowedOffs') return row.bonus?.allowed_offs || 0;
+    if (key === 'bonus') return row.bonus?.bonus_amount || 0;
+    if (key === 'reason') return row.bonus?.reason || '';
     if (key.startsWith('date:')) {
       const iso = key.slice(5);
       const cell = row.cells.find(c => c.iso === iso);
       return cell ? _attendanceStatusRank(cell.value) : 0;
     }
     return '';
+  }
+
+  function _attendanceTypeDaysLabel(bonus) {
+    if (!bonus) return '—';
+    const missing = bonus.missing_type_days ? ` / Missing ${_fmt(bonus.missing_type_days)}` : '';
+    return `FT ${_fmt(bonus.ft_days)} / PT ${_fmt(bonus.pt_days)}${missing}`;
   }
 
   function _attendanceTh(labelHtml, key, cls = '') {
@@ -3980,26 +4022,33 @@ const ui = (() => {
     const monthKey = document.getElementById('incentive-month')?.value;
     if (!monthKey) return;
 
+    // Attendance bonus uses raw daily hours plus effective-dated roster rows.
+    const dailyData = _supervisorFilter(sheets.getCached() || []);
     // Picking: use flagged daily data (has flows.is_picking)
     const flaggedData = _supervisorFilter(app.getFlaggedData() || []);
     // Audit: use Audits sheet (has audit_codes array for correct rack counts)
     const auditSheetData = _supervisorFilter(sheets.getAuditCached() || []);
+    const rosterRows = _supervisorFilter(sheets.getRosterCached() || []);
 
-    if (!flaggedData || flaggedData.length === 0) return;
+    if ((!dailyData || dailyData.length === 0) && (!flaggedData || flaggedData.length === 0) && (!auditSheetData || auditSheetData.length === 0) && (!rosterRows || rosterRows.length === 0)) return;
 
-    const cacheKey = `${monthKey}_${flaggedData.length}_${auditSheetData.length}`;
+    const attendanceOverrides = _getAttendanceOverrides();
+    const attendanceOverrideSig = _attendanceOverrideSignature(monthKey, attendanceOverrides);
+    const cacheKey = `${monthKey}_${dailyData.length}_${flaggedData.length}_${auditSheetData.length}_${rosterRows.length}_${attendanceOverrideSig}`;
     if (_incentiveCacheKey !== cacheKey) {
       // Use any date-bearing data to derive week keys for this month
-      const weekKeys = compute.getWeekKeysForMonth(flaggedData, monthKey);
+      const weekSource = dailyData.length > 0 ? dailyData : flaggedData;
+      const weekKeys = compute.getWeekKeysForMonth(weekSource, monthKey);
       const slabOverrides = JSON.parse(localStorage.getItem('incentiveSlabOverrides') || '{}');
       const slabOverride  = slabOverrides[monthKey] || null;
       const picking = compute.computePickingIncentives(flaggedData, weekKeys, slabOverride);
       const audit   = compute.computeAuditIncentives(auditSheetData, monthKey);
-      _incentiveCache = { weekKeys, picking, audit };
+      const attendance = compute.computeAttendanceBonus(dailyData, rosterRows, monthKey, attendanceOverrides);
+      _incentiveCache = { weekKeys, picking, audit, attendance };
       _incentiveCacheKey = cacheKey;
     }
 
-    const { weekKeys, picking, audit } = _incentiveCache;
+    const { weekKeys, picking, audit, attendance } = _incentiveCache;
 
     // ── Week labels: "Mar 30 – Apr 5 (2026)" style ──
     const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -4011,14 +4060,16 @@ const ui = (() => {
     });
 
     // ── Aggregate totals ──
-    let totalPicking = 0, totalAudit = 0, earningCount = 0;
-    const allCaptains = new Set([...picking.keys(), ...audit.keys()]);
+    let totalPicking = 0, totalAudit = 0, totalAttendance = 0, earningCount = 0;
+    const allCaptains = new Set([...picking.keys(), ...audit.keys(), ...attendance.keys()]);
     for (const empId of allCaptains) {
       const p = picking.get(empId)?.total || 0;
       const a = audit.get(empId)?.amount || 0;
+      const att = attendance.get(empId)?.bonus_amount || 0;
       totalPicking += p;
       totalAudit += a;
-      if (p > 0 || a > 0) earningCount++;
+      totalAttendance += att;
+      if (p > 0 || a > 0 || att > 0) earningCount++;
     }
 
     // ── Stat cards ──
@@ -4034,8 +4085,12 @@ const ui = (() => {
           <div class="stat-value" style="color:var(--green)">\u20B9${_fmt(totalAudit)}</div>
         </div>
         <div class="stat-card">
+          <div class="stat-label">Attendance Bonus</div>
+          <div class="stat-value" style="color:var(--yellow)">\u20B9${_fmt(totalAttendance)}</div>
+        </div>
+        <div class="stat-card">
           <div class="stat-label">Total Payout</div>
-          <div class="stat-value">\u20B9${_fmt(totalPicking + totalAudit)}</div>
+          <div class="stat-value">\u20B9${_fmt(totalPicking + totalAudit + totalAttendance)}</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Captains Earning</div>
@@ -4044,7 +4099,7 @@ const ui = (() => {
     }
 
     // ── Unified table ──
-    // Columns: Captain | [W1 Picking] [W2 Picking] ... | Audit Total | Total Incentive
+    // Columns: Captain | [W1 Picking] [W2 Picking] ... | Audit Total | Attendance Bonus | Total Incentive
     const tableEl = document.getElementById('incentive-table-content');
     if (!tableEl) return;
 
@@ -4053,10 +4108,12 @@ const ui = (() => {
     for (const empId of allCaptains) {
       const cap   = picking.get(empId);
       const aud   = audit.get(empId);
-      const name  = cap?.employee_name || aud?.employee_name || empId;
+      const att   = attendance.get(empId);
+      const name  = cap?.employee_name || aud?.employee_name || att?.employee_name || empId;
       const pTotal = cap?.total || 0;
       const aAmt   = aud?.amount || 0;
-      combined.push({ empId, name, cap, aud, pTotal, aAmt, total: pTotal + aAmt });
+      const attAmt = att?.bonus_amount || 0;
+      combined.push({ empId, name, cap, aud, att, pTotal, aAmt, attAmt, total: pTotal + aAmt + attAmt });
     }
     combined.sort((a, b) => b.total - a.total);
 
@@ -4082,11 +4139,21 @@ const ui = (() => {
         auditCell = `<td style="color:var(--text-muted)">—</td>`;
       }
 
+      let attendanceCell;
+      if (c.att) {
+        const detail = `FT ${_fmt(c.att.ft_days)} / PT ${_fmt(c.att.pt_days)} · offs ${_fmt(c.att.actual_offs)}/${_fmt(c.att.allowed_offs)}`;
+        const missing = c.att.missing_type_days ? ` · missing ${_fmt(c.att.missing_type_days)}` : '';
+        attendanceCell = `<td class="${c.att.bonus_amount > 0 ? 'cell-green' : ''}">\u20B9${_fmt(c.att.bonus_amount)}<div style="font-size:11px;color:var(--text-muted);font-weight:400;margin-top:2px">${detail}${missing}</div><div style="font-size:11px;color:${c.att.eligible ? 'var(--green)' : 'var(--yellow)'};font-weight:700;margin-top:2px">${_esc(c.att.reason)}</div></td>`;
+      } else {
+        attendanceCell = `<td style="color:var(--text-muted)">—</td>`;
+      }
+
       const rowClass = c.total > 0 ? '' : 'incentive-zero';
       return `<tr class="${rowClass}">
         <td><strong>${_esc(c.name)}</strong><br><small style="color:var(--text-muted)">${c.empId}</small></td>
         ${weekCells}
         ${auditCell}
+        ${attendanceCell}
         <td><strong>\u20B9${_fmt(c.total)}</strong></td>
       </tr>`;
     }).join('');
@@ -4105,6 +4172,7 @@ const ui = (() => {
             <th>Captain</th>
             ${weekHeaders}
             <th>Audit Total</th>
+            <th>Attendance Bonus</th>
             <th>Total Incentive</th>
           </tr></thead>
           <tbody>
@@ -4115,7 +4183,8 @@ const ui = (() => {
               <td><strong>TOTAL</strong></td>
               ${weekTotals}
               <td><strong>\u20B9${_fmt(totalAudit)}</strong></td>
-              <td><strong>\u20B9${_fmt(totalPicking + totalAudit)}</strong></td>
+              <td><strong>\u20B9${_fmt(totalAttendance)}</strong></td>
+              <td><strong>\u20B9${_fmt(totalPicking + totalAudit + totalAttendance)}</strong></td>
             </tr>
           </tfoot>
         </table>

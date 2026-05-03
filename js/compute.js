@@ -1359,6 +1359,208 @@ const compute = (() => {
     return result;
   }
 
+  // ── Attendance Bonus Calculation ─────────────────────────────────────
+
+  const ATTENDANCE_BONUS_BASE = { FT: 1000, PT: 500 };
+  const ATTENDANCE_BONUS_MIN_ACTIVE_DAYS = 7;
+
+  /**
+   * Compute prorated monthly attendance bonus per captain.
+   * Roster rows are effective-dated. A captain who changes FT/PT status mid-month
+   * should have separate roster rows with different start/end dates.
+   *
+   * @param {Array} data - daily metric rows with total_active_time
+   * @param {Array} rosterRows - roster rows with start/end and employment_type
+   * @param {string} monthKey - "YYYY-MM"
+   * @param {Object} overrides - optional attendance status overrides keyed employeeId_YYYY-MM-DD
+   * @returns {Map<string, {month, employee_id, employee_name, active_days, ft_days, pt_days, missing_type_days, allowed_offs, actual_offs, eligible, bonus_amount, reason}>}
+   */
+  function computeAttendanceBonus(data, rosterRows, monthKey, overrides = {}) {
+    const [year, month] = String(monthKey || '').split('-').map(Number);
+    if (!year || !month) return new Map();
+
+    const dates = _attendanceMonthDates(year, month);
+    const daysInMonth = dates.length;
+    const hoursByKey = _attendanceHoursByKey(data);
+    const rosterByCaptain = _attendanceRosterByCaptain(rosterRows);
+    const results = new Map();
+
+    for (const [empId, rows] of rosterByCaptain) {
+      let employeeName = rows.find(r => r.employee_name)?.employee_name || empId;
+      let activeDays = 0;
+      let ftDays = 0;
+      let ptDays = 0;
+      let missingTypeDays = 0;
+      let actualOffs = 0;
+      let rawAmount = 0;
+      let hasUnplannedLeave = false;
+      let hasShortAttendance = false;
+
+      for (const date of dates) {
+        const roster = _attendanceRosterEntryOnDate(rows, date);
+        if (!roster) continue;
+
+        activeDays++;
+        if (roster.employee_name) employeeName = roster.employee_name;
+
+        const iso = _dk(date);
+        const key = _attendanceOverrideKey(empId, iso);
+        const auto = _attendanceStatusFromHours(hoursByKey.get(key) || 0);
+        const status = overrides[key] || auto.status;
+        const employmentType = _normalizeEmploymentType(roster.employment_type);
+
+        if (employmentType === 'FT') {
+          ftDays++;
+          rawAmount += ATTENDANCE_BONUS_BASE.FT / daysInMonth;
+        } else if (employmentType === 'PT') {
+          ptDays++;
+          rawAmount += ATTENDANCE_BONUS_BASE.PT / daysInMonth;
+        } else {
+          missingTypeDays++;
+        }
+
+        if (status === 'Off') actualOffs++;
+        if (status === 'Unplanned Leave') hasUnplannedLeave = true;
+
+        if (employmentType && status !== 'Off' && status !== 'Unplanned Leave') {
+          const credit = _attendanceWorkDayValue(status);
+          const requiredCredit = employmentType === 'FT' ? 1 : 0.5;
+          if (credit < requiredCredit) hasShortAttendance = true;
+        }
+      }
+
+      if (activeDays === 0) continue;
+
+      const allowedOffs = Math.round(4 * activeDays / daysInMonth);
+      let eligible = false;
+      let reason = 'Eligible';
+
+      if (missingTypeDays > 0) reason = 'Needs roster type';
+      else if (activeDays < ATTENDANCE_BONUS_MIN_ACTIVE_DAYS) reason = 'Minimum tenure not met';
+      else if (hasUnplannedLeave) reason = 'Unplanned leave';
+      else if (actualOffs > allowedOffs) reason = 'Too many offs';
+      else if (hasShortAttendance) reason = 'Short attendance';
+      else eligible = true;
+
+      results.set(empId, {
+        month: monthKey,
+        employee_id: empId,
+        employee_name: employeeName,
+        active_days: activeDays,
+        ft_days: ftDays,
+        pt_days: ptDays,
+        missing_type_days: missingTypeDays,
+        allowed_offs: allowedOffs,
+        actual_offs: actualOffs,
+        eligible,
+        bonus_amount: eligible ? Math.round(rawAmount) : 0,
+        reason,
+      });
+    }
+
+    return results;
+  }
+
+  function _attendanceMonthDates(year, month) {
+    const last = new Date(year, month, 0).getDate();
+    return Array.from({ length: last }, (_, i) => new Date(year, month - 1, i + 1));
+  }
+
+  function _attendanceRosterByCaptain(rosterRows) {
+    const out = new Map();
+    for (const row of rosterRows || []) {
+      const id = _cleanEmployeeId(row.employee_id);
+      if (!id) continue;
+      if (!out.has(id)) out.set(id, []);
+      out.get(id).push(row);
+    }
+    return out;
+  }
+
+  function _attendanceHoursByKey(data) {
+    const out = new Map();
+    for (const row of data || []) {
+      const id = _cleanEmployeeId(row.employee_id);
+      const iso = row.dateIsoStr || (row.date ? _dk(row.date) : '');
+      const hrs = (row.total_active_time || 0) / 3600;
+      if (!id || !iso || isNaN(hrs) || hrs <= 0) continue;
+      const key = _attendanceOverrideKey(id, iso);
+      out.set(key, (out.get(key) || 0) + hrs);
+    }
+    return out;
+  }
+
+  function _attendanceRosterEntryOnDate(rows, date) {
+    const target = _dateOnly(date).getTime();
+    let best = null;
+    let bestStart = -Infinity;
+
+    for (const row of rows || []) {
+      const start = _rosterDate(row.start);
+      if (!start) continue;
+      const startMs = _dateOnly(start).getTime();
+      if (startMs > target) continue;
+      const end = _rosterDate(row.end);
+      if (end && _dateOnly(end).getTime() < target) continue;
+      if (startMs >= bestStart) {
+        best = row;
+        bestStart = startMs;
+      }
+    }
+
+    return best;
+  }
+
+  function _attendanceStatusFromHours(rawHours) {
+    if (!rawHours) return { status: 'Off', rawHours: 0 };
+    const adjusted = rawHours >= 5 ? rawHours + 1 : rawHours + 0.5;
+    const rounded = Math.round(adjusted);
+    if (rounded >= 9 && rounded <= 11) return { status: 'Full-day', rawHours };
+    if (rounded >= 4 && rounded <= 6) return { status: 'Half-day', rawHours };
+    return { status: `${rounded} hrs`, rawHours };
+  }
+
+  function _attendanceWorkDayValue(status) {
+    if (status === 'Full-day') return 1;
+    if (status === 'Half-day') return 0.5;
+    const m = String(status || '').match(/^(\d+)\s*hrs?$/i);
+    if (!m) return 0;
+    const hrs = parseInt(m[1], 10);
+    if (hrs >= 7) return 1;
+    if (hrs > 0) return 0.5;
+    return 0;
+  }
+
+  function _attendanceOverrideKey(empId, isoDate) {
+    return `${_cleanEmployeeId(empId)}_${isoDate}`;
+  }
+
+  function _cleanEmployeeId(value) {
+    return String(value || '').replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, '').toUpperCase();
+  }
+
+  function _normalizeEmploymentType(value) {
+    const s = String(value || '').trim().toUpperCase().replace(/[\s_-]+/g, '');
+    if (s === 'FT' || s === 'FULLTIME') return 'FT';
+    if (s === 'PT' || s === 'PARTTIME') return 'PT';
+    return '';
+  }
+
+  function _rosterDate(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const str = String(value).trim();
+    const n = parseFloat(str);
+    if (/^-?\d+(\.\d+)?$/.test(str) && !isNaN(n) && n > 1000) {
+      return new Date(Math.round((n - 25569) * 86400000));
+    }
+    const d = new Date(str);
+    return isNaN(d) ? null : d;
+  }
+
+  function _dateOnly(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
   return {
     computeFlowFlags,
     computeFNVRate,
@@ -1377,6 +1579,7 @@ const compute = (() => {
     weekStartFromKey,
     computePickingIncentives,
     computeAuditIncentives,
+    computeAttendanceBonus,
     PICKING_SLABS_400,
     PICKING_SLABS_800,
   };

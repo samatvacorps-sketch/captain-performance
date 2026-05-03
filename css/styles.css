@@ -1554,6 +1554,10 @@ tr.incentive-zero td { opacity: 0.45; }
   margin-bottom: 24px;
 }
 
+#incentive-stat-cards {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .stat-card {
   background: var(--card-bg);
   border: 1px solid var(--border-subtle);
@@ -2615,6 +2619,30 @@ td.attendance-name-col {
   text-align: center !important;
 }
 
+.attendance-type-col,
+.attendance-type-head,
+.attendance-bonus-col,
+.attendance-bonus-head {
+  width: 132px;
+  min-width: 132px;
+  text-align: center !important;
+}
+
+.attendance-reason-col,
+.attendance-reason-head {
+  width: 160px;
+  min-width: 160px;
+  text-align: center !important;
+}
+
+.attendance-bonus-ok {
+  color: var(--green);
+}
+
+.attendance-bonus-blocked {
+  color: var(--yellow);
+}
+
 .attendance-sort-icon {
   color: var(--accent);
   font-size: 10px;
@@ -3257,6 +3285,7 @@ body,
   .bento-card { padding: 16px; }
   .bento-card-header { flex-direction: column; gap: 8px; }
   .stat-cards-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  #incentive-stat-cards { grid-template-columns: repeat(2, 1fr); }
   .stat-card { padding: 14px; gap: 10px; }
   .stat-icon { width: 38px; height: 38px; font-size: 16px; }
   .stat-value { font-size: 20px; }

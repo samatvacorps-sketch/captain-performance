@@ -332,6 +332,7 @@ const sheets = (() => {
       start:         _str(raw[c.start]),
       end:           _str(raw[c.end]),
       assigned_off:  _str(raw[c.assigned_off]),
+      employment_type: _str(raw[c.employment_type]),
     };
   }
 
