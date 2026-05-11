@@ -1265,7 +1265,16 @@ const ui = (() => {
     'Unplanned Leave',
     ...Array.from({ length: 13 }, (_, i) => `${i + 1} hrs`),
   ];
+  const _ATTENDANCE_TIME_FIELDS = [
+    { key: 'total_active_time', label: 'Total Active' },
+    { key: 'picker_active_time', label: 'Picking' },
+    { key: 'putter_active_time', label: 'Putting' },
+    { key: 'auditor_active_time', label: 'Audit' },
+    { key: 'fnv_active_time', label: 'FNV' },
+  ];
   let _attendanceSort = { key: 'name', dir: 'asc' };
+  let _attendancePopoverDismiss = null;
+  let _attendancePopoverEscape = null;
 
   function initAttendance() {
     const input = document.getElementById('attendance-month');
@@ -1275,10 +1284,12 @@ const ui = (() => {
   }
 
   function onAttendanceMonthChange() {
+    _hideAttendanceTimePopover();
     renderAttendance();
   }
 
   function renderAttendance() {
+    _hideAttendanceTimePopover();
     const monthInput = document.getElementById('attendance-month');
     const gridEl = document.getElementById('attendance-grid');
     if (!monthInput || !gridEl) return;
@@ -1352,10 +1363,16 @@ const ui = (() => {
         <td class="attendance-name-col">
           <div class="captain-cell">
             <div class="captain-avatar">${_initials(row.captain.name || row.captain.id)}</div>
-            <div>
+            <button type="button"
+                    class="attendance-captain-trigger"
+                    data-emp-id="${_esc(row.captain.id)}"
+                    data-captain-name="${_esc(row.captain.name || 'Unknown')}"
+                    aria-haspopup="dialog"
+                    aria-expanded="false"
+                    aria-label="Show time summary for ${_esc(row.captain.name || row.captain.id)}">
               <div class="captain-name">${_esc(row.captain.name || 'Unknown')}</div>
               <div class="captain-id">${_esc(row.captain.id)}</div>
-            </div>
+            </button>
           </div>
         </td>
       </tr>`).join('');
@@ -1459,6 +1476,7 @@ const ui = (() => {
         </div>
       </div>`;
 
+    _bindAttendanceCaptainTriggers(gridEl);
     _renderAttendanceSummary(summary, monthKey);
   }
 
@@ -1477,6 +1495,7 @@ const ui = (() => {
   }
 
   function clearAttendanceOverrides() {
+    _hideAttendanceTimePopover();
     const month = document.getElementById('attendance-month')?.value;
     if (!month) return;
     const overrides = _getAttendanceOverrides();
@@ -1496,6 +1515,7 @@ const ui = (() => {
   }
 
   function sortAttendance(key) {
+    _hideAttendanceTimePopover();
     if (_attendanceSort.key === key) {
       _attendanceSort.dir = _attendanceSort.dir === 'asc' ? 'desc' : 'asc';
     } else {
@@ -1693,6 +1713,127 @@ const ui = (() => {
       return cell ? _attendanceStatusRank(cell.value) : 0;
     }
     return '';
+  }
+
+  function _bindAttendanceCaptainTriggers(root) {
+    root.querySelectorAll('.attendance-captain-trigger').forEach(btn => {
+      btn.addEventListener('click', ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        _showAttendanceTimePopover(btn, {
+          id: btn.dataset.empId || '',
+          name: btn.dataset.captainName || '',
+        });
+      });
+    });
+  }
+
+  function _showAttendanceTimePopover(anchor, captain) {
+    const empId = _cleanAttendanceId(captain.id);
+    if (!empId) return;
+    _hideAttendanceTimePopover();
+
+    anchor.setAttribute('aria-expanded', 'true');
+    const monthKey = document.getElementById('attendance-month')?.value || _latestAttendanceMonth();
+    const rows = _attendanceCaptainTimeRows(empId, monthKey);
+    const totalSeconds = rows.find(r => r.key === 'total_active_time')?.seconds || 0;
+    const pop = document.createElement('div');
+    pop.id = 'attendance-time-popover';
+    pop.className = 'attendance-time-popover';
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-label', `${captain.name || empId} active time summary`);
+    pop.innerHTML = `
+      <div class="attendance-time-header">
+        <div>
+          <div class="attendance-time-title">${_esc(captain.name || 'Unknown')}</div>
+          <div class="attendance-time-sub">${_esc(empId)} · ${_esc(_attendanceMonthLabel(monthKey))}</div>
+        </div>
+        <div class="attendance-time-total">${_fmt(totalSeconds / 3600, 1)} h</div>
+      </div>
+      <div class="attendance-time-rows">
+        ${rows.map(row => {
+          const pctText = row.percent === null ? '—' : `${_fmt(row.percent, 1)}%`;
+          const width = row.percent === null ? '0' : String(Math.min(100, Math.max(0, row.percent)).toFixed(1));
+          return `
+            <div class="attendance-time-row ${row.key === 'total_active_time' ? 'is-total' : ''}">
+              <div class="attendance-time-label">${_esc(row.label)}</div>
+              <div class="attendance-time-hours">${_fmt(row.seconds / 3600, 1)} h</div>
+              <div class="attendance-time-percent">${pctText}</div>
+              <div class="attendance-time-bar" aria-hidden="true"><span style="width:${width}%"></span></div>
+            </div>`;
+        }).join('')}
+      </div>`;
+    document.body.appendChild(pop);
+
+    _positionAttendanceTimePopover(anchor, pop);
+
+    _attendancePopoverDismiss = ev => {
+      if (!pop.contains(ev.target) && ev.target !== anchor) _hideAttendanceTimePopover();
+    };
+    _attendancePopoverEscape = ev => {
+      if (ev.key === 'Escape') _hideAttendanceTimePopover();
+    };
+    setTimeout(() => {
+      document.addEventListener('click', _attendancePopoverDismiss, true);
+      document.addEventListener('keydown', _attendancePopoverEscape, true);
+    }, 0);
+  }
+
+  function _positionAttendanceTimePopover(anchor, pop) {
+    const rect = anchor.getBoundingClientRect();
+    const scrollX = window.scrollX || window.pageXOffset;
+    const scrollY = window.scrollY || window.pageYOffset;
+    const popW = Math.min(340, window.innerWidth - 16);
+    let left = rect.left + scrollX;
+    if (left + popW > window.innerWidth + scrollX - 8) left = window.innerWidth + scrollX - popW - 8;
+    if (left < scrollX + 8) left = scrollX + 8;
+
+    pop.style.width = popW + 'px';
+    pop.style.left = left + 'px';
+    pop.style.top = (rect.bottom + scrollY + 8) + 'px';
+
+    const popRect = pop.getBoundingClientRect();
+    if (rect.bottom + popRect.height > window.innerHeight - 8 && rect.top > popRect.height + 8) {
+      pop.style.top = (rect.top + scrollY - popRect.height - 8) + 'px';
+    }
+  }
+
+  function _hideAttendanceTimePopover() {
+    document.querySelectorAll('.attendance-captain-trigger[aria-expanded="true"]').forEach(btn => {
+      btn.setAttribute('aria-expanded', 'false');
+    });
+    document.getElementById('attendance-time-popover')?.remove();
+    if (_attendancePopoverDismiss) {
+      document.removeEventListener('click', _attendancePopoverDismiss, true);
+      _attendancePopoverDismiss = null;
+    }
+    if (_attendancePopoverEscape) {
+      document.removeEventListener('keydown', _attendancePopoverEscape, true);
+      _attendancePopoverEscape = null;
+    }
+  }
+
+  function _attendanceCaptainTimeRows(empId, monthKey) {
+    const totals = Object.fromEntries(_ATTENDANCE_TIME_FIELDS.map(f => [f.key, 0]));
+    const monthPrefix = `${monthKey}-`;
+    for (const row of sheets.getCached() || []) {
+      if (_cleanAttendanceId(row.employee_id) !== empId) continue;
+      const iso = row.dateIsoStr || _isoDateStr(row.date);
+      if (!iso || !iso.startsWith(monthPrefix)) continue;
+      for (const field of _ATTENDANCE_TIME_FIELDS) {
+        totals[field.key] += row[field.key] || 0;
+      }
+    }
+    const totalSeconds = totals.total_active_time || 0;
+    return _ATTENDANCE_TIME_FIELDS.map(field => {
+      const seconds = totals[field.key] || 0;
+      return {
+        key: field.key,
+        label: field.label,
+        seconds,
+        percent: totalSeconds > 0 ? (seconds / totalSeconds) * 100 : null,
+      };
+    });
   }
 
   function _attendanceTypeDaysLabel(bonus) {
