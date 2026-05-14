@@ -1213,6 +1213,7 @@ const compute = (() => {
     { maxTime: 95,  amount: 250 },   // 1:25-1:35
     { maxTime: 120, amount: 125 },   // 1:35-2:00
   ];
+  const AUDIT_INCENTIVE_RACK_CAP = 100;
 
   function _pickingSlabAmount(avgTime, slabs) {
     for (const slab of slabs) {
@@ -1319,7 +1320,7 @@ const compute = (() => {
    * Uses the Audits sheet (auditData) for accurate rack counts via audit_codes.length.
    * @param {Array} auditData - rows from the Audits sheet (each has audit_codes array)
    * @param {string} monthKey - "YYYY-MM"
-   * @returns {Map<string, { employee_name, totalRacks, amount, tier1, tier2, tier3 }>}
+   * @returns {Map<string, { employee_name, totalRacks, payableRacks, rackCap, amount, tier1, tier2, tier3 }>}
    */
   function computeAuditIncentives(auditData, monthKey) {
     const empMap = new Map();
@@ -1341,15 +1342,18 @@ const compute = (() => {
     const result = new Map();
     for (const [empId, emp] of empMap) {
       const r = emp.totalRacks;
-      const tier1Racks = Math.min(r, 40);
-      const tier2Racks = Math.min(Math.max(r - 40, 0), 40);
-      const tier3Racks = Math.max(r - 80, 0);
+      const payableRacks = Math.min(r, AUDIT_INCENTIVE_RACK_CAP);
+      const tier1Racks = Math.min(payableRacks, 40);
+      const tier2Racks = Math.min(Math.max(payableRacks - 40, 0), 40);
+      const tier3Racks = Math.max(payableRacks - 80, 0);
       const tier1 = tier1Racks * 30;
       const tier2 = tier2Racks * 40;
       const tier3 = tier3Racks * 50;
       result.set(empId, {
         employee_name: emp.employee_name,
         totalRacks: r,
+        payableRacks,
+        rackCap: AUDIT_INCENTIVE_RACK_CAP,
         amount: tier1 + tier2 + tier3,
         tier1, tier1Racks,
         tier2, tier2Racks,

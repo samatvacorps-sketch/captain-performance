@@ -4272,7 +4272,9 @@ const ui = (() => {
       let auditCell;
       if (c.aud) {
         const r = c.aud.totalRacks;
-        auditCell = `<td class="${c.aud.amount > 0 ? 'cell-green' : ''}">\u20B9${_fmt(c.aud.amount)}<div style="font-size:11px;color:var(--text-muted);font-weight:400;margin-top:2px">${r} rack${r !== 1 ? 's' : ''}</div></td>`;
+        const paidRacks = c.aud.payableRacks ?? r;
+        const capNote = paidRacks < r ? ` · ${paidRacks} paid` : '';
+        auditCell = `<td class="${c.aud.amount > 0 ? 'cell-green' : ''}">\u20B9${_fmt(c.aud.amount)}<div style="font-size:11px;color:var(--text-muted);font-weight:400;margin-top:2px">${r} rack${r !== 1 ? 's' : ''}${capNote}</div></td>`;
       } else {
         auditCell = `<td style="color:var(--text-muted)">—</td>`;
       }
