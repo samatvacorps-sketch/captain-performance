@@ -1357,26 +1357,6 @@ const ui = (() => {
 
     rows.sort(_attendanceRowSorter);
 
-    const identityRows = rows.map(row => `
-      <tr>
-        <td class="attendance-id-col">${_esc(row.captain.id)}</td>
-        <td class="attendance-name-col">
-          <div class="captain-cell">
-            <div class="captain-avatar">${_initials(row.captain.name || row.captain.id)}</div>
-            <button type="button"
-                    class="attendance-captain-trigger"
-                    data-emp-id="${_esc(row.captain.id)}"
-                    data-captain-name="${_esc(row.captain.name || 'Unknown')}"
-                    aria-haspopup="dialog"
-                    aria-expanded="false"
-                    aria-label="Show time summary for ${_esc(row.captain.name || row.captain.id)}">
-              <div class="captain-name">${_esc(row.captain.name || 'Unknown')}</div>
-              <div class="captain-id">${_esc(row.captain.id)}</div>
-            </button>
-          </div>
-        </td>
-      </tr>`).join('');
-
     const attendanceRows = rows.map(row => {
       const cellHtml = row.cells.map(cell => {
         const statusCls = _attendanceStatusClass(cell.value);
@@ -1403,6 +1383,22 @@ const ui = (() => {
 
       return `
         <tr>
+          <td class="attendance-id-col">${_esc(row.captain.id)}</td>
+          <td class="attendance-name-col">
+            <div class="captain-cell">
+              <div class="captain-avatar">${_initials(row.captain.name || row.captain.id)}</div>
+              <button type="button"
+                      class="attendance-captain-trigger"
+                      data-emp-id="${_esc(row.captain.id)}"
+                      data-captain-name="${_esc(row.captain.name || 'Unknown')}"
+                      aria-haspopup="dialog"
+                      aria-expanded="false"
+                      aria-label="Show time summary for ${_esc(row.captain.name || row.captain.id)}">
+                <div class="captain-name">${_esc(row.captain.name || 'Unknown')}</div>
+                <div class="captain-id">${_esc(row.captain.id)}</div>
+              </button>
+            </div>
+          </td>
           ${cellHtml}
           <td class="attendance-total-cell attendance-summary-col">${_fmt(row.workDays, 1)}</td>
           <td class="attendance-total-cell attendance-summary-col">${_fmt(row.weekOffs)}</td>
@@ -1430,27 +1426,12 @@ const ui = (() => {
 
     gridEl.innerHTML = `
       <div class="attendance-shell">
-        <div class="table-wrapper attendance-identity-pane">
-          <table class="data-table attendance-table attendance-identity-table">
+        <div class="table-wrapper attendance-table-wrapper">
+          <table class="data-table attendance-table">
             <thead>
               <tr>
                 ${_attendanceTh('employee_id', 'id', 'attendance-id-col')}
                 ${_attendanceTh('Employee Name', 'name', 'attendance-name-col')}
-              </tr>
-            </thead>
-            <tbody>${identityRows}</tbody>
-            <tfoot>
-              <tr>
-                <td class="attendance-id-col"></td>
-                <td class="attendance-name-col attendance-total-label">Total Staff</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        <div class="table-wrapper attendance-scroll-pane">
-          <table class="data-table attendance-table attendance-values-table">
-            <thead>
-              <tr>
                 ${headDays}
                 ${_attendanceTh('Work Days', 'workDays', 'attendance-summary-head')}
                 ${_attendanceTh('Week Offs', 'weekOffs', 'attendance-summary-head')}
@@ -1463,6 +1444,8 @@ const ui = (() => {
             <tbody>${attendanceRows}</tbody>
             <tfoot>
               <tr>
+                <td class="attendance-id-col"></td>
+                <td class="attendance-name-col attendance-total-label">Total Staff</td>
                 ${totalRow}
                 <td class="attendance-total-cell attendance-summary-col">${_fmt(totalWorkDays, 1)}</td>
                 <td class="attendance-total-cell attendance-summary-col">${_fmt(totalWeekOffs)}</td>

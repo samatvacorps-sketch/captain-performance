@@ -2390,6 +2390,7 @@ tr.incentive-zero td { opacity: 0.45; }
 }
 
 .attendance-table {
+  width: 100%;
   min-width: max-content;
   border-collapse: separate;
   border-spacing: 0;
@@ -2397,33 +2398,13 @@ tr.incentive-zero td { opacity: 0.45; }
 }
 
 .attendance-shell {
-  display: grid;
-  grid-template-columns: 364px minmax(0, 1fr);
-  align-items: start;
-  max-height: calc(100vh - 330px);
-  overflow-y: auto;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  display: block;
+  width: 100%;
+}
+
+.attendance-table-wrapper {
+  overflow: visible;
   background: var(--card-bg);
-}
-
-.attendance-identity-pane {
-  overflow: hidden;
-  border: none;
-  border-radius: 0;
-  border-right: 1px solid var(--border-subtle);
-}
-
-.attendance-scroll-pane {
-  overflow-x: auto;
-  overflow-y: visible;
-  border: none;
-  border-radius: 0;
-}
-
-.attendance-identity-table,
-.attendance-values-table {
-  width: auto;
 }
 
 .attendance-table th,
@@ -2434,16 +2415,13 @@ tr.incentive-zero td { opacity: 0.45; }
 
 .attendance-table thead th {
   position: sticky;
-  top: 0;
-  z-index: 4;
+  top: 56px;
+  z-index: 8;
   cursor: pointer;
   height: 58px;
 }
 
 .attendance-table tfoot td {
-  position: sticky;
-  bottom: 0;
-  z-index: 3;
   background: var(--surface-high);
   border-top: 1px solid var(--border);
   font-weight: 800;
@@ -2460,14 +2438,12 @@ tr.incentive-zero td { opacity: 0.45; }
 
 .attendance-id-col,
 .attendance-name-col {
-  background: var(--surface-high);
   text-align: left !important;
   overflow: hidden;
 }
 
 th.attendance-id-col,
 td.attendance-id-col {
-  left: 0;
   width: 128px;
   min-width: 128px;
   max-width: 128px;
@@ -2477,21 +2453,9 @@ td.attendance-id-col {
 
 th.attendance-name-col,
 td.attendance-name-col {
-  left: 128px;
   width: 236px;
   min-width: 236px;
   max-width: 236px;
-  box-shadow: 1px 0 0 var(--border-subtle);
-}
-
-td.attendance-id-col,
-td.attendance-name-col {
-  background: var(--card-bg);
-}
-
-.attendance-table tbody tr:hover td.attendance-id-col,
-.attendance-table tbody tr:hover td.attendance-name-col {
-  background: var(--surface-bright);
 }
 
 .attendance-date-col {
@@ -2800,10 +2764,6 @@ td.attendance-name-col {
 
 @media (max-width: 700px) {
   .attendance-summary-grid { grid-template-columns: 1fr; }
-  .attendance-shell {
-    grid-template-columns: 324px minmax(0, 1fr);
-    max-height: calc(100vh - 380px);
-  }
   th.attendance-name-col,
   td.attendance-name-col {
     width: 196px;
