@@ -48,6 +48,22 @@ const charts = (() => {
     return `rgba(${r},${g},${b},${a})`;
   };
 
+  const _RCA_STORE_DARK = ['#14b8a6', '#2dd4bf', '#34d399', '#4ade80', '#0d9488', '#10b981', '#5eead4', '#86efac'];
+  const _RCA_EXTERNAL_DARK = ['#f97316', '#fb923c', '#f59e0b', '#fbbf24', '#ea580c', '#d97706', '#fdba74', '#facc15'];
+  const _RCA_STORE_LIGHT = ['#0f766e', '#0d9488', '#059669', '#16a34a', '#14b8a6', '#22c55e', '#2dd4bf', '#4ade80'];
+  const _RCA_EXTERNAL_LIGHT = ['#c2410c', '#ea580c', '#d97706', '#f59e0b', '#f97316', '#b45309', '#fb923c', '#eab308'];
+  const _RCA_STORE_TERMS = ['picker', 'putter', 'auditor', 'warehouse', 'supervisor', 'infra', 'grn', 'store', 'captain', 'packing', 'inventory'];
+
+  function _isStoreSideRCA(rca) {
+    const text = String(rca || '').toLowerCase();
+    return _RCA_STORE_TERMS.some(term => text.includes(term));
+  }
+
+  function _rcaPalette(isStoreSide) {
+    if (isStoreSide) return _isLight() ? _RCA_STORE_LIGHT : _RCA_STORE_DARK;
+    return _isLight() ? _RCA_EXTERNAL_LIGHT : _RCA_EXTERNAL_DARK;
+  }
+
   // ── Theme-aware Chart Defaults ─────────────────────────────────────────
 
   function _isLight() {
@@ -806,8 +822,6 @@ const charts = (() => {
     const ctx = document.getElementById(canvasId)?.getContext('2d');
     if (!ctx) return;
 
-    const rcaColorList = [COLORS.red, COLORS.amber, '#facc15', COLORS.purple, COLORS.teal, COLORS.pink, COLORS.silver, COLORS.accent];
-
     const labels = periodData.map(d => d.label || d.weekKey || d.monthKey);
 
     // Collect all RCA keys across all periods, ordered by total count desc
@@ -819,17 +833,28 @@ const charts = (() => {
     }
     const allRCAs = Object.keys(rcaTotals).sort((a, b) => rcaTotals[b] - rcaTotals[a]);
 
-    const datasets = allRCAs.map((rca, i) => ({
-      label: rca,
-      data: periodData.map(d => {
-        const count = (d.byRCA || {})[rca] || 0;
-        const orders = d.totalOrdersPicked || 0;
-        return orders > 0 ? +((count / orders) * 100).toFixed(3) : 0;
-      }),
-      _rawCounts: periodData.map(d => (d.byRCA || {})[rca] || 0),
-      backgroundColor: ALPHA(rcaColorList[i % rcaColorList.length], 0.8),
-      stack: 'rca',
-    }));
+    let storeColorIdx = 0;
+    let externalColorIdx = 0;
+    const datasets = allRCAs.map((rca) => {
+      const isStoreSide = _isStoreSideRCA(rca);
+      const palette = _rcaPalette(isStoreSide);
+      const colorIdx = isStoreSide ? storeColorIdx++ : externalColorIdx++;
+      const color = palette[colorIdx % palette.length];
+
+      return {
+        label: rca,
+        data: periodData.map(d => {
+          const count = (d.byRCA || {})[rca] || 0;
+          const orders = d.totalOrdersPicked || 0;
+          return orders > 0 ? +((count / orders) * 100).toFixed(3) : 0;
+        }),
+        _rawCounts: periodData.map(d => (d.byRCA || {})[rca] || 0),
+        backgroundColor: ALPHA(color, 0.82),
+        borderColor: ALPHA(color, 0.95),
+        borderWidth: 0.5,
+        stack: 'rca',
+      };
+    });
 
     _instances[canvasId] = new Chart(ctx, {
       type: 'bar',
