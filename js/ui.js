@@ -3696,6 +3696,10 @@ const ui = (() => {
   let _complDateMode = false;
   let _complCatMode = 'total';
   let _complCatPeriodData = null;
+  let _complDetailRows = [];
+  let _complDetailCaptains = new Map();
+  let _complDetailPeriod = { start: '', end: '' };
+  let _complDetailEscHandler = null;
 
   function initComplaintsDeepDive() {
     const complData = sheets.getComplaintsCached();
@@ -3811,11 +3815,13 @@ const ui = (() => {
   function renderComplaintsDeepDive() {
     const container = document.getElementById('compl-content');
     if (!container) return;
+    _closeComplaintDetail();
 
     const complData = _supervisorFilter(sheets.getComplaintsCached() || []);
     const dailyData = _supervisorFilter(sheets.getCached());
 
     if (!complData || complData.length === 0) {
+      _complDetailRows = [];
       container.innerHTML = '<p class="placeholder-text">No complaints data available. Ensure the "Complaints" sheet exists in the source spreadsheet.</p>';
       return;
     }
@@ -3832,14 +3838,17 @@ const ui = (() => {
     if (!_complIncludeQNG) {
       filteredCompl = filteredCompl.filter(r => (r.complaint_category || '').toLowerCase() !== 'qng');
     }
+    _complDetailRows = filteredCompl;
+    _complDetailPeriod = { start: startVal || '', end: endVal || '' };
 
     if (filteredCompl.length === 0) {
+      _complDetailRows = [];
       container.innerHTML = '<p class="placeholder-text">No complaints data for the selected period.</p>';
       return;
     }
 
     // Compute (or use cache)
-    const cacheKey = `${startVal}_${endVal}_${complData.length}_qng${_complIncludeQNG ? 1 : 0}`;
+    const cacheKey = `${startVal}_${endVal}_${complData.length}_${filteredDaily.length}_qng${_complIncludeQNG ? 1 : 0}`;
     if (_complCacheKey !== cacheKey) {
       _complCache = compute.computeComplaintAggregations(filteredCompl, filteredDaily);
       _complCacheKey = cacheKey;
@@ -3974,6 +3983,7 @@ const ui = (() => {
 
     // Render captain scatter
     const captainArr = [...agg.captainPerf.values()].sort((a, b) => b.inStoreYes - a.inStoreYes);
+    _complDetailCaptains = new Map(captainArr.map(c => [c.employee_id || '', c]));
     charts.renderCaptainComplaintScatter('chart-compl-scatter', captainArr);
 
     // Render captain ranking + table
@@ -4059,12 +4069,16 @@ const ui = (() => {
     const rows = captains.map(c => {
       const rateClass    = c.complaintRate >= 1        ? 'rate-high' : c.complaintRate >= 0.5        ? 'rate-medium' : 'rate-low';
       const pfmRateClass = c.pickerFaultMissingRate >= 1 ? 'rate-high' : c.pickerFaultMissingRate >= 0.5 ? 'rate-medium' : 'rate-low';
+      const empId = c.employee_id || '';
+      const captainLabel = c.employee_name || empId || 'Unknown Captain';
+      const inStoreCell = _renderComplaintDrillCell(c.inStoreYes, empId, 'instore', `View in-store complaints for ${captainLabel}`, true);
+      const pfmCell = _renderComplaintDrillCell(c.pickerFaultMissing, empId, 'pfm', `View picker fault missing complaints for ${captainLabel}`);
       return `<tr>
         <td style="font-weight:600;">${_esc(c.employee_name)}</td>
         <td>${_fmt(c.totalOrdersPicked)}</td>
         <td>${c.totalComplaints}</td>
-        <td style="font-weight:700;color:#ff6b6b;">${c.inStoreYes}</td>
-        <td>${c.pickerFaultMissing ?? '—'}</td>
+        <td>${inStoreCell}</td>
+        <td>${pfmCell}</td>
         <td><span class="compl-rate-badge ${pfmRateClass}">${c.pickerFaultMissingRate ?? 0}%</span></td>
         <td><span class="compl-rate-badge ${rateClass}">${c.complaintRate}%</span></td>
         <td>${_esc(c.topCategory)}</td>
@@ -4090,6 +4104,7 @@ const ui = (() => {
         </table>
       </div>`;
     _initTableSort(container.querySelector('.data-table'));
+    _bindComplaintDrilldowns(container);
   }
 
   function _renderCategoryTable(sortedL0) {
@@ -4124,6 +4139,123 @@ const ui = (() => {
         </table>
       </div>`;
     _initTableSort(container.querySelector('.data-table'));
+  }
+
+  function _renderComplaintDrillCell(count, empId, kind, label, danger = false) {
+    const n = Number(count) || 0;
+    const text = _fmt(n);
+    if (n <= 0) {
+      return `<span class="compl-drill-empty${danger ? ' compl-drill-danger-text' : ''}">${text}</span>`;
+    }
+    return `<button type="button"
+      class="compl-drill-btn${danger ? ' compl-drill-danger' : ''}"
+      data-compl-emp="${_esc(empId || '')}"
+      data-compl-kind="${_esc(kind)}"
+      aria-label="${_esc(label)}">${text}</button>`;
+  }
+
+  function _bindComplaintDrilldowns(container) {
+    container.querySelectorAll('.compl-drill-btn').forEach(btn => {
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        _showComplaintDetail(btn.dataset.complEmp || '', btn.dataset.complKind || 'instore');
+      });
+    });
+  }
+
+  function _showComplaintDetail(empId, kind) {
+    const isPickerMissing = kind === 'pfm';
+    const matchesKind = (row) => {
+      if (!row.in_store) return false;
+      if (!isPickerMissing) return true;
+      return (row.complaint_category || '').toLowerCase() === 'item_missing';
+    };
+    const rows = _complDetailRows
+      .filter(row => (row.employee_id || '') === empId && matchesKind(row))
+      .slice()
+      .sort((a, b) => (b.date?.getTime?.() || 0) - (a.date?.getTime?.() || 0));
+
+    _closeComplaintDetail();
+    if (rows.length === 0) return;
+
+    const captain = _complDetailCaptains.get(empId);
+    const captainName = captain?.employee_name || empId || 'Unknown Captain';
+    const title = isPickerMissing ? 'Picker Fault Missing' : 'In-Store Yes';
+    const uniqueOrders = new Set(rows.map(r => r.order_id).filter(Boolean)).size;
+    const periodText = _complDetailPeriod.start && _complDetailPeriod.end
+      ? `${_complDetailPeriod.start} to ${_complDetailPeriod.end}`
+      : 'Selected period';
+
+    const bodyRows = rows.map(r => `
+      <tr>
+        <td style="white-space:nowrap;">${_esc(r.dateStr || _isoDateStr(r.date))}</td>
+        <td>${_esc(r.order_id || '—')}</td>
+        <td class="compl-detail-product">${_esc(r.product_name || '—')}</td>
+        <td>${_esc(r.complaint_category || 'unknown')}</td>
+        <td class="compl-detail-rca">${_esc(r.rca || '—')}</td>
+        <td>${_esc(r.l0_category || '—')}</td>
+        <td>${_esc(r.l1_category || '—')}</td>
+      </tr>
+    `).join('');
+
+    const modal = document.createElement('div');
+    modal.id = 'compl-detail-modal';
+    modal.className = 'compl-detail-backdrop';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'compl-detail-title');
+    modal.innerHTML = `
+      <div class="compl-detail-modal">
+        <div class="compl-detail-header">
+          <div>
+            <p class="compl-detail-kicker">${_esc(title)}</p>
+            <h3 id="compl-detail-title">${_esc(captainName)}</h3>
+            <p class="compl-detail-subtitle">${_esc(periodText)}</p>
+          </div>
+          <button type="button" class="compl-detail-close" aria-label="Close complaint details">&times;</button>
+        </div>
+        <div class="compl-detail-summary">
+          <span>${_fmt(uniqueOrders)} unique order${uniqueOrders === 1 ? '' : 's'}</span>
+          <span>${_fmt(rows.length)} complaint row${rows.length === 1 ? '' : 's'}</span>
+        </div>
+        <div class="table-wrapper compl-detail-table-wrapper">
+          <table class="data-table compl-detail-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Order ID</th>
+                <th>Product</th>
+                <th>Complaint Category</th>
+                <th>RCA</th>
+                <th>L0</th>
+                <th>L1</th>
+              </tr>
+            </thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+
+    document.body.appendChild(modal);
+    modal.querySelector('.compl-detail-close')?.addEventListener('click', _closeComplaintDetail);
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal) _closeComplaintDetail();
+    });
+    _complDetailEscHandler = (event) => {
+      if (event.key === 'Escape') _closeComplaintDetail();
+    };
+    document.addEventListener('keydown', _complDetailEscHandler);
+    _initTableSort(modal.querySelector('.data-table'));
+    modal.querySelector('.compl-detail-close')?.focus();
+  }
+
+  function _closeComplaintDetail() {
+    document.getElementById('compl-detail-modal')?.remove();
+    if (_complDetailEscHandler) {
+      document.removeEventListener('keydown', _complDetailEscHandler);
+      _complDetailEscHandler = null;
+    }
   }
 
   // ── Incentives ─────────────────────────────────────────────────────────
