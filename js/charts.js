@@ -50,17 +50,22 @@ const charts = (() => {
 
   const _RCA_STORE_DARK = ['#14b8a6', '#2dd4bf', '#34d399', '#4ade80', '#0d9488', '#10b981', '#5eead4', '#86efac'];
   const _RCA_EXTERNAL_DARK = ['#f97316', '#fb923c', '#f59e0b', '#fbbf24', '#ea580c', '#d97706', '#fdba74', '#facc15'];
+  const _RCA_UNKNOWN_DARK = ['#ef4444'];
   const _RCA_STORE_LIGHT = ['#0f766e', '#0d9488', '#059669', '#16a34a', '#14b8a6', '#22c55e', '#2dd4bf', '#4ade80'];
   const _RCA_EXTERNAL_LIGHT = ['#c2410c', '#ea580c', '#d97706', '#f59e0b', '#f97316', '#b45309', '#fb923c', '#eab308'];
-  const _RCA_STORE_TERMS = ['picker', 'putter', 'auditor', 'warehouse', 'supervisor', 'infra', 'grn', 'store', 'captain', 'packing', 'inventory'];
+  const _RCA_UNKNOWN_LIGHT = ['#dc2626'];
+  const _RCA_STORE_TERMS = ['picker', 'putter', 'auditor', 'supervisor', 'infra', 'grn', 'store', 'captain', 'packing', 'inventory'];
+  const _RCA_GROUP_RANK = { store: 0, external: 1, unknown: 2 };
 
-  function _isStoreSideRCA(rca) {
+  function _rcaGroup(rca) {
     const text = String(rca || '').toLowerCase();
-    return _RCA_STORE_TERMS.some(term => text.includes(term));
+    if (!text || text === 'unknown') return 'unknown';
+    return _RCA_STORE_TERMS.some(term => text.includes(term)) ? 'store' : 'external';
   }
 
-  function _rcaPalette(isStoreSide) {
-    if (isStoreSide) return _isLight() ? _RCA_STORE_LIGHT : _RCA_STORE_DARK;
+  function _rcaPalette(group) {
+    if (group === 'store') return _isLight() ? _RCA_STORE_LIGHT : _RCA_STORE_DARK;
+    if (group === 'unknown') return _isLight() ? _RCA_UNKNOWN_LIGHT : _RCA_UNKNOWN_DARK;
     return _isLight() ? _RCA_EXTERNAL_LIGHT : _RCA_EXTERNAL_DARK;
   }
 
@@ -831,14 +836,17 @@ const charts = (() => {
         rcaTotals[k] = (rcaTotals[k] || 0) + v;
       }
     }
-    const allRCAs = Object.keys(rcaTotals).sort((a, b) => rcaTotals[b] - rcaTotals[a]);
+    const allRCAs = Object.keys(rcaTotals).sort((a, b) => {
+      const groupDelta = _RCA_GROUP_RANK[_rcaGroup(a)] - _RCA_GROUP_RANK[_rcaGroup(b)];
+      if (groupDelta !== 0) return groupDelta;
+      return (rcaTotals[b] - rcaTotals[a]) || a.localeCompare(b);
+    });
 
-    let storeColorIdx = 0;
-    let externalColorIdx = 0;
+    const colorIdxByGroup = { store: 0, external: 0, unknown: 0 };
     const datasets = allRCAs.map((rca) => {
-      const isStoreSide = _isStoreSideRCA(rca);
-      const palette = _rcaPalette(isStoreSide);
-      const colorIdx = isStoreSide ? storeColorIdx++ : externalColorIdx++;
+      const group = _rcaGroup(rca);
+      const palette = _rcaPalette(group);
+      const colorIdx = colorIdxByGroup[group]++;
       const color = palette[colorIdx % palette.length];
 
       return {
@@ -849,6 +857,7 @@ const charts = (() => {
           return orders > 0 ? +((count / orders) * 100).toFixed(3) : 0;
         }),
         _rawCounts: periodData.map(d => (d.byRCA || {})[rca] || 0),
+        _group: group,
         backgroundColor: ALPHA(color, 0.82),
         borderColor: ALPHA(color, 0.95),
         borderWidth: 0.5,
@@ -865,7 +874,7 @@ const charts = (() => {
           ...BASE_OPTS.plugins,
           tooltip: {
             ...BASE_OPTS.plugins?.tooltip,
-            itemSort: (a, b) => b.datasetIndex - a.datasetIndex,
+            itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
             filter: (item) => (item.dataset._rawCounts?.[item.dataIndex] ?? 0) > 0,
             callbacks: {
               label(ctx) {
