@@ -4175,7 +4175,7 @@ const ui = (() => {
       <!-- Zone 1: Trends -->
       <div class="compl-section">
         <div class="bento-grid">
-          <div class="bento-card bento-large">
+          <div class="bento-card bento-full">
             <div class="bento-card-header">
               <div>
                 <h3 class="bento-card-title">Complaint Trend</h3>
@@ -4184,7 +4184,7 @@ const ui = (() => {
             </div>
             <canvas id="chart-compl-trend"></canvas>
           </div>
-          <div class="bento-card bento-large">
+          <div class="bento-card bento-full">
             <div class="bento-card-header">
               <div>
                 <h3 class="bento-card-title">RCA Breakdown</h3>
@@ -4196,43 +4196,14 @@ const ui = (() => {
         </div>
       </div>
 
-      <!-- Zone 2: Captain Performance -->
-      <div class="compl-section">
-        <div class="tiers-section-header">
-          <span class="tiers-section-pip" style="background:#ff6b6b;"></span>
-          <h3 class="tiers-section-title">Captain Complaint Performance</h3>
-        </div>
-        <div class="bento-grid">
-          <div class="bento-card bento-large">
-            <div class="bento-card-header">
-              <div>
-                <h3 class="bento-card-title">Orders Picked vs In-Store Complaints</h3>
-                <p class="bento-card-subtitle">Each dot is a captain — size = complaint rate</p>
-              </div>
-            </div>
-            <canvas id="chart-compl-scatter"></canvas>
-          </div>
-          <div class="bento-card bento-small" style="padding:16px;">
-            <div class="bento-card-header" style="margin-bottom:12px;">
-              <div>
-                <h3 class="bento-card-title">Top Offenders</h3>
-                <p class="bento-card-subtitle">By in-store complaints</p>
-              </div>
-            </div>
-            <div id="compl-captain-ranking" class="compl-ranking-list"></div>
-          </div>
-        </div>
-        <div id="compl-captain-table-container" style="margin-top:16px;"></div>
-      </div>
-
-      <!-- Zone 3: Category Intelligence -->
+      <!-- Zone 2: Category Intelligence -->
       <div class="compl-section">
         <div class="tiers-section-header">
           <span class="tiers-section-pip" style="background:#fb923c;"></span>
           <h3 class="tiers-section-title">Category Intelligence</h3>
         </div>
         <div class="bento-grid">
-          <div class="bento-card bento-large">
+          <div class="bento-card bento-full">
             <div class="bento-card-header">
               <div>
                 <h3 class="bento-card-title">Complaint Categories Over Time</h3>
@@ -4246,17 +4217,28 @@ const ui = (() => {
             </div>
             <canvas id="chart-compl-category"></canvas>
           </div>
-          <div class="bento-card bento-small">
-            <div class="bento-card-header">
-              <div>
-                <h3 class="bento-card-title">Top L0 Categories</h3>
-                <p class="bento-card-subtitle">By complaint volume</p>
-              </div>
-            </div>
-            <canvas id="chart-compl-l0"></canvas>
-          </div>
         </div>
         <div id="compl-category-table-container" style="margin-top:16px;"></div>
+      </div>
+
+      <!-- Zone 3: Captain Performance -->
+      <div class="compl-section">
+        <div class="tiers-section-header">
+          <span class="tiers-section-pip" style="background:#ff6b6b;"></span>
+          <h3 class="tiers-section-title">Captain Complaint Performance</h3>
+        </div>
+        <div class="bento-grid">
+          <div class="bento-card bento-full">
+            <div class="bento-card-header">
+              <div>
+                <h3 class="bento-card-title">Orders Picked vs In-Store Complaints</h3>
+                <p class="bento-card-subtitle">Each dot is a captain — size = complaint rate</p>
+              </div>
+            </div>
+            <canvas id="chart-compl-scatter"></canvas>
+          </div>
+        </div>
+        <div id="compl-captain-table-container" style="margin-top:16px;"></div>
       </div>
     `;
 
@@ -4272,15 +4254,13 @@ const ui = (() => {
     charts.renderComplaintTrendChart('chart-compl-trend', periodData);
     charts.renderRCADonutChart('chart-compl-rca', periodData);
     charts.renderComplaintCategoryChart('chart-compl-category', periodData, _complCatMode);
-    charts.renderL0CategoryChart('chart-compl-l0', agg.categoryIntel.sorted.l0);
 
     // Render captain scatter
     const captainArr = [...agg.captainPerf.values()].sort((a, b) => b.inStoreYes - a.inStoreYes);
     _complDetailCaptains = new Map(captainArr.map(c => [c.employee_id || '', c]));
     charts.renderCaptainComplaintScatter('chart-compl-scatter', captainArr);
 
-    // Render captain ranking + table
-    _renderCaptainComplaintRanking(captainArr);
+    // Render captain table
     _renderCaptainComplaintTable(captainArr);
 
     // Render category table
