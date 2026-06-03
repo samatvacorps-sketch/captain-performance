@@ -3993,6 +3993,8 @@ const ui = (() => {
   let _complDetailCaptains = new Map();
   let _complDetailPeriod = { start: '', end: '' };
   let _complDetailEscHandler = null;
+  let _complCaptainRows = [];
+  let _complCaptainCategory = 'all';
 
   function initComplaintsDeepDive() {
     const complData = sheets.getComplaintsCached();
@@ -4105,6 +4107,11 @@ const ui = (() => {
     }
   }
 
+  function onComplCaptainCategoryChange(category) {
+    _complCaptainCategory = category || 'all';
+    _renderCaptainComplaintTable(_complCaptainRows);
+  }
+
   function renderComplaintsDeepDive() {
     const container = document.getElementById('compl-content');
     if (!container) return;
@@ -4115,6 +4122,7 @@ const ui = (() => {
 
     if (!complData || complData.length === 0) {
       _complDetailRows = [];
+      _complCaptainRows = [];
       container.innerHTML = '<p class="placeholder-text">No complaints data available. Ensure the "Complaints" sheet exists in the source spreadsheet.</p>';
       return;
     }
@@ -4136,6 +4144,7 @@ const ui = (() => {
 
     if (filteredCompl.length === 0) {
       _complDetailRows = [];
+      _complCaptainRows = [];
       container.innerHTML = '<p class="placeholder-text">No complaints data for the selected period.</p>';
       return;
     }
@@ -4217,8 +4226,16 @@ const ui = (() => {
             </div>
             <canvas id="chart-compl-category"></canvas>
           </div>
+          <div class="bento-card bento-full">
+            <div class="bento-card-header">
+              <div>
+                <h3 class="bento-card-title">L0 Category Table</h3>
+                <p class="bento-card-subtitle">Category-level complaints, products, and RCA</p>
+              </div>
+            </div>
+            <div id="compl-category-table-container"></div>
+          </div>
         </div>
-        <div id="compl-category-table-container" style="margin-top:16px;"></div>
       </div>
 
       <!-- Zone 3: Captain Performance -->
@@ -4257,6 +4274,7 @@ const ui = (() => {
 
     // Render captain scatter
     const captainArr = [...agg.captainPerf.values()].sort((a, b) => b.inStoreYes - a.inStoreYes);
+    _complCaptainRows = captainArr;
     _complDetailCaptains = new Map(captainArr.map(c => [c.employee_id || '', c]));
     charts.renderCaptainComplaintScatter('chart-compl-scatter', captainArr);
 
@@ -4335,17 +4353,55 @@ const ui = (() => {
     }).join('');
   }
 
+  function _complCaptainCategoryOptions(captains) {
+    const totals = new Map();
+    captains.forEach(c => {
+      Object.entries(c.byCategory || {}).forEach(([category, count]) => {
+        const key = category || 'unknown';
+        totals.set(key, (totals.get(key) || 0) + (Number(count) || 0));
+      });
+    });
+
+    return [...totals.entries()]
+      .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))
+      .map(([category, count]) => ({ category, count }));
+  }
+
   function _renderCaptainComplaintTable(captains) {
     const container = document.getElementById('compl-captain-table-container');
     if (!container) return;
 
-    const rows = captains.map(c => {
+    const categoryOptions = _complCaptainCategoryOptions(captains);
+    const activeExists = _complCaptainCategory === 'all' || categoryOptions.some(opt => opt.category === _complCaptainCategory);
+    if (!activeExists) _complCaptainCategory = 'all';
+
+    const activeCategory = _complCaptainCategory;
+    const filteredCaptains = activeCategory === 'all'
+      ? captains
+      : captains.filter(c => ((c.byCategory || {})[activeCategory] || 0) > 0);
+    const totalCategoryComplaints = categoryOptions.reduce((sum, opt) => sum + opt.count, 0);
+
+    const categoryButtons = [
+      `<button type="button" class="compl-category-filter-btn${activeCategory === 'all' ? ' active' : ''}" data-compl-captain-cat="all">All<span>${_fmt(totalCategoryComplaints)}</span></button>`,
+      ...categoryOptions.map(opt => `
+        <button type="button" class="compl-category-filter-btn${activeCategory === opt.category ? ' active' : ''}" data-compl-captain-cat="${_esc(opt.category)}">
+          ${_esc(opt.category)}<span>${_fmt(opt.count)}</span>
+        </button>`),
+    ].join('');
+
+    const rows = filteredCaptains.map(c => {
       const rateClass    = c.complaintRate >= 1        ? 'rate-high' : c.complaintRate >= 0.5        ? 'rate-medium' : 'rate-low';
       const pfmRateClass = c.pickerFaultMissingRate >= 1 ? 'rate-high' : c.pickerFaultMissingRate >= 0.5 ? 'rate-medium' : 'rate-low';
       const empId = c.employee_id || '';
       const captainLabel = c.employee_name || empId || 'Unknown Captain';
       const inStoreCell = _renderComplaintDrillCell(c.inStoreYes, empId, 'instore', `View in-store complaints for ${captainLabel}`, true);
       const pfmCell = _renderComplaintDrillCell(c.pickerFaultMissing, empId, 'pfm', `View picker fault missing complaints for ${captainLabel}`);
+      const categoryCell = activeCategory === 'all'
+        ? _esc(c.topCategory)
+        : `<span class="compl-selected-category">
+            <span>${_esc(activeCategory)}</span>
+            <span class="compl-selected-category-count">${_fmt((c.byCategory || {})[activeCategory] || 0)} complaints</span>
+          </span>`;
       return `<tr>
         <td style="font-weight:600;">${_esc(c.employee_name)}</td>
         <td>${_fmt(c.totalOrdersPicked)}</td>
@@ -4354,11 +4410,15 @@ const ui = (() => {
         <td>${pfmCell}</td>
         <td><span class="compl-rate-badge ${pfmRateClass}">${c.pickerFaultMissingRate ?? 0}%</span></td>
         <td><span class="compl-rate-badge ${rateClass}">${c.complaintRate}%</span></td>
-        <td>${_esc(c.topCategory)}</td>
+        <td>${categoryCell}</td>
       </tr>`;
     }).join('');
 
     container.innerHTML = `
+      <div class="compl-table-toolbar">
+        <span class="compl-table-toolbar-label">Complaint Category</span>
+        <div class="compl-category-filter-chips">${categoryButtons}</div>
+      </div>
       <div class="table-wrapper">
         <table class="data-table">
           <thead>
@@ -4370,14 +4430,21 @@ const ui = (() => {
               <th>Picker Fault Missing<br><span style="font-size:9px;font-weight:500;opacity:0.65;text-transform:none;letter-spacing:0">(Order Level)</span></th>
               <th>Picker Fault Missing Rate</th>
               <th>Complaint Rate</th>
-              <th>Top Category</th>
+              <th>${activeCategory === 'all' ? 'Top Category' : 'Selected Category'}</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+    _bindComplaintCaptainCategoryToggles(container);
     _initTableSort(container.querySelector('.data-table'));
     _bindComplaintDrilldowns(container);
+  }
+
+  function _bindComplaintCaptainCategoryToggles(container) {
+    container.querySelectorAll('[data-compl-captain-cat]').forEach(btn => {
+      btn.addEventListener('click', () => onComplCaptainCategoryChange(btn.dataset.complCaptainCat || 'all'));
+    });
   }
 
   function _renderCategoryTable(sortedL0) {
@@ -4756,6 +4823,7 @@ const ui = (() => {
     renderComplaintsDeepDive,
     toggleComplQNG,
     onComplCatModeChange,
+    onComplCaptainCategoryChange,
     toggleSupervisors,
     addExcludedId,
     removeExcludedId,
