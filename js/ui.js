@@ -714,15 +714,18 @@ const ui = (() => {
       th.addEventListener('touchend', (e) => {
         if (_ddTouchMoved) return;
         e.preventDefault();
+        if (e.target?.closest?.('.table-filter-btn')) return;
         _doDeepDiveSort();
       }, { passive: false });
       let _ddLastTouch = 0;
       th.addEventListener('touchend', () => { _ddLastTouch = Date.now(); }, { passive: true });
-      th.addEventListener('click', () => {
+      th.addEventListener('click', (e) => {
+        if (e.target?.closest?.('.table-filter-btn')) return;
         if (Date.now() - _ddLastTouch < 500) return;
         _doDeepDiveSort();
       });
     });
+    container.querySelectorAll('.dd-table').forEach(t => _initTableFilters(t));
   }
 
   function _groupByCaptain(rows, periodType, periodStoreStats, auditRacksMap, captainAuditRacks) {
@@ -930,6 +933,9 @@ const ui = (() => {
     }
   }
 
+  const _FILTER_ICON = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h12L9 8.5V13l-2 1V8.5z"/></svg>';
+  let _tableFilterPopover = null;
+
   /**
    * Generic DOM table sorter.
    * Attaches asc/desc click sorting to every <th> in the table's <thead>.
@@ -938,12 +944,14 @@ const ui = (() => {
    */
   function _initTableSort(tableEl) {
     if (!tableEl) return;
+    _initTableFilters(tableEl);
+
     const ths = [...tableEl.querySelectorAll('thead th')];
     ths.forEach((th, colIdx) => {
-      // Store original inner HTML once (guard against double-init)
-      if (th.dataset.origHtml === undefined) th.dataset.origHtml = th.innerHTML;
       th.style.cursor = 'pointer';
       th.style.userSelect = 'none';
+      if (th.dataset.sortBound === '1') return;
+      th.dataset.sortBound = '1';
 
       // Core sort handler — shared by both click and touchend
       function _doSort() {
@@ -954,15 +962,17 @@ const ui = (() => {
         // Reset all headers
         ths.forEach(t => {
           t.dataset.sortDir = '';
-          t.innerHTML = t.dataset.origHtml;
+          const marker = t.querySelector('.table-sort-marker');
+          if (marker) marker.textContent = '';
         });
         th.dataset.sortDir = dir;
-        th.innerHTML = th.dataset.origHtml + (dir === 'asc' ? ' <span style="opacity:0.7">▲</span>' : ' <span style="opacity:0.7">▼</span>');
+        const marker = th.querySelector('.table-sort-marker');
+        if (marker) marker.textContent = dir === 'asc' ? ' ▲' : ' ▼';
         // Sort rows
         const rows = [...tbody.querySelectorAll('tr')];
         rows.sort((rowA, rowB) => {
-          const aRaw = rowA.cells[colIdx]?.textContent?.trim() || '';
-          const bRaw = rowB.cells[colIdx]?.textContent?.trim() || '';
+          const aRaw = _tableCellText(rowA.cells[colIdx]);
+          const bRaw = _tableCellText(rowB.cells[colIdx]);
           // Empty / dash → always last
           const aEmpty = aRaw === '' || aRaw === '—';
           const bEmpty = bRaw === '' || bRaw === '—';
@@ -988,17 +998,298 @@ const ui = (() => {
       th.addEventListener('touchend', (e) => {
         if (_touchMoved) return;   // was a scroll gesture, not a tap
         e.preventDefault();        // block the subsequent synthetic click
+        if (e.target?.closest?.('.table-filter-btn')) return;
         _doSort();
       }, { passive: false });
 
       // click handles desktop mice and keyboard Enter/Space on focused th
       let _lastTouchEnd = 0;
       th.addEventListener('touchend', () => { _lastTouchEnd = Date.now(); }, { passive: true });
-      th.addEventListener('click', () => {
+      th.addEventListener('click', (e) => {
+        if (e.target?.closest?.('.table-filter-btn')) return;
         if (Date.now() - _lastTouchEnd < 500) return; // already handled by touchend
         _doSort();
       });
     });
+  }
+
+  function _initTableFilters(tableEl) {
+    if (!tableEl) return;
+    const ths = [...tableEl.querySelectorAll('thead th')];
+    if (ths.length === 0) return;
+
+    if (!tableEl._columnFilters) tableEl._columnFilters = new Map();
+    tableEl.classList.add('filterable-table');
+
+    ths.forEach((th, colIdx) => {
+      _ensureTableHeaderControls(th, colIdx);
+      const btn = th.querySelector('.table-filter-btn');
+      if (!btn || btn.dataset.filterBound === '1') return;
+      btn.dataset.filterBound = '1';
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        _openTableFilterPopover(tableEl, colIdx, th, btn);
+      });
+      btn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        _openTableFilterPopover(tableEl, colIdx, th, btn);
+      }, { passive: false });
+    });
+
+    _applyTableFilters(tableEl);
+  }
+
+  function _ensureTableHeaderControls(th, colIdx) {
+    if (th.dataset.filterReady === '1') return;
+    th.dataset.filterReady = '1';
+    if (th.dataset.origHtml === undefined) th.dataset.origHtml = th.innerHTML;
+    const label = th.dataset.origHtml || `Column ${colIdx + 1}`;
+    th.innerHTML = `
+      <span class="table-header-control">
+        <span class="table-header-label">${label}</span>
+        <span class="table-sort-marker" aria-hidden="true"></span>
+        <button type="button" class="table-filter-btn" data-col="${colIdx}" aria-label="Filter column ${colIdx + 1}">${_FILTER_ICON}</button>
+      </span>`;
+  }
+
+  function _openTableFilterPopover(tableEl, colIdx, th, btn) {
+    _closeTableFilterPopover();
+
+    const kind = _inferTableFilterKind(tableEl, colIdx);
+    const current = tableEl._columnFilters?.get(colIdx) || null;
+    const label = (th.dataset.origHtml || th.textContent || `Column ${colIdx + 1}`)
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim() || `Column ${colIdx + 1}`;
+
+    const pop = document.createElement('div');
+    pop.id = 'table-filter-popover';
+    pop.className = 'table-filter-popover';
+    pop.setAttribute('role', 'dialog');
+    pop.innerHTML = _tableFilterPopoverHTML(label, kind, current);
+    document.body.appendChild(pop);
+    _tableFilterPopover = pop;
+
+    const rect = btn.getBoundingClientRect();
+    const width = 260;
+    const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect.right - width));
+    pop.style.left = `${left}px`;
+    pop.style.top = `${Math.max(12, Math.min(window.innerHeight - pop.offsetHeight - 12, rect.bottom + 8))}px`;
+
+    const operator = pop.querySelector('[data-filter-role="operator"]');
+    const value1 = pop.querySelector('[data-filter-role="value1"]');
+    const value2 = pop.querySelector('[data-filter-role="value2"]');
+    const betweenRow = pop.querySelector('[data-filter-role="between-row"]');
+    const applyBtn = pop.querySelector('[data-filter-action="apply"]');
+    const clearBtn = pop.querySelector('[data-filter-action="clear"]');
+
+    const syncFields = () => {
+      const isBetween = operator?.value === 'between';
+      if (betweenRow) betweenRow.classList.toggle('hidden', !isBetween);
+      if (value1) value1.placeholder = isBetween ? 'Min' : (kind === 'number' ? 'Value' : 'Text');
+    };
+    operator?.addEventListener('change', syncFields);
+    syncFields();
+
+    const apply = () => {
+      const op = operator?.value || '';
+      const v1 = value1?.value?.trim() || '';
+      const v2 = value2?.value?.trim() || '';
+      if (!op || (op !== 'empty' && op !== 'not_empty' && !v1)) {
+        tableEl._columnFilters.delete(colIdx);
+      } else {
+        tableEl._columnFilters.set(colIdx, { kind, op, v1, v2 });
+      }
+      _applyTableFilters(tableEl);
+      _closeTableFilterPopover();
+    };
+
+    applyBtn?.addEventListener('click', apply);
+    clearBtn?.addEventListener('click', () => {
+      tableEl._columnFilters.delete(colIdx);
+      _applyTableFilters(tableEl);
+      _closeTableFilterPopover();
+    });
+    pop.addEventListener('click', e => e.stopPropagation());
+    pop.addEventListener('keydown', e => {
+      if (e.key === 'Enter') apply();
+      if (e.key === 'Escape') _closeTableFilterPopover();
+    });
+    setTimeout(() => document.addEventListener('click', _closeTableFilterPopover, { once: true }), 0);
+    value1?.focus();
+  }
+
+  function _tableFilterPopoverHTML(label, kind, current) {
+    const isNumber = kind === 'number';
+    const op = current?.op || (isNumber ? 'gt' : 'contains');
+    const v1 = current?.v1 || '';
+    const v2 = current?.v2 || '';
+    const numberOps = [
+      ['gt', 'Greater than'],
+      ['gte', 'Greater than or equal'],
+      ['lt', 'Less than'],
+      ['lte', 'Less than or equal'],
+      ['eq', 'Equals'],
+      ['between', 'Between'],
+      ['empty', 'Blank'],
+      ['not_empty', 'Not blank'],
+    ];
+    const textOps = [
+      ['contains', 'Contains'],
+      ['not_contains', 'Does not contain'],
+      ['eq', 'Equals'],
+      ['starts', 'Starts with'],
+      ['empty', 'Blank'],
+      ['not_empty', 'Not blank'],
+    ];
+    const opts = (isNumber ? numberOps : textOps)
+      .map(([value, text]) => `<option value="${value}"${op === value ? ' selected' : ''}>${text}</option>`)
+      .join('');
+    const inputType = isNumber ? 'number' : 'text';
+
+    return `
+      <div class="table-filter-title">${_esc(label)}</div>
+      <select class="table-filter-select" data-filter-role="operator">${opts}</select>
+      <input class="table-filter-input" data-filter-role="value1" type="${inputType}" value="${_esc(v1)}" />
+      <div class="table-filter-between${op === 'between' ? '' : ' hidden'}" data-filter-role="between-row">
+        <input class="table-filter-input" data-filter-role="value2" type="${inputType}" value="${_esc(v2)}" placeholder="Max" />
+      </div>
+      <div class="table-filter-actions">
+        <button type="button" class="table-filter-clear" data-filter-action="clear">Clear</button>
+        <button type="button" class="table-filter-apply" data-filter-action="apply">Apply</button>
+      </div>`;
+  }
+
+  function _closeTableFilterPopover() {
+    _tableFilterPopover?.remove();
+    _tableFilterPopover = null;
+  }
+
+  function _inferTableFilterKind(tableEl, colIdx) {
+    const rows = [...tableEl.querySelectorAll('tbody tr')].filter(r => !r.classList.contains('dd-tier-divider'));
+    let filled = 0;
+    let numeric = 0;
+    for (const row of rows.slice(0, 40)) {
+      const raw = _tableCellText(row.cells[colIdx]);
+      if (!raw || raw === '—') continue;
+      filled++;
+      if (_tableNumericValue(raw) !== null) numeric++;
+    }
+    return filled > 0 && numeric / filled >= 0.6 ? 'number' : 'text';
+  }
+
+  function _tableCellText(cell) {
+    if (!cell) return '';
+    const controlValues = [...cell.querySelectorAll('select,input,textarea')]
+      .map(el => {
+        if (el.tagName === 'SELECT') return el.selectedOptions?.[0]?.textContent || el.value || '';
+        return el.value || '';
+      })
+      .filter(Boolean);
+    const clone = cell.cloneNode(true);
+    clone.querySelectorAll('select,input,textarea,script,style').forEach(el => el.remove());
+    return [...controlValues, clone.textContent || ''].join(' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function _tableNumericValue(raw) {
+    const text = String(raw || '').trim();
+    if (!text || text === '—') return null;
+    const firstPart = text.split('|')[0].trim();
+    const duration = firstPart.match(/^(-?\d+):(\d{2})(?::(\d{2}))?$/);
+    if (duration) {
+      const a = Number(duration[1]);
+      const b = Number(duration[2]);
+      const c = duration[3] === undefined ? null : Number(duration[3]);
+      return c === null ? (a * 60) + b : (a * 3600) + (b * 60) + c;
+    }
+    const words = firstPart.match(/[A-Za-z]+/g) || [];
+    if (words.length > 0) {
+      const allowedUnits = new Set(['h', 'hr', 'hrs', 'hour', 'hours', 's', 'sec', 'secs', 'second', 'seconds', 'm', 'min', 'mins', 'minute', 'minutes', 'order', 'orders', 'rack', 'racks', 'day', 'days']);
+      if (words.some(w => !allowedUnits.has(w.toLowerCase()))) return null;
+    }
+    const cleaned = firstPart.replace(/,/g, '').replace(/[^\d.-]/g, '');
+    if (!cleaned || cleaned === '-' || cleaned === '.') return null;
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function _applyTableFilters(tableEl) {
+    const filters = tableEl._columnFilters || new Map();
+    const rows = [...tableEl.querySelectorAll('tbody tr')];
+    if (filters.size === 0) {
+      rows.forEach(row => { row.hidden = false; });
+    } else {
+      rows.forEach(row => {
+        if (row.classList.contains('dd-tier-divider')) {
+          row.hidden = true;
+          return;
+        }
+        row.hidden = !_rowPassesTableFilters(row, filters);
+      });
+      _syncDividerRows(rows);
+    }
+
+    tableEl.classList.toggle('has-table-filters', filters.size > 0);
+    tableEl.querySelectorAll('.table-filter-btn').forEach(btn => {
+      const colIdx = Number(btn.dataset.col);
+      btn.classList.toggle('active', filters.has(colIdx));
+    });
+  }
+
+  function _rowPassesTableFilters(row, filters) {
+    for (const [colIdx, filter] of filters.entries()) {
+      const raw = _tableCellText(row.cells[colIdx]);
+      if (!_cellPassesTableFilter(raw, filter)) return false;
+    }
+    return true;
+  }
+
+  function _cellPassesTableFilter(raw, filter) {
+    const text = String(raw || '').trim();
+    if (filter.op === 'empty') return !text || text === '—';
+    if (filter.op === 'not_empty') return !!text && text !== '—';
+
+    if (filter.kind === 'number') {
+      const value = _tableNumericValue(text);
+      const v1 = Number(filter.v1);
+      const v2 = Number(filter.v2);
+      if (value === null || !Number.isFinite(v1)) return false;
+      if (filter.op === 'gt') return value > v1;
+      if (filter.op === 'gte') return value >= v1;
+      if (filter.op === 'lt') return value < v1;
+      if (filter.op === 'lte') return value <= v1;
+      if (filter.op === 'eq') return value === v1;
+      if (filter.op === 'between') return Number.isFinite(v2) && value >= Math.min(v1, v2) && value <= Math.max(v1, v2);
+      return true;
+    }
+
+    const hay = text.toLowerCase();
+    const needle = String(filter.v1 || '').toLowerCase();
+    if (filter.op === 'contains') return hay.includes(needle);
+    if (filter.op === 'not_contains') return !hay.includes(needle);
+    if (filter.op === 'eq') return hay === needle;
+    if (filter.op === 'starts') return hay.startsWith(needle);
+    return true;
+  }
+
+  function _syncDividerRows(rows) {
+    let divider = null;
+    let hasVisibleInGroup = false;
+    const flush = () => {
+      if (divider) divider.hidden = !hasVisibleInGroup;
+    };
+    for (const row of rows) {
+      if (row.classList.contains('dd-tier-divider')) {
+        flush();
+        divider = row;
+        hasVisibleInGroup = false;
+      } else if (!row.hidden) {
+        hasVisibleInGroup = true;
+      }
+    }
+    flush();
   }
 
   function _applySortIndicator(col, activeCol, dir) {
@@ -1460,6 +1751,7 @@ const ui = (() => {
       </div>`;
 
     _bindAttendanceCaptainTriggers(gridEl);
+    _initTableFilters(gridEl.querySelector('.attendance-table'));
     _renderAttendanceSummary(summary, monthKey);
   }
 
@@ -3187,6 +3479,7 @@ const ui = (() => {
         </div>
       </div>
     `;
+    container.querySelectorAll('.config-table').forEach(t => _initTableSort(t));
   }
 
   // ── Utility ────────────────────────────────────────────────────────────
