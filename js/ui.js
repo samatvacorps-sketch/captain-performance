@@ -4452,10 +4452,13 @@ const ui = (() => {
     if (!container) return;
 
     const rows = sortedL0.map(c => {
+      const category = c.category || 'Unknown';
+      const complaintsCell = _renderL0ComplaintDrillCell(c.count, category, 'all', `View all complaints for ${category}`);
+      const inStoreCell = _renderL0ComplaintDrillCell(c.inStoreYes, category, 'instore', `View in-store complaints for ${category}`, true);
       return `<tr>
-        <td style="font-weight:600;">${_esc(c.category)}</td>
-        <td>${c.count}</td>
-        <td style="font-weight:700;color:#ff6b6b;">${c.inStoreYes}</td>
+        <td style="font-weight:600;">${_esc(category)}</td>
+        <td>${complaintsCell}</td>
+        <td>${inStoreCell}</td>
         <td>${c.inStorePct}%</td>
         <td style="font-size:12px;">${_esc(c.topProduct)}</td>
         <td style="font-size:12px;">${_esc(c.topRCA)}</td>
@@ -4479,6 +4482,7 @@ const ui = (() => {
         </table>
       </div>`;
     _initTableSort(container.querySelector('.data-table'));
+    _bindComplaintDrilldowns(container);
   }
 
   function _renderComplaintDrillCell(count, empId, kind, label, danger = false) {
@@ -4494,12 +4498,29 @@ const ui = (() => {
       aria-label="${_esc(label)}">${text}</button>`;
   }
 
+  function _renderL0ComplaintDrillCell(count, l0Category, kind, label, danger = false) {
+    const n = Number(count) || 0;
+    const text = _fmt(n);
+    if (n <= 0) {
+      return `<span class="compl-drill-empty${danger ? ' compl-drill-danger-text' : ''}">${text}</span>`;
+    }
+    return `<button type="button"
+      class="compl-drill-btn${danger ? ' compl-drill-danger' : ''}"
+      data-compl-l0="${_esc(l0Category || 'Unknown')}"
+      data-compl-kind="${_esc(kind)}"
+      aria-label="${_esc(label)}">${text}</button>`;
+  }
+
   function _bindComplaintDrilldowns(container) {
     container.querySelectorAll('.compl-drill-btn').forEach(btn => {
       btn.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        _showComplaintDetail(btn.dataset.complEmp || '', btn.dataset.complKind || 'instore');
+        if (btn.dataset.complL0 !== undefined) {
+          _showL0ComplaintDetail(btn.dataset.complL0 || 'Unknown', btn.dataset.complKind || 'all');
+        } else {
+          _showComplaintDetail(btn.dataset.complEmp || '', btn.dataset.complKind || 'instore');
+        }
       });
     });
   }
@@ -4513,21 +4534,41 @@ const ui = (() => {
     };
     const rows = _complDetailRows
       .filter(row => (row.employee_id || '') === empId && matchesKind(row))
-      .slice()
-      .sort((a, b) => (b.date?.getTime?.() || 0) - (a.date?.getTime?.() || 0));
-
-    _closeComplaintDetail();
-    if (rows.length === 0) return;
+      .slice();
 
     const captain = _complDetailCaptains.get(empId);
     const captainName = captain?.employee_name || empId || 'Unknown Captain';
     const title = isPickerMissing ? 'Picker Fault Missing' : 'In-Store Yes';
+    _showComplaintRowsDetail(rows, title, captainName);
+  }
+
+  function _showL0ComplaintDetail(l0Category, kind) {
+    const isInStoreOnly = kind === 'instore';
+    const rows = _complDetailRows
+      .filter(row => {
+        const rowL0 = row.l0_category || 'Unknown';
+        if (rowL0 !== l0Category) return false;
+        return isInStoreOnly ? !!row.in_store : true;
+      })
+      .slice();
+    const title = isInStoreOnly ? 'L0 In-Store Complaints' : 'L0 Complaints';
+    _showComplaintRowsDetail(rows, title, l0Category || 'Unknown');
+  }
+
+  function _showComplaintRowsDetail(rows, title, heading) {
+    const sortedRows = rows
+      .slice()
+      .sort((a, b) => (b.date?.getTime?.() || 0) - (a.date?.getTime?.() || 0));
+
+    _closeComplaintDetail();
+    if (sortedRows.length === 0) return;
+
     const uniqueOrders = new Set(rows.map(r => r.order_id).filter(Boolean)).size;
     const periodText = _complDetailPeriod.start && _complDetailPeriod.end
       ? `${_complDetailPeriod.start} to ${_complDetailPeriod.end}`
       : 'Selected period';
 
-    const bodyRows = rows.map(r => `
+    const bodyRows = sortedRows.map(r => `
       <tr>
         <td style="white-space:nowrap;">${_esc(r.dateStr || _isoDateStr(r.date))}</td>
         <td>${_esc(r.order_id || '—')}</td>
@@ -4550,14 +4591,14 @@ const ui = (() => {
         <div class="compl-detail-header">
           <div>
             <p class="compl-detail-kicker">${_esc(title)}</p>
-            <h3 id="compl-detail-title">${_esc(captainName)}</h3>
+            <h3 id="compl-detail-title">${_esc(heading)}</h3>
             <p class="compl-detail-subtitle">${_esc(periodText)}</p>
           </div>
           <button type="button" class="compl-detail-close" aria-label="Close complaint details">&times;</button>
         </div>
         <div class="compl-detail-summary">
           <span>${_fmt(uniqueOrders)} unique order${uniqueOrders === 1 ? '' : 's'}</span>
-          <span>${_fmt(rows.length)} complaint row${rows.length === 1 ? '' : 's'}</span>
+          <span>${_fmt(sortedRows.length)} complaint row${sortedRows.length === 1 ? '' : 's'}</span>
         </div>
         <div class="table-wrapper compl-detail-table-wrapper">
           <table class="data-table compl-detail-table">
