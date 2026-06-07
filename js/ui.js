@@ -3991,6 +3991,7 @@ const ui = (() => {
   let _complCatPeriodData = null;
   let _complDetailRows = [];
   let _complDetailCaptains = new Map();
+  let _complPickerNames = new Map();
   let _complDetailPeriod = { start: '', end: '' };
   let _complDetailEscHandler = null;
   let _complCaptainRows = [];
@@ -4119,6 +4120,12 @@ const ui = (() => {
 
     const complData = _supervisorFilter(sheets.getComplaintsCached() || []);
     const dailyData = _supervisorFilter(sheets.getCached());
+    _complPickerNames = new Map();
+    dailyData.forEach(row => {
+      if (row.employee_id && row.employee_name && !_complPickerNames.has(row.employee_id)) {
+        _complPickerNames.set(row.employee_id, row.employee_name);
+      }
+    });
 
     if (!complData || complData.length === 0) {
       _complDetailRows = [];
@@ -4552,10 +4559,20 @@ const ui = (() => {
       })
       .slice();
     const title = isInStoreOnly ? 'L0 In-Store Complaints' : 'L0 Complaints';
-    _showComplaintRowsDetail(rows, title, l0Category || 'Unknown');
+    _showComplaintRowsDetail(rows, title, l0Category || 'Unknown', { showPickerName: true });
   }
 
-  function _showComplaintRowsDetail(rows, title, heading) {
+  function _complPickerName(row) {
+    const empId = row.employee_id || '';
+    return row.employee_name
+      || _complDetailCaptains.get(empId)?.employee_name
+      || _complPickerNames.get(empId)
+      || empId
+      || 'Unknown';
+  }
+
+  function _showComplaintRowsDetail(rows, title, heading, options = {}) {
+    const showPickerName = !!options.showPickerName;
     const sortedRows = rows
       .slice()
       .sort((a, b) => (b.date?.getTime?.() || 0) - (a.date?.getTime?.() || 0));
@@ -4572,6 +4589,7 @@ const ui = (() => {
       <tr>
         <td style="white-space:nowrap;">${_esc(r.dateStr || _isoDateStr(r.date))}</td>
         <td>${_esc(r.order_id || '—')}</td>
+        ${showPickerName ? `<td>${_esc(_complPickerName(r))}</td>` : ''}
         <td class="compl-detail-product">${_esc(r.product_name || '—')}</td>
         <td>${_esc(r.complaint_category || 'unknown')}</td>
         <td class="compl-detail-rca">${_esc(r.rca || '—')}</td>
@@ -4606,6 +4624,7 @@ const ui = (() => {
               <tr>
                 <th>Date</th>
                 <th>Order ID</th>
+                ${showPickerName ? '<th>Picker Name</th>' : ''}
                 <th>Product</th>
                 <th>Complaint Category</th>
                 <th>RCA</th>
