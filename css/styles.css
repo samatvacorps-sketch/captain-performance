@@ -3954,13 +3954,13 @@ body,
 .km-heat-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; }
 .km-heat-cell {
   border-radius: 7px; display: flex; flex-direction: column; gap: 1px;
-  align-items: center; justify-content: center; color: var(--text-muted); min-height: 58px;
-  padding: 6px 2px; border: 1px solid var(--border-subtle);
+  align-items: center; justify-content: center; color: var(--text-muted); min-height: 78px;
+  padding: 7px 2px; border: 1px solid var(--border-subtle);
 }
 .km-heat-cell.km-heat-filled { color: #0f1722; border-color: rgba(0,0,0,0.18); }
 .km-heat-hr { font-size: 0.62rem; opacity: 0.85; }
-.km-heat-val { font-size: 0.95rem; font-weight: 800; }
-.km-heat-breach { font-size: 0.58rem; font-weight: 600; opacity: 0.8; }
+.km-heat-val { font-size: 0.98rem; font-weight: 800; margin-bottom: 2px; }
+.km-heat-stat { font-size: 0.57rem; font-weight: 600; opacity: 0.82; line-height: 1.25; }
 
 /* Clickable breached-orders count in the picker table */
 .km-breach-btn {

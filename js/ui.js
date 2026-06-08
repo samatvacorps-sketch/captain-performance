@@ -4415,10 +4415,14 @@ const ui = (() => {
       const color = _KM_GRADE_COLOR[tier];
       const dark = has; // bright tier fills → dark text; muted no-data → light text
       const lbl = `${String(h.hour).padStart(2, '0')}`;
-      return `<div class="km-heat-cell${dark ? ' km-heat-filled' : ''}" style="background:${color};" title="${lbl}:00 · ${has ? h.pct + '% (' + h.met + '/' + h.denom + ')' : 'no orders'}">
+      const stats = has ? `
+        <span class="km-heat-stat">${_fmt(breached)} breached</span>
+        <span class="km-heat-stat">${_fmt(h.totalOrders)} orders</span>
+        <span class="km-heat-stat">${_fmt(h.activePickers)} pickers</span>` : '';
+      return `<div class="km-heat-cell${dark ? ' km-heat-filled' : ''}" style="background:${color};" title="${lbl}:00 · ${has ? h.pct + '% SLA (' + h.met + '/' + h.denom + ' IPO≤6) · ' + _fmt(h.totalOrders) + ' total orders · ' + _fmt(h.activePickers) + ' active pickers' : 'no orders'}">
         <span class="km-heat-hr">${lbl}:00</span>
         <span class="km-heat-val">${has ? h.pct + '%' : '—'}</span>
-        <span class="km-heat-breach">${has ? _fmt(breached) + ' breached' : ''}</span>
+        ${stats}
       </div>`;
     }).join('');
     return `

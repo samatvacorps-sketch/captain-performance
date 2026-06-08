@@ -1604,13 +1604,29 @@ const compute = (() => {
     const daily  = bucketTrend(r => _dateKey(r.date), k => k, byKey);
 
     // ── Drill-downs (scoped to selected cycle, else all) ──────────────
-    const drillRows = (selectedCycleKey
+    const drillSource = selectedCycleKey
       ? instoreData.filter(r => _merchantCycleKey(r.date) === selectedCycleKey)
-      : instoreData
-    ).filter(inScope);
+      : instoreData;
+    const drillRows = drillSource.filter(inScope);
 
     let denom = 0, met = 0;
-    const byHour = Array.from({ length: 24 }, (_, h) => ({ hour: h, denom: 0, met: 0, pct: 0 }));
+    const byHour = Array.from({ length: 24 }, (_, h) => ({ hour: h, denom: 0, met: 0, pct: 0, totalOrders: 0, activePickers: 0 }));
+
+    // Hour load — over ALL orders in the slot (not just IPO≤6):
+    //  • totalOrders  = every order picked in that hour
+    //  • activePickers = unique pickers with >1 order in that hour
+    const hourPickerCounts = Array.from({ length: 24 }, () => new Map());
+    for (const r of drillSource) {
+      if (r.hour === null || r.hour < 0 || r.hour >= 24) continue;
+      byHour[r.hour].totalOrders++;
+      const hp = hourPickerCounts[r.hour];
+      hp.set(r.employee_id, (hp.get(r.employee_id) || 0) + 1);
+    }
+    for (let h = 0; h < 24; h++) {
+      let active = 0;
+      for (const c of hourPickerCounts[h].values()) if (c > 1) active++;
+      byHour[h].activePickers = active;
+    }
     const pickerMap = new Map();
     const ipoBands = [
       { label: '1–2 IPO', min: 1, max: 2, denom: 0, met: 0 },
