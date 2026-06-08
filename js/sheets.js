@@ -257,12 +257,16 @@ const sheets = (() => {
    */
   function _parseDate(val) {
     if (val === undefined || val === null || val === '') return null;
-    const n = parseFloat(val);
+    // Use Number() (not parseFloat) so date strings like "2026-05-28" are
+    // rejected as serials — parseFloat would greedily read "2026" and treat it
+    // as a serial number, landing the date in ~1905. Only treat a value as a
+    // Sheets serial when the WHOLE value is numeric.
+    const n = Number(val);
     if (!isNaN(n) && n > 1000) {
       // Google Sheets serial number → JS Date
       return new Date(Math.round((n - 25569) * 86400 * 1000));
     }
-    // Fallback: try parsing as string
+    // Fallback: parse as a date/datetime string (e.g. "2026-05-28 19:30:58").
     const d = new Date(val);
     return isNaN(d) ? null : d;
   }
