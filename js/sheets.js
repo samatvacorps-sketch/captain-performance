@@ -338,6 +338,14 @@ const sheets = (() => {
       end:           _str(raw[c.end]),
       assigned_off:  _str(raw[c.assigned_off]),
       employment_type: _str(raw[c.employment_type]),
+      // Correctly-named aliases for the live Roster layout (A:H):
+      // D = Shift Start Date (effective date), E = Start time,
+      // F = End time, G = Assigned Off. (Existing fields above are kept
+      // as-is so tier/attendance code is undisturbed.)
+      eff_date:    _str(raw[3]),
+      shift_start: _str(raw[4]),
+      shift_end:   _str(raw[5]),
+      off_day:     _str(raw[6]),
     };
   }
 

@@ -4102,6 +4102,88 @@ const ui = (() => {
     return `${y}-${String(m).padStart(2, '0')}`;
   }
 
+  // ── Roster manpower per hour ──────────────────────────────────────
+  // Roster cols: eff_date (effective date, serial), shift_start/shift_end
+  // (time-of-day), off_day (weekly off). Counts captains available in each
+  // hour slot, averaged per calendar day across the selected window.
+
+  const _KM_WEEKDAYS = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+
+  function _rosterEffDay(val) {
+    const n = parseFloat(val);
+    if (isNaN(n) || n <= 1000) return null;
+    const d = new Date(Math.round((n - 25569) * 86400000));
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); // local midnight
+  }
+  function _rosterTimeToHour(val) {
+    if (val === '' || val == null) return null;
+    const n = Number(val);
+    if (!isNaN(n)) return (n - Math.floor(n)) * 24; // fraction-of-day → 0..24
+    const m = String(val).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!m) return null;
+    let hr = parseInt(m[1], 10); const min = parseInt(m[2], 10); const ap = (m[3] || '').toUpperCase();
+    if (ap === 'PM' && hr < 12) hr += 12;
+    if (ap === 'AM' && hr === 12) hr = 0;
+    return hr + min / 60;
+  }
+  function _coverHours(startH, endH) {
+    if (startH == null || endH == null) return [];
+    const out = [];
+    if (endH > startH) {
+      for (let h = Math.floor(startH); h < Math.ceil(endH); h++) out.push(h % 24);
+    } else { // wraps past midnight
+      for (let h = Math.floor(startH); h < 24; h++) out.push(h);
+      for (let h = 0; h < Math.ceil(endH); h++) out.push(h);
+    }
+    return out;
+  }
+  function _parseOffDays(s) {
+    const set = new Set();
+    const low = (s || '').toLowerCase();
+    if (!low || low.includes('no week off') || low.includes('no off')) return set;
+    for (const part of low.split(/[,/]/)) {
+      const d = _KM_WEEKDAYS[part.trim()];
+      if (d !== undefined) set.add(d);
+    }
+    return set;
+  }
+
+  function _kmManpowerByHour(startMs, endMs) {
+    if (!isFinite(startMs) || !isFinite(endMs)) return null;
+    const roster = _supervisorFilter(sheets.getRosterCached() || []);
+    if (!roster.length) return null;
+
+    // Per-captain effective-dated entries, sorted ascending.
+    const byCap = new Map();
+    for (const r of roster) {
+      const eff = _rosterEffDay(r.eff_date);
+      if (eff == null) continue;
+      const hours = _coverHours(_rosterTimeToHour(r.shift_start), _rosterTimeToHour(r.shift_end));
+      if (!hours.length) continue;
+      if (!byCap.has(r.employee_id)) byCap.set(r.employee_id, []);
+      byCap.get(r.employee_id).push({ eff, hours, offs: _parseOffDays(r.off_day) });
+    }
+    for (const arr of byCap.values()) arr.sort((a, b) => a.eff - b.eff);
+
+    const total = new Array(24).fill(0);
+    const DAY = 86400000;
+    const startDay = new Date(startMs); startDay.setHours(0, 0, 0, 0);
+    const endDay   = new Date(endMs);   endDay.setHours(0, 0, 0, 0);
+    let dayCount = 0;
+    for (let t = startDay.getTime(); t <= endDay.getTime(); t += DAY) {
+      dayCount++;
+      const weekday = new Date(t).getDay();
+      for (const arr of byCap.values()) {
+        let entry = null;
+        for (const e of arr) { if (e.eff <= t) entry = e; else break; }
+        if (!entry || entry.offs.has(weekday)) continue;
+        for (const h of entry.hours) total[h]++;
+      }
+    }
+    if (!dayCount) return null;
+    return total.map(v => v / dayCount);
+  }
+
   // SLA targets are three-tiered per merchant cycle (Baseline / SLA 1 / SLA 2),
   // edited in the Config panel. In-store & fill-rate are "higher is better";
   // complaints is "lower is better".
@@ -4272,6 +4354,7 @@ const ui = (() => {
     _kmCycleRows = instoreWin.filter(r => r.ipo > 0 && r.ipo <= CAP); // SLA population, for breach drill-down
     const instorePct = (instoreSLA && instoreSLA.totals.denom)
       ? +(instoreSLA.totals.met / instoreSLA.totals.denom * 100).toFixed(2) : null;
+    const manpowerByHour = _kmManpowerByHour(startMs, endMs);
 
     // ── Complaints SLA (over the selected window) ──
     const dailyWin  = dailyData.filter(inWindow);
@@ -4302,7 +4385,7 @@ const ui = (() => {
       <div class="km-section">
         <div class="tiers-section-header"><span class="tiers-section-pip" style="background:#60a5fa;"></span>
           <h3 class="tiers-section-title">In-Store Time — What's Dragging It Down</h3></div>
-        ${_kmHourHeatmap(instoreSLA.byHour, targets.instore)}
+        ${_kmHourHeatmap(instoreSLA.byHour, targets.instore, manpowerByHour)}
         <div class="km-grid-2">
           ${_kmStageBars(instoreSLA.byStage)}
           ${_kmIpoBands(instoreSLA.byIpoBand, targets.instore)}
@@ -4407,10 +4490,11 @@ const ui = (() => {
       </div>`;
   }
 
-  function _kmHourHeatmap(byHour, tiers) {
+  function _kmHourHeatmap(byHour, tiers, manpower) {
     const cells = byHour.map(h => {
       const has = h.denom > 0;
       const breached = h.denom - h.met;
+      const ros = manpower ? Math.round(manpower[h.hour]) : null;
       const tier = has ? _kmTierReached(h.pct, tiers, 'high').tier : 'na';
       const color = _KM_GRADE_COLOR[tier];
       const dark = has; // bright tier fills → dark text; muted no-data → light text
@@ -4418,8 +4502,9 @@ const ui = (() => {
       const stats = has ? `
         <span class="km-heat-stat">${_fmt(breached)} breached</span>
         <span class="km-heat-stat">${_fmt(h.totalOrders)} orders</span>
-        <span class="km-heat-stat">${_fmt(h.activePickers)} pickers</span>` : '';
-      return `<div class="km-heat-cell${dark ? ' km-heat-filled' : ''}" style="background:${color};" title="${lbl}:00 · ${has ? h.pct + '% SLA (' + h.met + '/' + h.denom + ' IPO≤6) · ' + _fmt(h.totalOrders) + ' total orders · ' + _fmt(h.activePickers) + ' active pickers' : 'no orders'}">
+        <span class="km-heat-stat">${_fmt(h.activePickers)} pickers</span>
+        ${ros != null ? `<span class="km-heat-stat">${_fmt(ros)} rostered</span>` : ''}` : '';
+      return `<div class="km-heat-cell${dark ? ' km-heat-filled' : ''}" style="background:${color};" title="${lbl}:00 · ${has ? h.pct + '% SLA (' + h.met + '/' + h.denom + ' IPO≤6) · ' + _fmt(h.totalOrders) + ' total orders · ' + _fmt(h.activePickers) + ' active pickers' + (ros != null ? ' · ~' + _fmt(ros) + ' rostered/day' : '') : 'no orders'}">
         <span class="km-heat-hr">${lbl}:00</span>
         <span class="km-heat-val">${has ? h.pct + '%' : '—'}</span>
         ${stats}

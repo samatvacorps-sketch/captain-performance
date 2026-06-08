@@ -3954,7 +3954,7 @@ body,
 .km-heat-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; }
 .km-heat-cell {
   border-radius: 7px; display: flex; flex-direction: column; gap: 1px;
-  align-items: center; justify-content: center; color: var(--text-muted); min-height: 78px;
+  align-items: center; justify-content: center; color: var(--text-muted); min-height: 90px;
   padding: 7px 2px; border: 1px solid var(--border-subtle);
 }
 .km-heat-cell.km-heat-filled { color: #0f1722; border-color: rgba(0,0,0,0.18); }
