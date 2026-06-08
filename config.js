@@ -49,7 +49,7 @@ const CONFIG = {
   // ── In-Store Orders With Time Sheet ──────────────────────────────────
   // Order-level rows powering the In-store time SLA. Columns are resolved by
   // header name (see INSTORE_HEADERS) so the sheet can be safely reordered.
-  INSTORE_DATA_RANGE: "'in-store orders with time'!A:P",
+  INSTORE_DATA_RANGE: "'In-store Time'!A:Q",
   INSTORE_HEADERS: {
     date_ts:              'date_ts',
     order_id:             'order_id',

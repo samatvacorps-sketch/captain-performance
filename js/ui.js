@@ -3264,29 +3264,41 @@ const ui = (() => {
   }
 
   // ── SLA Targets config helpers ────────────────────────────────────
+  function _slaTargetRow(label, metric, tiers, arrow) {
+    const step = metric === 'complaints' ? '0.01' : '0.1';
+    const cell = tier => `<td><input class="slab-threshold-input" id="sla-${metric}-${tier}" type="number" min="0" max="100" step="${step}" value="${tiers[tier]}" /></td>`;
+    return `<tr>
+      <td style="font-weight:600">${label} <span style="color:var(--text-muted)">${arrow}</span></td>
+      ${cell('baseline')}${cell('sla1')}${cell('sla2')}
+    </tr>`;
+  }
+
   function loadSlaTargetCycle() {
     const cycle = document.getElementById('sla-target-cycle')?.value;
     if (!cycle) return;
     const t = _getSlaTargets(cycle);
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-    set('sla-target-instore', t.instore);
-    set('sla-target-complaints', t.complaints);
-    set('sla-target-fillrate', t.fillrate);
+    for (const m of _KM_METRICS) for (const tier of _KM_TIERS) {
+      const el = document.getElementById(`sla-${m}-${tier}`);
+      if (el) el.value = t[m][tier];
+    }
     const all = JSON.parse(localStorage.getItem('slaTargets') || '{}');
     const note = document.getElementById('sla-target-note');
-    if (note) note.textContent = all[cycle] ? `Custom targets set for this cycle` : `Using default targets`;
+    if (note) note.textContent = all[cycle] ? 'Custom targets set for this cycle' : 'Using default targets';
   }
 
   function updateSlaTarget() {
     const cycle = document.getElementById('sla-target-cycle')?.value;
     if (!cycle) return;
-    const num = id => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v) ? undefined : v; };
     const all = JSON.parse(localStorage.getItem('slaTargets') || '{}');
-    all[cycle] = {
-      instore:    num('sla-target-instore'),
-      complaints: num('sla-target-complaints'),
-      fillrate:   num('sla-target-fillrate'),
-    };
+    const obj = {};
+    for (const m of _KM_METRICS) {
+      obj[m] = {};
+      for (const tier of _KM_TIERS) {
+        const v = parseFloat(document.getElementById(`sla-${m}-${tier}`)?.value);
+        obj[m][tier] = isNaN(v) ? undefined : v;
+      }
+    }
+    all[cycle] = obj;
     localStorage.setItem('slaTargets', JSON.stringify(all));
     const note = document.getElementById('sla-target-note');
     if (note) note.textContent = 'Custom targets set for this cycle';
@@ -3346,7 +3358,7 @@ const ui = (() => {
     const complCats = [...new Set((sheets.getComplaintsCached() || []).map(r => r.complaint_category).filter(Boolean))].sort();
     const _savedCatSet = _getComplaintSlaCategorySet();
     const catChecks = complCats.map(cat => {
-      const checked = _savedCatSet ? _savedCatSet.has(cat.toLowerCase()) : !/mdnd|poor.*qual/i.test(cat.toLowerCase());
+      const checked = _savedCatSet ? _savedCatSet.has(cat.toLowerCase()) : !_KM_EXCLUDE_RE.test(cat.toLowerCase());
       return `<label class="km-cat-check"><input type="checkbox" data-cat="${_esc(cat)}" ${checked ? 'checked' : ''} onchange="ui.toggleComplaintSlaCategory()"> ${_esc(cat)}</label>`;
     }).join('');
 
@@ -3445,36 +3457,27 @@ const ui = (() => {
           <div class="config-card-icon stat-icon-blue">${ICONS.barChart}</div>
           <h3>SLA Targets (Key Metrics)</h3>
         </div>
-        <p class="config-desc">Per merchant-cycle targets shown on the Key Metrics tab. In-store time is "higher is better"; complaints is "lower is better".</p>
+        <p class="config-desc">Three-tiered per-cycle targets (Baseline / SLA 1 / SLA 2) shown on the Key Metrics tab. In-store &amp; fill-rate are "higher is better"; complaints is "lower is better".</p>
         <div class="config-month-row">
           <span class="dd-control-label">Cycle</span>
           <select id="sla-target-cycle" onchange="ui.loadSlaTargetCycle()">${slaCycleOptions}</select>
           <span id="sla-target-note" class="config-hint" style="margin-left:8px"></span>
         </div>
-        <div class="config-row" style="margin-top:14px;gap:24px;flex-wrap:wrap">
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <span class="dd-control-label">In-Store Time Target (%)</span>
-            <input type="number" id="sla-target-instore" min="0" max="100" step="0.5" value="${slaT.instore}" style="width:100px" />
-            <span class="config-hint" style="margin-top:2px">Default: ${_KM_TARGET_DEFAULTS.instore}%</span>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <span class="dd-control-label">Complaints Target (%)</span>
-            <input type="number" id="sla-target-complaints" min="0" max="100" step="0.1" value="${slaT.complaints}" style="width:100px" />
-            <span class="config-hint" style="margin-top:2px">Default: ${_KM_TARGET_DEFAULTS.complaints}%</span>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <span class="dd-control-label">Fill-Rate Target (%)</span>
-            <input type="number" id="sla-target-fillrate" min="0" max="100" step="0.5" value="${slaT.fillrate}" style="width:100px" />
-            <span class="config-hint" style="margin-top:2px">Phase 2 · Default: ${_KM_TARGET_DEFAULTS.fillrate}%</span>
-          </div>
-        </div>
+        <table class="slab-editor-table sla-target-table" style="margin-top:14px">
+          <thead><tr><th>Metric</th><th>Baseline (%)</th><th>SLA 1 (%)</th><th>SLA 2 (%)</th></tr></thead>
+          <tbody>
+            ${_slaTargetRow('In-Store Time', 'instore', slaT.instore, '↑')}
+            ${_slaTargetRow('Complaints', 'complaints', slaT.complaints, '↓')}
+            ${_slaTargetRow('Fill Rate (Phase 2)', 'fillrate', slaT.fillrate, '↑')}
+          </tbody>
+        </table>
         <div class="config-row" style="margin-top:14px;gap:8px">
           <button class="btn active" onclick="ui.updateSlaTarget()">Save Targets</button>
           <span id="sla-target-saved-msg" class="slab-saved-msg" style="display:none">Saved!</span>
         </div>
         <div style="margin-top:18px">
           <span class="dd-control-label">Qualifying Complaint Categories</span>
-          <p class="config-hint" style="margin:4px 0 8px">Checked categories count toward the Complaints SLA. MDND and Poor-Quality are excluded by default.</p>
+          <p class="config-hint" style="margin:4px 0 8px">Checked categories count toward the Complaints SLA. MDND, Poor-Quality and QNG are excluded by default.</p>
           <div class="km-cat-checklist">
             ${complCats.length ? catChecks : '<span class="config-hint">No complaint categories loaded yet.</span>'}
           </div>
@@ -4082,16 +4085,45 @@ const ui = (() => {
 
   let _kmCycleKey = null; // selected merchant-cycle key "YYYY-MM"
 
-  // SLA target storage (per merchant cycle, edited in Config panel).
-  const _KM_TARGET_DEFAULTS = { instore: 90, complaints: 2.5, fillrate: 98 };
+  // SLA targets are three-tiered per merchant cycle (Baseline / SLA 1 / SLA 2),
+  // edited in the Config panel. In-store & fill-rate are "higher is better";
+  // complaints is "lower is better".
+  const _KM_TARGET_DEFAULTS = {
+    instore:    { baseline: 75,    sla1: 80,    sla2: 86    },
+    complaints: { baseline: 1.33,  sla1: 1.1,   sla2: 0.9   },
+    fillrate:   { baseline: 99.32, sla1: 99.56, sla2: 99.66 },
+  };
+  const _KM_METRICS = ['instore', 'complaints', 'fillrate'];
+  const _KM_TIERS = ['baseline', 'sla1', 'sla2'];
+  // Complaint categories excluded from the SLA by default.
+  const _KM_EXCLUDE_RE = /mdnd|poor.*qual|qng/i;
+
   function _getSlaTargets(cycleKey) {
     const all = JSON.parse(localStorage.getItem('slaTargets') || '{}');
-    const t = all[cycleKey] || {};
-    return {
-      instore:    t.instore    != null ? t.instore    : _KM_TARGET_DEFAULTS.instore,
-      complaints: t.complaints != null ? t.complaints : _KM_TARGET_DEFAULTS.complaints,
-      fillrate:   t.fillrate   != null ? t.fillrate   : _KM_TARGET_DEFAULTS.fillrate,
-    };
+    const stored = all[cycleKey] || {};
+    const out = {};
+    for (const m of _KM_METRICS) {
+      const sm = stored[m] || {};
+      out[m] = {};
+      for (const tier of _KM_TIERS) {
+        out[m][tier] = sm[tier] != null ? sm[tier] : _KM_TARGET_DEFAULTS[m][tier];
+      }
+    }
+    return out;
+  }
+
+  // Highest SLA tier reached by a value. direction 'high' = bigger is better.
+  function _kmTierReached(value, tiers, direction) {
+    if (value === null || value === undefined || isNaN(value)) {
+      return { tier: 'na', label: 'No data', cls: 'km-tier-na' };
+    }
+    const ok = direction === 'high'
+      ? (t) => value >= t
+      : (t) => value <= t;
+    if (ok(tiers.sla2))     return { tier: 'sla2',     label: 'SLA 2',         cls: 'km-tier-sla2' };
+    if (ok(tiers.sla1))     return { tier: 'sla1',     label: 'SLA 1',         cls: 'km-tier-sla1' };
+    if (ok(tiers.baseline)) return { tier: 'baseline', label: 'Baseline',      cls: 'km-tier-baseline' };
+    return { tier: 'below', label: 'Below baseline', cls: 'km-tier-below' };
   }
 
   // Qualifying complaint categories for the SLA. Returns an explicit lowercased
@@ -4110,8 +4142,8 @@ const ui = (() => {
     const c = (cat || '').toLowerCase();
     const set = _getComplaintSlaCategorySet();
     if (set) return set.has(c);
-    // Default: include everything except MDND and Poor-Quality.
-    return c !== '' && !/mdnd|poor.*qual/i.test(c);
+    // Default: include everything except MDND, Poor-Quality, and QNG.
+    return c !== '' && !_KM_EXCLUDE_RE.test(c);
   }
 
   function _kmHeatColor(pct, hasData) {
@@ -4214,7 +4246,7 @@ const ui = (() => {
           ${_kmStageBars(instoreSLA.byStage)}
         </div>
         <div class="km-grid-2">
-          ${_kmIpoBands(instoreSLA.byIpoBand)}
+          ${_kmIpoBands(instoreSLA.byIpoBand, targets.instore)}
           ${_kmDropzoneNote()}
         </div>
         <div class="km-table-block">
@@ -4225,7 +4257,7 @@ const ui = (() => {
       <div class="km-section">
         <div class="tiers-section-header"><span class="tiers-section-pip" style="background:#60a5fa;"></span>
           <h3 class="tiers-section-title">In-Store Time</h3></div>
-        <p class="placeholder-text">No in-store data. Add the "in-store orders with time" tab to the source sheet and hit Refresh.</p>
+        <p class="placeholder-text">No in-store data. Ensure the "In-store Time" tab exists in the source sheet and hit Refresh.</p>
       </div>`;
 
     // ── Complaints drill-down section ──
@@ -4263,52 +4295,66 @@ const ui = (() => {
 
   // ── Key Metrics render helpers ────────────────────────────────────
 
-  function _kmScoreCard(title, sub, value, unit, target, direction, footnote) {
+  // Renders the Baseline / SLA 1 / SLA 2 ladder, marking the highest reached.
+  function _kmTierLadder(tiers, unit, reachedTier) {
+    const order = { below: -1, na: -1, baseline: 0, sla1: 1, sla2: 2 };
+    const reachedIdx = order[reachedTier] ?? -1;
+    const items = [
+      { key: 'baseline', label: 'Base', idx: 0 },
+      { key: 'sla1',     label: 'SLA 1', idx: 1 },
+      { key: 'sla2',     label: 'SLA 2', idx: 2 },
+    ];
+    return `<div class="km-ladder">${items.map(it => `
+      <span class="km-ladder-step${it.idx <= reachedIdx ? ' km-ladder-hit' : ''}">
+        <span class="km-ladder-lbl">${it.label}</span>
+        <span class="km-ladder-val">${_fmt(tiers[it.key], 2)}${unit}</span>
+      </span>`).join('')}</div>`;
+  }
+
+  function _kmScoreCard(title, sub, value, unit, tiers, direction, footnote) {
     const has = value !== null && value !== undefined && !isNaN(value);
-    const meet = has && (direction === 'high' ? value >= target : value <= target);
-    const cls = has ? (meet ? 'km-good' : 'km-bad') : 'km-na';
+    const r = _kmTierReached(value, tiers, direction);
     const valStr = has ? `${_fmt(value, unit === '%' ? 1 : 0)}${unit}` : '—';
     const arrow = direction === 'high' ? '↑ higher is better' : '↓ lower is better';
-    const gap = has ? (meet ? 'On target' : `Target ${_fmt(target, 1)}${unit} · ${arrow}`) : 'No data';
     return `
-      <div class="km-score-card ${cls}">
+      <div class="km-score-card ${r.cls}">
         <div class="km-score-head">
           <span class="km-score-title">${title}</span>
-          <span class="km-score-badge">${has ? (meet ? 'MET' : 'MISS') : 'N/A'}</span>
+          <span class="km-score-badge">${r.label}</span>
         </div>
         <div class="km-score-value">${valStr}</div>
-        <div class="km-score-target">Target: ${_fmt(target, 1)}${unit}</div>
-        <div class="km-score-sub">${sub}</div>
+        <div class="km-score-sub">${sub} · ${arrow}</div>
+        ${_kmTierLadder(tiers, unit, r.tier)}
         <div class="km-score-foot">${_esc(footnote)}</div>
-        <div class="km-score-gap">${gap}</div>
       </div>`;
   }
 
-  function _kmFillRatePlaceholder(target) {
+  function _kmFillRatePlaceholder(tiers) {
     return `
-      <div class="km-score-card km-na km-soon">
+      <div class="km-score-card km-tier-na km-soon">
         <div class="km-score-head">
           <span class="km-score-title">Fill Rate</span>
           <span class="km-score-badge">SOON</span>
         </div>
         <div class="km-score-value">—</div>
-        <div class="km-score-target">Target: ${_fmt(target, 1)}%</div>
-        <div class="km-score-sub">Delivered in full ÷ checkout orders</div>
-        <div class="km-score-foot">Needs PNA / missing-item feed</div>
-        <div class="km-score-gap">Phase 2</div>
+        <div class="km-score-sub">Delivered in full ÷ checkout orders · ↑ higher is better</div>
+        ${_kmTierLadder(tiers, '%', 'na')}
+        <div class="km-score-foot">Phase 2 · needs PNA / missing-item feed</div>
       </div>`;
   }
 
-  function _kmCycleTrend(cycles, target, activeKey) {
+  const _KM_TIER_COLOR = { sla2: '#34d399', sla1: '#22d3ee', baseline: '#fbbf24', below: '#f87171', na: '#6b7280' };
+
+  function _kmCycleTrend(cycles, tiers, activeKey) {
     if (!cycles || !cycles.length) return '';
     const recent = cycles.slice(-8);
     const bars = recent.map(c => {
-      const meet = c.slaPct >= target;
+      const r = _kmTierReached(c.slaPct, tiers, 'high');
       const active = c.key === activeKey;
       return `
-        <div class="km-trend-col${active ? ' km-trend-active' : ''}" title="${_esc(c.label)} · ${c.slaPct}% (${c.met}/${c.denom})">
+        <div class="km-trend-col${active ? ' km-trend-active' : ''}" title="${_esc(c.label)} · ${c.slaPct}% (${c.met}/${c.denom}) · ${r.label}">
           <div class="km-trend-bar-wrap">
-            <div class="km-trend-bar" style="height:${Math.max(2, c.slaPct)}%;background:${meet ? '#34d399' : '#f87171'};"></div>
+            <div class="km-trend-bar" style="height:${Math.max(2, c.slaPct)}%;background:${_KM_TIER_COLOR[r.tier]};"></div>
           </div>
           <div class="km-trend-pct">${c.slaPct}%</div>
           <div class="km-trend-lbl">${_esc(c.label.split('–')[0].trim())}</div>
@@ -4316,12 +4362,12 @@ const ui = (() => {
     }).join('');
     return `
       <div class="km-trend-block">
-        <h4 class="km-block-title">SLA % by Cycle <span class="km-target-line">target ${_fmt(target,1)}%</span></h4>
+        <h4 class="km-block-title">SLA % by Cycle <span class="km-target-line">Base ${_fmt(tiers.baseline,1)}% · SLA1 ${_fmt(tiers.sla1,1)}% · SLA2 ${_fmt(tiers.sla2,1)}%</span></h4>
         <div class="km-trend-row">${bars}</div>
       </div>`;
   }
 
-  function _kmHourHeatmap(byHour, target) {
+  function _kmHourHeatmap(byHour, tiers) {
     const cells = byHour.map(h => {
       const has = h.denom > 0;
       const color = _kmHeatColor(h.pct, has);
@@ -4333,7 +4379,7 @@ const ui = (() => {
     }).join('');
     return `
       <div class="km-card">
-        <h4 class="km-block-title">Hourly Breakdown <span class="km-target-line">green ≥ ${_fmt(target,0)}%</span></h4>
+        <h4 class="km-block-title">Hourly Breakdown <span class="km-target-line">green ≥ baseline ${_fmt(tiers.baseline,0)}%</span></h4>
         <div class="km-heat-grid">${cells}</div>
       </div>`;
   }
@@ -4353,11 +4399,11 @@ const ui = (() => {
       </div>`;
   }
 
-  function _kmIpoBands(bands) {
+  function _kmIpoBands(bands, tiers) {
     const rows = bands.map(b => `
       <div class="km-stage-row">
         <span class="km-stage-lbl">${b.label}</span>
-        <div class="km-stage-track"><div class="km-stage-fill" style="width:${b.pct}%;background:${b.pct >= 90 ? '#34d399' : b.pct >= 75 ? '#fbbf24' : '#f87171'};"></div></div>
+        <div class="km-stage-track"><div class="km-stage-fill" style="width:${b.pct}%;background:${b.pct >= tiers.sla1 ? '#34d399' : b.pct >= tiers.baseline ? '#fbbf24' : '#f87171'};"></div></div>
         <span class="km-stage-val">${b.denom ? b.pct + '%' : '—'}</span>
       </div>`).join('');
     return `
@@ -4375,10 +4421,10 @@ const ui = (() => {
       </div>`;
   }
 
-  function _kmPickerTable(byPicker, nameOf, target) {
+  function _kmPickerTable(byPicker, nameOf, tiers) {
     if (!byPicker.length) return '<p class="placeholder-text">No picker data for this cycle.</p>';
     const rows = byPicker.map(p => {
-      const cls = p.pct >= target ? 'cell-green' : p.pct >= target - 10 ? 'cell-yellow' : 'cell-red';
+      const cls = p.pct >= tiers.sla1 ? 'cell-green' : p.pct >= tiers.baseline ? 'cell-yellow' : 'cell-red';
       return `<tr>
         <td>${_esc(nameOf(p.employee_id))}</td>
         <td data-sort="${p.orders}">${_fmt(p.orders)}</td>

@@ -3888,25 +3888,42 @@ body,
   border-radius: 12px;
   padding: 18px 20px;
 }
-.km-score-card.km-good { border-left-color: #34d399; }
-.km-score-card.km-bad  { border-left-color: #f87171; }
-.km-score-card.km-na   { border-left-color: #6b7280; opacity: 0.92; }
+.km-score-card.km-tier-sla2     { border-left-color: #34d399; }
+.km-score-card.km-tier-sla1     { border-left-color: #22d3ee; }
+.km-score-card.km-tier-baseline { border-left-color: #fbbf24; }
+.km-score-card.km-tier-below    { border-left-color: #f87171; }
+.km-score-card.km-tier-na       { border-left-color: #6b7280; opacity: 0.92; }
 .km-score-card.km-soon { opacity: 0.7; }
 .km-score-head { display: flex; justify-content: space-between; align-items: center; }
 .km-score-title { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
 .km-score-badge {
   font-size: 0.6rem; font-weight: 800; letter-spacing: 0.08em;
   padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.08); color: var(--text-muted);
+  white-space: nowrap;
 }
-.km-good .km-score-badge { background: rgba(52,211,153,0.16); color: #34d399; }
-.km-bad  .km-score-badge { background: rgba(248,113,113,0.16); color: #f87171; }
+.km-tier-sla2 .km-score-badge     { background: rgba(52,211,153,0.16); color: #34d399; }
+.km-tier-sla1 .km-score-badge     { background: rgba(34,211,238,0.16); color: #22d3ee; }
+.km-tier-baseline .km-score-badge { background: rgba(251,191,36,0.16); color: #fbbf24; }
+.km-tier-below .km-score-badge    { background: rgba(248,113,113,0.16); color: #f87171; }
 .km-score-value { font-size: 2.4rem; font-weight: 800; line-height: 1.1; margin: 8px 0 2px; color: var(--text); }
-.km-score-target { font-size: 0.72rem; color: var(--text-muted); }
-.km-score-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 6px; }
-.km-score-foot { font-size: 0.72rem; color: var(--text); margin-top: 8px; opacity: 0.85; }
-.km-score-gap { font-size: 0.7rem; font-weight: 600; margin-top: 6px; color: var(--text-muted); }
-.km-good .km-score-gap { color: #34d399; }
-.km-bad  .km-score-gap { color: #f87171; }
+.km-score-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 4px; }
+.km-score-foot { font-size: 0.72rem; color: var(--text); margin-top: 10px; opacity: 0.85; }
+
+/* Three-tier ladder on each scorecard */
+.km-ladder { display: flex; gap: 6px; margin-top: 12px; }
+.km-ladder-step {
+  flex: 1; display: flex; flex-direction: column; gap: 1px; align-items: center;
+  padding: 5px 4px; border-radius: 7px; background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+}
+.km-ladder-step.km-ladder-hit { background: rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.4); }
+.km-ladder-lbl { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.km-ladder-hit .km-ladder-lbl { color: #34d399; }
+.km-ladder-val { font-size: 0.78rem; font-weight: 700; color: var(--text); }
+
+/* Config: SLA target table */
+.sla-target-table th:not(:first-child), .sla-target-table td:not(:first-child) { text-align: center; }
+.sla-target-table .slab-threshold-input { width: 90px; }
 
 .km-section { margin-bottom: 28px; }
 .km-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
