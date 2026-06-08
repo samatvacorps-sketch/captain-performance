@@ -3954,11 +3954,20 @@ body,
 .km-heat-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; }
 .km-heat-cell {
   aspect-ratio: 1 / 1; border-radius: 6px; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; color: #fff; min-height: 38px;
+  align-items: center; justify-content: center; color: var(--text-muted); min-height: 38px;
   border: 1px solid var(--border-subtle);
 }
-.km-heat-hr { font-size: 0.6rem; opacity: 0.8; }
+.km-heat-cell.km-heat-filled { color: #0f1722; border-color: rgba(0,0,0,0.18); }
+.km-heat-hr { font-size: 0.6rem; opacity: 0.85; }
 .km-heat-val { font-size: 0.74rem; font-weight: 700; }
+
+/* Clickable breached-orders count in the picker table */
+.km-breach-btn {
+  background: rgba(248,113,113,0.14); color: #f87171; border: 1px solid rgba(248,113,113,0.4);
+  border-radius: 6px; padding: 1px 9px; font-size: 0.78rem; font-weight: 700; cursor: pointer;
+  font-family: inherit;
+}
+.km-breach-btn:hover { background: rgba(248,113,113,0.26); }
 
 /* Stage / band bars */
 .km-stage-row { display: grid; grid-template-columns: 110px 1fr 80px; align-items: center; gap: 10px; margin-bottom: 8px; }

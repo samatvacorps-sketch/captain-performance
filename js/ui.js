@@ -4083,7 +4083,24 @@ const ui = (() => {
 
   // ── Key Metrics (SLA Command Center) ──────────────────────────────
 
-  let _kmCycleKey = null; // selected merchant-cycle key "YYYY-MM"
+  let _kmCycleKey = null;          // merchant-cycle key "YYYY-MM" for target lookup
+  let _kmDateMode = false;         // true once a custom date range is in play
+  let _kmCycleRows = [];           // in-scope (IPO≤6) in-store rows for the period
+  let _kmPickerNames = new Map();  // employee_id → name
+  let _kmDetailPeriod = { start: '', end: '' };
+  let _kmDetailEscHandler = null;
+
+  // Tier grading colours for heatmap / picker cells:
+  // below=red · baseline=orange · SLA 1=yellow · SLA 2=green.
+  const _KM_GRADE_COLOR = { below: '#f87171', baseline: '#fb923c', sla1: '#facc15', sla2: '#34d399', na: '#39414f' };
+
+  // Billing-cycle key ("YYYY-MM", cycle ends 25th) for a date — mirrors
+  // compute._billingMonthKey so Config target lookups line up.
+  function _billingCycleKeyOf(date) {
+    let y = date.getFullYear(), m = date.getMonth() + 1;
+    if (date.getDate() >= 26) { m++; if (m > 12) { m = 1; y++; } }
+    return `${y}-${String(m).padStart(2, '0')}`;
+  }
 
   // SLA targets are three-tiered per merchant cycle (Baseline / SLA 1 / SLA 2),
   // edited in the Config panel. In-store & fill-rate are "higher is better";
@@ -4146,34 +4163,75 @@ const ui = (() => {
     return c !== '' && !_KM_EXCLUDE_RE.test(c);
   }
 
-  function _kmHeatColor(pct, hasData) {
-    if (!hasData) return 'var(--bg-elevated, #1c2230)';
-    const h = Math.max(0, Math.min(120, (pct / 100) * 120)); // 0=red → 120=green
-    return `hsl(${h}, 55%, 30%)`;
-  }
-
   function initKeyMetrics() {
     const sel = document.getElementById('km-preset');
     if (!sel) return;
     const daily = sheets.getCached();
     if (!daily || daily.length === 0) { sel.innerHTML = ''; return; }
 
-    const monthly = compute.aggregateBillingMonthly(
-      daily.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id }))
-    );
-    sel.innerHTML = monthly.slice().reverse()
-      .map(d => `<option value="${d.month_key}">${_billingMonthLabel(d.month_key)}</option>`)
-      .join('');
+    const mapped = daily.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id }));
+    const weekly  = compute.aggregateWeekly(mapped);
+    const monthly = compute.aggregateBillingMonthly(mapped);
 
-    if (!_kmCycleKey || !monthly.some(d => d.month_key === _kmCycleKey)) {
-      _kmCycleKey = monthly.length ? monthly[monthly.length - 1].month_key : null;
+    sel.innerHTML = [
+      '<option value="all">All Time</option>',
+      '<option value="t1">T-1 (Yesterday)</option>',
+      '<option value="t2">T-2 (Day before yesterday)</option>',
+      '<optgroup label="Weekly">',
+      ...weekly.slice().reverse().map(d => `<option value="W:${d.week_key}">${d.label || d.week_key}</option>`),
+      '</optgroup>',
+      '<optgroup label="Monthly">',
+      ...monthly.slice().reverse().map(d => `<option value="M:${d.month_key}">${_billingMonthLabel(d.month_key)}</option>`),
+      '</optgroup>',
+    ].join('');
+
+    // Default: latest billing cycle window.
+    if (monthly.length) {
+      const latest = monthly[monthly.length - 1].month_key;
+      _applyBillingMonthDates('km-start', 'km-end', latest);
+      sel.value = `M:${latest}`;
     }
-    if (_kmCycleKey) sel.value = _kmCycleKey;
+    _kmDateMode = false;
   }
 
   function onKmPresetChange() {
-    const sel = document.getElementById('km-preset');
-    if (sel) _kmCycleKey = sel.value;
+    const daily = sheets.getCached();
+    if (!daily) return;
+    const periodVal = document.getElementById('km-preset')?.value;
+    if (!periodVal) return;
+    _kmDateMode = false;
+
+    if (periodVal === 't1' || periodVal === 't2') {
+      const d = new Date();
+      d.setDate(d.getDate() - (periodVal === 't1' ? 1 : 2));
+      const ds = _isoDateStr(d);
+      document.getElementById('km-start').value = ds;
+      document.getElementById('km-end').value   = ds;
+      _kmDateMode = true;
+    } else if (periodVal === 'all') {
+      const dates = daily.map(r => r.date).filter(Boolean).sort((a, b) => a - b);
+      if (dates.length) {
+        document.getElementById('km-start').value = _isoDateStr(dates[0]);
+        document.getElementById('km-end').value   = _isoDateStr(dates[dates.length - 1]);
+      }
+    } else {
+      const colonIdx   = periodVal.indexOf(':');
+      const periodType = periodVal.slice(0, colonIdx);
+      const periodKey  = periodVal.slice(colonIdx + 1);
+      if (periodType === 'W') {
+        const start = compute.weekStartFromKey(periodKey);
+        const end   = new Date(start); end.setDate(end.getDate() + 6);
+        document.getElementById('km-start').value = _isoDateStr(start);
+        document.getElementById('km-end').value   = _isoDateStr(end);
+      } else {
+        _applyBillingMonthDates('km-start', 'km-end', periodKey);
+      }
+    }
+    renderKeyMetrics();
+  }
+
+  function onKmDateChange() {
+    _kmDateMode = true;
     renderKeyMetrics();
   }
 
@@ -4181,15 +4239,23 @@ const ui = (() => {
     const container = document.getElementById('key-metrics-content');
     if (!container) return;
 
+    _closeKmDetail();
+
     const dailyData   = _supervisorFilter(sheets.getCached());
     const instoreAll  = _supervisorFilter(sheets.getInstoreCached() || []);
     const complAll    = _supervisorFilter(sheets.getComplaintsCached() || []);
 
-    const cycleKey = _kmCycleKey;
-    if (!cycleKey) {
-      container.innerHTML = '<p class="placeholder-text">No data available yet. Hit Refresh after loading the source sheets.</p>';
-      return;
-    }
+    // Date window from the pickers (same pattern as other tabs).
+    const startVal = document.getElementById('km-start')?.value;
+    const endVal   = document.getElementById('km-end')?.value;
+    const startMs  = startVal ? new Date(startVal).setHours(0, 0, 0, 0)   : -Infinity;
+    const endMs    = endVal   ? new Date(endVal).setHours(23, 59, 59, 999) : Infinity;
+    const inWindow = r => r.date && r.date >= startMs && r.date <= endMs;
+    _kmDetailPeriod = { start: startVal || '', end: endVal || '' };
+
+    // Targets are keyed by the billing cycle the period ends in.
+    _kmCycleKey = endVal ? _billingCycleKeyOf(new Date(endVal)) : new Date().toISOString().slice(0, 7);
+    const targets = _getSlaTargets(_kmCycleKey);
 
     // Picker id → name map (from Daily Metrics)
     const names = new Map();
@@ -4197,31 +4263,26 @@ const ui = (() => {
       if (r.employee_id && r.employee_name && !names.has(r.employee_id)) names.set(r.employee_id, r.employee_name);
     });
     const nameOf = id => names.get(id) || id || 'Unknown';
+    _kmPickerNames = names;
 
-    const targets = _getSlaTargets(cycleKey);
-
-    // Cycle date window (26th prev month → 25th cycle month)
-    const [cy, cmo] = cycleKey.split('-').map(Number);
-    const cycleStart = new Date(cy, cmo - 2, 26).setHours(0, 0, 0, 0);
-    const cycleEnd   = new Date(cy, cmo - 1, 25).setHours(23, 59, 59, 999);
-    const inWindow = r => r.date && r.date >= cycleStart && r.date <= cycleEnd;
-
-    // ── In-store SLA (trend over all data + drill-downs scoped to cycle) ──
-    const instoreSLA = instoreAll.length ? compute.computeInstoreSLA(instoreAll, cycleKey) : null;
-
-    // ── Complaints SLA (scoped to cycle window) ──
-    const dailyCycle = dailyData.filter(inWindow);
-    const qualCompl  = complAll.filter(r => inWindow(r) && _isQualifyingComplaint(r.complaint_category));
-    const complAgg   = compute.computeComplaintAggregations(qualCompl, dailyCycle);
-    const complCycle = complAgg ? (complAgg.storeSummary.merchantCycle || []).find(c => c.cycleKey === cycleKey) : null;
-    const complOrders = complCycle ? complCycle.totalOrdersPicked
-      : dailyCycle.reduce((s, r) => s + (r.checkout_orders || 0), 0);
-    const complItems  = complCycle ? complCycle.totalComplaints : qualCompl.length;
-    const complPct    = complOrders > 0 ? +(complItems / complOrders * 100).toFixed(2) : null;
-    const complInStore  = complCycle ? complCycle.inStoreYes : qualCompl.filter(r => r.in_store).length;
-    const complOutStore = complCycle ? complCycle.inStoreNo  : qualCompl.filter(r => !r.in_store).length;
-
+    // ── In-store SLA (over the selected window) ──
+    const instoreWin = instoreAll.filter(inWindow);
+    const instoreSLA = instoreWin.length ? compute.computeInstoreSLA(instoreWin, null) : null;
+    const CAP = CONFIG.INSTORE_SLA.IPO_CAP;
+    _kmCycleRows = instoreWin.filter(r => r.ipo > 0 && r.ipo <= CAP); // SLA population, for breach drill-down
     const instorePct = instoreSLA ? instoreSLA.totals.slaPct : null;
+
+    // ── Complaints SLA (over the selected window) ──
+    const dailyWin  = dailyData.filter(inWindow);
+    const qualCompl = complAll.filter(r => inWindow(r) && _isQualifyingComplaint(r.complaint_category));
+    const complAgg  = qualCompl.length ? compute.computeComplaintAggregations(qualCompl, dailyWin) : null;
+    const cTot      = complAgg ? complAgg.storeSummary.totals : null;
+    const complOrders = cTot ? cTot.totalOrdersPicked : dailyWin.reduce((s, r) => s + (r.checkout_orders || 0), 0);
+    const complItems  = cTot ? cTot.totalComplaints : 0;
+    const complPct    = complOrders > 0 ? +(complItems / complOrders * 100).toFixed(2) : null;
+    const complInStore  = cTot ? cTot.inStoreYes : 0;
+    const complOutStore = cTot ? cTot.inStoreNo  : 0;
+    const complByCategory = cTot ? cTot.byCategory : {};
 
     // ── Scorecards ──
     const scorecards = `
@@ -4240,7 +4301,6 @@ const ui = (() => {
       <div class="km-section">
         <div class="tiers-section-header"><span class="tiers-section-pip" style="background:#60a5fa;"></span>
           <h3 class="tiers-section-title">In-Store Time — What's Dragging It Down</h3></div>
-        ${_kmCycleTrend(instoreSLA.cycles, targets.instore, cycleKey)}
         <div class="km-grid-2">
           ${_kmHourHeatmap(instoreSLA.byHour, targets.instore)}
           ${_kmStageBars(instoreSLA.byStage)}
@@ -4250,14 +4310,14 @@ const ui = (() => {
           ${_kmDropzoneNote()}
         </div>
         <div class="km-table-block">
-          <h4 class="km-block-title">Slowest Pickers (worst SLA first)</h4>
+          <h4 class="km-block-title">Slowest Pickers (worst SLA first) <span class="km-target-line">click a Breached count to list those orders</span></h4>
           <div id="km-picker-table"></div>
         </div>
       </div>` : `
       <div class="km-section">
         <div class="tiers-section-header"><span class="tiers-section-pip" style="background:#60a5fa;"></span>
           <h3 class="tiers-section-title">In-Store Time</h3></div>
-        <p class="placeholder-text">No in-store data. Ensure the "In-store Time" tab exists in the source sheet and hit Refresh.</p>
+        <p class="placeholder-text">No in-store data for this period. Ensure the "In-store Time" tab exists in the source sheet and hit Refresh.</p>
       </div>`;
 
     // ── Complaints drill-down section ──
@@ -4267,10 +4327,10 @@ const ui = (() => {
           <h3 class="tiers-section-title">Complaints — Where They Come From</h3></div>
         <div class="km-grid-2">
           ${_kmComplaintSplit(complInStore, complOutStore, complItems)}
-          ${_kmComplaintCategories(complCycle ? complCycle.byCategory : {}, complItems)}
+          ${_kmComplaintCategories(complByCategory, complItems)}
         </div>
         <div class="km-table-block">
-          <h4 class="km-block-title">Per-Picker Complaints (this cycle)</h4>
+          <h4 class="km-block-title">Per-Picker Complaints (selected period)</h4>
           <div id="km-compl-picker-table"></div>
         </div>
       </div>`;
@@ -4283,6 +4343,12 @@ const ui = (() => {
       if (el) {
         el.innerHTML = _kmPickerTable(instoreSLA.byPicker, nameOf, targets.instore);
         _initTableSort(el.querySelector('.data-table'));
+        el.querySelectorAll('.km-breach-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            _showInstoreBreachDetail(btn.dataset.emp || '');
+          });
+        });
       }
     }
     const cEl = document.getElementById('km-compl-picker-table');
@@ -4343,43 +4409,21 @@ const ui = (() => {
       </div>`;
   }
 
-  const _KM_TIER_COLOR = { sla2: '#34d399', sla1: '#22d3ee', baseline: '#fbbf24', below: '#f87171', na: '#6b7280' };
-
-  function _kmCycleTrend(cycles, tiers, activeKey) {
-    if (!cycles || !cycles.length) return '';
-    const recent = cycles.slice(-8);
-    const bars = recent.map(c => {
-      const r = _kmTierReached(c.slaPct, tiers, 'high');
-      const active = c.key === activeKey;
-      return `
-        <div class="km-trend-col${active ? ' km-trend-active' : ''}" title="${_esc(c.label)} · ${c.slaPct}% (${c.met}/${c.denom}) · ${r.label}">
-          <div class="km-trend-bar-wrap">
-            <div class="km-trend-bar" style="height:${Math.max(2, c.slaPct)}%;background:${_KM_TIER_COLOR[r.tier]};"></div>
-          </div>
-          <div class="km-trend-pct">${c.slaPct}%</div>
-          <div class="km-trend-lbl">${_esc(c.label.split('–')[0].trim())}</div>
-        </div>`;
-    }).join('');
-    return `
-      <div class="km-trend-block">
-        <h4 class="km-block-title">SLA % by Cycle <span class="km-target-line">Base ${_fmt(tiers.baseline,1)}% · SLA1 ${_fmt(tiers.sla1,1)}% · SLA2 ${_fmt(tiers.sla2,1)}%</span></h4>
-        <div class="km-trend-row">${bars}</div>
-      </div>`;
-  }
-
   function _kmHourHeatmap(byHour, tiers) {
     const cells = byHour.map(h => {
       const has = h.denom > 0;
-      const color = _kmHeatColor(h.pct, has);
+      const tier = has ? _kmTierReached(h.pct, tiers, 'high').tier : 'na';
+      const color = _KM_GRADE_COLOR[tier];
+      const dark = has; // bright tier fills → dark text; muted no-data → light text
       const lbl = `${String(h.hour).padStart(2, '0')}`;
-      return `<div class="km-heat-cell" style="background:${color};" title="${lbl}:00 · ${has ? h.pct + '% (' + h.met + '/' + h.denom + ')' : 'no orders'}">
+      return `<div class="km-heat-cell${dark ? ' km-heat-filled' : ''}" style="background:${color};" title="${lbl}:00 · ${has ? h.pct + '% (' + h.met + '/' + h.denom + ')' : 'no orders'}">
         <span class="km-heat-hr">${lbl}</span>
         <span class="km-heat-val">${has ? h.pct : '—'}</span>
       </div>`;
     }).join('');
     return `
       <div class="km-card">
-        <h4 class="km-block-title">Hourly Breakdown <span class="km-target-line">green ≥ baseline ${_fmt(tiers.baseline,0)}%</span></h4>
+        <h4 class="km-block-title">Hourly Breakdown <span class="km-target-line">red&lt;base · orange=base · yellow=SLA1 · green=SLA2</span></h4>
         <div class="km-heat-grid">${cells}</div>
       </div>`;
   }
@@ -4422,14 +4466,18 @@ const ui = (() => {
   }
 
   function _kmPickerTable(byPicker, nameOf, tiers) {
-    if (!byPicker.length) return '<p class="placeholder-text">No picker data for this cycle.</p>';
+    if (!byPicker.length) return '<p class="placeholder-text">No picker data for this period.</p>';
     const rows = byPicker.map(p => {
-      const cls = p.pct >= tiers.sla1 ? 'cell-green' : p.pct >= tiers.baseline ? 'cell-yellow' : 'cell-red';
+      const tier = _kmTierReached(p.pct, tiers, 'high').tier;
+      const color = _KM_GRADE_COLOR[tier];
+      const breachCell = p.breached > 0
+        ? `<button type="button" class="km-breach-btn" data-emp="${_esc(p.employee_id || '')}" aria-label="List breached orders for ${_esc(nameOf(p.employee_id))}">${_fmt(p.breached)}</button>`
+        : _fmt(p.breached);
       return `<tr>
         <td>${_esc(nameOf(p.employee_id))}</td>
         <td data-sort="${p.orders}">${_fmt(p.orders)}</td>
-        <td data-sort="${p.breached}">${_fmt(p.breached)}</td>
-        <td data-sort="${p.pct}" class="${cls}">${p.pct}%</td>
+        <td data-sort="${p.breached}">${breachCell}</td>
+        <td data-sort="${p.pct}" class="km-grade-cell" style="color:${color};font-weight:700;">${p.pct}%</td>
         <td data-sort="${p.median || 0}">${p.median != null ? compute.formatDuration(p.median) : '—'}</td>
         <td data-sort="${p.p90 || 0}">${p.p90 != null ? compute.formatDuration(p.p90) : '—'}</td>
       </tr>`;
@@ -4492,7 +4540,7 @@ const ui = (() => {
         <td data-sort="${c.complaintRate}">${c.complaintRate}%</td>
         <td>${_esc(c.topCategory)}</td>
       </tr>`).join('');
-    if (!rows) return '<p class="placeholder-text">No qualifying complaints for this cycle.</p>';
+    if (!rows) return '<p class="placeholder-text">No qualifying complaints for this period.</p>';
     return `
       <div class="table-wrapper">
         <table class="data-table">
@@ -4502,6 +4550,76 @@ const ui = (() => {
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+  }
+
+  // Breached-orders drill-down for a picker (reuses the complaint-detail modal shell).
+  function _showInstoreBreachDetail(empId) {
+    const THRESH = CONFIG.INSTORE_SLA.TIME_THRESHOLD_SEC;
+    const rows = _kmCycleRows
+      .filter(r => (r.employee_id || '') === empId && (r.instore_seconds || 0) > THRESH)
+      .sort((a, b) => (b.instore_seconds || 0) - (a.instore_seconds || 0));
+    _closeKmDetail();
+    if (!rows.length) return;
+
+    const name = _kmPickerNames.get(empId) || empId || 'Unknown';
+    const periodText = _kmDetailPeriod.start && _kmDetailPeriod.end
+      ? `${_kmDetailPeriod.start} to ${_kmDetailPeriod.end}` : 'Selected period';
+
+    const body = rows.map(r => `
+      <tr>
+        <td style="white-space:nowrap;">${_esc(r.dateIsoStr || '')}</td>
+        <td>${_esc(r.order_id || '—')}</td>
+        <td data-sort="${r.ipo || 0}">${_fmt(r.ipo)}</td>
+        <td data-sort="${r.instore_seconds || 0}" style="font-weight:700;color:${_KM_GRADE_COLOR.below};">${compute.formatDuration(r.instore_seconds)}</td>
+        <td data-sort="${r.hour ?? -1}">${r.hour != null ? String(r.hour).padStart(2, '0') + ':00' : '—'}</td>
+        <td data-sort="${r.wait_sec || 0}">${r.wait_sec != null ? compute.formatDuration(r.wait_sec) : '—'}</td>
+        <td data-sort="${r.pick_sec || 0}">${r.pick_sec != null ? compute.formatDuration(r.pick_sec) : '—'}</td>
+        <td data-sort="${r.billing_sec || 0}">${r.billing_sec != null ? compute.formatDuration(r.billing_sec) : '—'}</td>
+      </tr>`).join('');
+
+    const modal = document.createElement('div');
+    modal.id = 'km-detail-modal';
+    modal.className = 'compl-detail-backdrop';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.innerHTML = `
+      <div class="compl-detail-modal">
+        <div class="compl-detail-header">
+          <div>
+            <p class="compl-detail-kicker">Breached Orders · in-store &gt; ${compute.formatDuration(THRESH)}</p>
+            <h3>${_esc(name)}</h3>
+            <p class="compl-detail-subtitle">${_esc(periodText)}</p>
+          </div>
+          <button type="button" class="compl-detail-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="compl-detail-summary">
+          <span>${_fmt(rows.length)} breached order${rows.length === 1 ? '' : 's'}</span>
+        </div>
+        <div class="table-wrapper compl-detail-table-wrapper">
+          <table class="data-table compl-detail-table">
+            <thead><tr>
+              <th>Date</th><th>Order ID</th><th>IPO</th><th>In-Store Time</th><th>Hour</th>
+              <th>Assign Wait</th><th>Picking</th><th>Billing</th>
+            </tr></thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('.compl-detail-close')?.addEventListener('click', _closeKmDetail);
+    modal.addEventListener('click', (e) => { if (e.target === modal) _closeKmDetail(); });
+    _kmDetailEscHandler = (e) => { if (e.key === 'Escape') _closeKmDetail(); };
+    document.addEventListener('keydown', _kmDetailEscHandler);
+    _initTableSort(modal.querySelector('.data-table'));
+    modal.querySelector('.compl-detail-close')?.focus();
+  }
+
+  function _closeKmDetail() {
+    document.getElementById('km-detail-modal')?.remove();
+    if (_kmDetailEscHandler) {
+      document.removeEventListener('keydown', _kmDetailEscHandler);
+      _kmDetailEscHandler = null;
+    }
   }
 
   // ── Complaints Deep Dive ──────────────────────────────────────────
@@ -5402,6 +5520,7 @@ const ui = (() => {
     initKeyMetrics,
     renderKeyMetrics,
     onKmPresetChange,
+    onKmDateChange,
     loadSlaTargetCycle,
     updateSlaTarget,
     toggleComplaintSlaCategory,

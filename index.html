@@ -456,8 +456,14 @@
         <h2 class="flags-title">Key Metrics</h2>
       </div>
       <div class="flags-date-strip">
-        <span class="dd-control-label">Cycle</span>
+        <span class="dd-control-label">Quick select</span>
         <select id="km-preset" onchange="ui.onKmPresetChange()"></select>
+        <span class="strip-divider"></span>
+        <span class="dd-control-label">From</span>
+        <input type="date" id="km-start" onchange="ui.onKmDateChange()">
+        <span class="dd-control-sep">—</span>
+        <span class="dd-control-label">To</span>
+        <input type="date" id="km-end" onchange="ui.onKmDateChange()">
       </div>
     </div>
 
