@@ -3953,13 +3953,14 @@ body,
 /* Hourly heatmap */
 .km-heat-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; }
 .km-heat-cell {
-  aspect-ratio: 1 / 1; border-radius: 6px; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; color: var(--text-muted); min-height: 38px;
-  border: 1px solid var(--border-subtle);
+  border-radius: 7px; display: flex; flex-direction: column; gap: 1px;
+  align-items: center; justify-content: center; color: var(--text-muted); min-height: 58px;
+  padding: 6px 2px; border: 1px solid var(--border-subtle);
 }
 .km-heat-cell.km-heat-filled { color: #0f1722; border-color: rgba(0,0,0,0.18); }
-.km-heat-hr { font-size: 0.6rem; opacity: 0.85; }
-.km-heat-val { font-size: 0.74rem; font-weight: 700; }
+.km-heat-hr { font-size: 0.62rem; opacity: 0.85; }
+.km-heat-val { font-size: 0.95rem; font-weight: 800; }
+.km-heat-breach { font-size: 0.58rem; font-weight: 600; opacity: 0.8; }
 
 /* Clickable breached-orders count in the picker table */
 .km-breach-btn {

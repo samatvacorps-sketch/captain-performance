@@ -4270,7 +4270,8 @@ const ui = (() => {
     const instoreSLA = instoreWin.length ? compute.computeInstoreSLA(instoreWin, null) : null;
     const CAP = CONFIG.INSTORE_SLA.IPO_CAP;
     _kmCycleRows = instoreWin.filter(r => r.ipo > 0 && r.ipo <= CAP); // SLA population, for breach drill-down
-    const instorePct = instoreSLA ? instoreSLA.totals.slaPct : null;
+    const instorePct = (instoreSLA && instoreSLA.totals.denom)
+      ? +(instoreSLA.totals.met / instoreSLA.totals.denom * 100).toFixed(2) : null;
 
     // ── Complaints SLA (over the selected window) ──
     const dailyWin  = dailyData.filter(inWindow);
@@ -4301,13 +4302,10 @@ const ui = (() => {
       <div class="km-section">
         <div class="tiers-section-header"><span class="tiers-section-pip" style="background:#60a5fa;"></span>
           <h3 class="tiers-section-title">In-Store Time — What's Dragging It Down</h3></div>
+        ${_kmHourHeatmap(instoreSLA.byHour, targets.instore)}
         <div class="km-grid-2">
-          ${_kmHourHeatmap(instoreSLA.byHour, targets.instore)}
           ${_kmStageBars(instoreSLA.byStage)}
-        </div>
-        <div class="km-grid-2">
           ${_kmIpoBands(instoreSLA.byIpoBand, targets.instore)}
-          ${_kmDropzoneNote()}
         </div>
         <div class="km-table-block">
           <h4 class="km-block-title">Slowest Pickers (worst SLA first) <span class="km-target-line">click a Breached count to list those orders</span></h4>
@@ -4380,7 +4378,7 @@ const ui = (() => {
   function _kmScoreCard(title, sub, value, unit, tiers, direction, footnote) {
     const has = value !== null && value !== undefined && !isNaN(value);
     const r = _kmTierReached(value, tiers, direction);
-    const valStr = has ? `${_fmt(value, unit === '%' ? 1 : 0)}${unit}` : '—';
+    const valStr = has ? `${_fmt(value, unit === '%' ? 2 : 0)}${unit}` : '—';
     const arrow = direction === 'high' ? '↑ higher is better' : '↓ lower is better';
     return `
       <div class="km-score-card ${r.cls}">
@@ -4412,13 +4410,15 @@ const ui = (() => {
   function _kmHourHeatmap(byHour, tiers) {
     const cells = byHour.map(h => {
       const has = h.denom > 0;
+      const breached = h.denom - h.met;
       const tier = has ? _kmTierReached(h.pct, tiers, 'high').tier : 'na';
       const color = _KM_GRADE_COLOR[tier];
       const dark = has; // bright tier fills → dark text; muted no-data → light text
       const lbl = `${String(h.hour).padStart(2, '0')}`;
       return `<div class="km-heat-cell${dark ? ' km-heat-filled' : ''}" style="background:${color};" title="${lbl}:00 · ${has ? h.pct + '% (' + h.met + '/' + h.denom + ')' : 'no orders'}">
-        <span class="km-heat-hr">${lbl}</span>
-        <span class="km-heat-val">${has ? h.pct : '—'}</span>
+        <span class="km-heat-hr">${lbl}:00</span>
+        <span class="km-heat-val">${has ? h.pct + '%' : '—'}</span>
+        <span class="km-heat-breach">${has ? _fmt(breached) + ' breached' : ''}</span>
       </div>`;
     }).join('');
     return `
@@ -4454,14 +4454,6 @@ const ui = (() => {
       <div class="km-card">
         <h4 class="km-block-title">SLA % by Order Size</h4>
         ${rows}
-      </div>`;
-  }
-
-  function _kmDropzoneNote() {
-    return `
-      <div class="km-card km-card-muted">
-        <h4 class="km-block-title">How to read this</h4>
-        <p class="km-help">Red hour cells = slots breaching the 2.5-min SLA — staff those windows. The bottleneck bar shows which stage eats the most time on breached orders: <b>Assign wait</b> → staffing/availability, <b>Picking</b> → picker speed, <b>Billing</b> → checkout/packing. The picker table below names who to coach.</p>
       </div>`;
   }
 
