@@ -2762,7 +2762,9 @@ tr.incentive-zero td { opacity: 0.45; }
 }
 
 .attendance-table-wrapper {
-  overflow: visible;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
   background: var(--card-bg);
 }
 
@@ -3865,4 +3867,96 @@ body,
 
   /* Flow sections */
   .flow-section-header { padding: 10px 14px; font-size: 9px; }
+
+  /* Key Metrics */
+  .km-score-row { grid-template-columns: 1fr; }
+  .km-grid-2 { grid-template-columns: 1fr; }
+  .km-heat-grid { grid-template-columns: repeat(8, 1fr); }
 }
+
+/* ── Key Metrics (SLA Command Center) ───────────────────────────────── */
+.km-score-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.km-score-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.km-score-card.km-good { border-left-color: #34d399; }
+.km-score-card.km-bad  { border-left-color: #f87171; }
+.km-score-card.km-na   { border-left-color: #6b7280; opacity: 0.92; }
+.km-score-card.km-soon { opacity: 0.7; }
+.km-score-head { display: flex; justify-content: space-between; align-items: center; }
+.km-score-title { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.km-score-badge {
+  font-size: 0.6rem; font-weight: 800; letter-spacing: 0.08em;
+  padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.08); color: var(--text-muted);
+}
+.km-good .km-score-badge { background: rgba(52,211,153,0.16); color: #34d399; }
+.km-bad  .km-score-badge { background: rgba(248,113,113,0.16); color: #f87171; }
+.km-score-value { font-size: 2.4rem; font-weight: 800; line-height: 1.1; margin: 8px 0 2px; color: var(--text); }
+.km-score-target { font-size: 0.72rem; color: var(--text-muted); }
+.km-score-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 6px; }
+.km-score-foot { font-size: 0.72rem; color: var(--text); margin-top: 8px; opacity: 0.85; }
+.km-score-gap { font-size: 0.7rem; font-weight: 600; margin-top: 6px; color: var(--text-muted); }
+.km-good .km-score-gap { color: #34d399; }
+.km-bad  .km-score-gap { color: #f87171; }
+
+.km-section { margin-bottom: 28px; }
+.km-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
+.km-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.km-card-muted { background: transparent; border-style: dashed; }
+.km-block-title { font-size: 0.82rem; font-weight: 700; color: var(--text); margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+.km-target-line { font-size: 0.66rem; font-weight: 500; color: var(--text-muted); text-transform: none; letter-spacing: 0; }
+.km-table-block { margin-top: 18px; }
+.km-help { font-size: 0.72rem; color: var(--text-muted); line-height: 1.55; margin: 6px 0 0; }
+
+/* Cycle trend bars */
+.km-trend-block { margin-bottom: 6px; }
+.km-trend-row { display: flex; gap: 10px; align-items: flex-end; }
+.km-trend-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.km-trend-bar-wrap { height: 90px; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.km-trend-bar { width: 60%; min-height: 2px; border-radius: 4px 4px 0 0; transition: height 0.3s; }
+.km-trend-pct { font-size: 0.7rem; font-weight: 700; color: var(--text); }
+.km-trend-lbl { font-size: 0.62rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.km-trend-active .km-trend-pct { color: #60a5fa; }
+.km-trend-active .km-trend-lbl { color: #60a5fa; font-weight: 700; }
+
+/* Hourly heatmap */
+.km-heat-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; }
+.km-heat-cell {
+  aspect-ratio: 1 / 1; border-radius: 6px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; color: #fff; min-height: 38px;
+  border: 1px solid var(--border-subtle);
+}
+.km-heat-hr { font-size: 0.6rem; opacity: 0.8; }
+.km-heat-val { font-size: 0.74rem; font-weight: 700; }
+
+/* Stage / band bars */
+.km-stage-row { display: grid; grid-template-columns: 110px 1fr 80px; align-items: center; gap: 10px; margin-bottom: 8px; }
+.km-stage-lbl { font-size: 0.74rem; color: var(--text-muted); }
+.km-stage-track { height: 10px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden; }
+.km-stage-fill { height: 100%; background: #60a5fa; border-radius: 999px; min-width: 2px; }
+.km-stage-val { font-size: 0.74rem; font-weight: 600; color: var(--text); text-align: right; }
+
+/* Complaint split */
+.km-split-bar { display: flex; height: 18px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,0.06); }
+.km-split-seg { height: 100%; }
+.km-split-legend { display: flex; gap: 18px; margin-top: 10px; font-size: 0.72rem; color: var(--text-muted); }
+.km-split-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+
+/* Config: category checklist */
+.km-cat-checklist { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+.km-cat-check { display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: var(--text); cursor: pointer; }
+.km-cat-check input { accent-color: #60a5fa; }

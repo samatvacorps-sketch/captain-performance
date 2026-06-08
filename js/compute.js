@@ -1565,6 +1565,114 @@ const compute = (() => {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
   }
 
+  // ── In-Store Time SLA ──────────────────────────────────────────────
+  // SLA% over orders with ipo <= cap: share completed within the time
+  // threshold. Returns trend buckets (all data) plus drill-downs scoped to
+  // the selected merchant cycle (or all data when no cycle is given).
+
+  function _percentile(sortedAsc, p) {
+    if (!sortedAsc.length) return null;
+    const i = Math.min(sortedAsc.length - 1, Math.floor(p * (sortedAsc.length - 1)));
+    return sortedAsc[i];
+  }
+
+  function computeInstoreSLA(instoreData, selectedCycleKey) {
+    if (!instoreData || instoreData.length === 0) return null;
+    const CAP = CONFIG.INSTORE_SLA.IPO_CAP;
+    const THRESH = CONFIG.INSTORE_SLA.TIME_THRESHOLD_SEC;
+    const inScope = r => r.ipo > 0 && r.ipo <= CAP;          // denominator population
+    const isMet   = r => r.instore_seconds > 0 && r.instore_seconds <= THRESH;
+    const pct = (met, denom) => (denom ? +(met / denom * 100).toFixed(1) : 0);
+
+    // ── Trend buckets (over all passed data) ──────────────────────────
+    const bucketTrend = (keyFn, labelFn, sortFn) => {
+      const m = new Map();
+      for (const r of instoreData) {
+        if (!inScope(r)) continue;
+        const k = keyFn(r);
+        let e = m.get(k);
+        if (!e) { e = { key: k, denom: 0, met: 0 }; m.set(k, e); }
+        e.denom++; if (isMet(r)) e.met++;
+      }
+      return [...m.values()]
+        .map(e => ({ ...e, label: labelFn(e.key), slaPct: pct(e.met, e.denom) }))
+        .sort(sortFn);
+    };
+    const byKey = (a, b) => a.key.localeCompare(b.key);
+    const cycles = bucketTrend(r => _merchantCycleKey(r.date), _merchantCycleLabel, byKey);
+    const weekly = bucketTrend(r => _isoWeekKey(r.date), k => _weekLabel(weekStartFromKey(k)), byKey);
+    const daily  = bucketTrend(r => _dateKey(r.date), k => k, byKey);
+
+    // ── Drill-downs (scoped to selected cycle, else all) ──────────────
+    const drillRows = (selectedCycleKey
+      ? instoreData.filter(r => _merchantCycleKey(r.date) === selectedCycleKey)
+      : instoreData
+    ).filter(inScope);
+
+    let denom = 0, met = 0;
+    const byHour = Array.from({ length: 24 }, (_, h) => ({ hour: h, denom: 0, met: 0, pct: 0 }));
+    const pickerMap = new Map();
+    const ipoBands = [
+      { label: '1–2 IPO', min: 1, max: 2, denom: 0, met: 0 },
+      { label: '3–4 IPO', min: 3, max: 4, denom: 0, met: 0 },
+      { label: '5–6 IPO', min: 5, max: 6, denom: 0, met: 0 },
+    ];
+    const stageAcc = { wait: { sum: 0, n: 0 }, assign: { sum: 0, n: 0 }, pick: { sum: 0, n: 0 }, billing: { sum: 0, n: 0 } };
+
+    for (const r of drillRows) {
+      denom++;
+      const m = isMet(r);
+      if (m) met++;
+
+      if (r.hour !== null && r.hour >= 0 && r.hour < 24) {
+        byHour[r.hour].denom++; if (m) byHour[r.hour].met++;
+      }
+
+      let p = pickerMap.get(r.employee_id);
+      if (!p) { p = { employee_id: r.employee_id, denom: 0, met: 0, times: [] }; pickerMap.set(r.employee_id, p); }
+      p.denom++; if (m) p.met++;
+      if (r.instore_seconds > 0) p.times.push(r.instore_seconds);
+
+      for (const b of ipoBands) { if (r.ipo >= b.min && r.ipo <= b.max) { b.denom++; if (m) b.met++; } }
+
+      // Stage bottleneck — measured on breached orders only.
+      if (!m) {
+        if (r.wait_sec   != null) { stageAcc.wait.sum   += r.wait_sec;   stageAcc.wait.n++; }
+        if (r.assign_sec != null) { stageAcc.assign.sum += r.assign_sec; stageAcc.assign.n++; }
+        if (r.pick_sec   != null) { stageAcc.pick.sum   += r.pick_sec;   stageAcc.pick.n++; }
+        if (r.billing_sec!= null) { stageAcc.billing.sum+= r.billing_sec;stageAcc.billing.n++; }
+      }
+    }
+
+    for (const h of byHour) h.pct = pct(h.met, h.denom);
+
+    const byPicker = [...pickerMap.values()].map(p => {
+      const sorted = p.times.slice().sort((a, b) => a - b);
+      return {
+        employee_id: p.employee_id,
+        orders: p.denom, met: p.met, breached: p.denom - p.met,
+        pct: pct(p.met, p.denom),
+        median: _percentile(sorted, 0.5),
+        p90: _percentile(sorted, 0.9),
+      };
+    }).sort((a, b) => a.pct - b.pct); // worst (lowest %) first
+
+    const byIpoBand = ipoBands.map(b => ({ label: b.label, denom: b.denom, met: b.met, pct: pct(b.met, b.denom) }));
+
+    const byStage = [
+      { label: 'Assign wait',  key: 'wait',    avgSec: stageAcc.wait.n    ? Math.round(stageAcc.wait.sum / stageAcc.wait.n)       : 0 },
+      { label: 'To pick start', key: 'assign', avgSec: stageAcc.assign.n  ? Math.round(stageAcc.assign.sum / stageAcc.assign.n)   : 0 },
+      { label: 'Picking',      key: 'pick',    avgSec: stageAcc.pick.n    ? Math.round(stageAcc.pick.sum / stageAcc.pick.n)       : 0 },
+      { label: 'Billing',      key: 'billing', avgSec: stageAcc.billing.n ? Math.round(stageAcc.billing.sum / stageAcc.billing.n) : 0 },
+    ];
+
+    return {
+      cycles, weekly, daily,
+      byHour, byPicker, byStage, byIpoBand,
+      totals: { denom, met, breached: denom - met, slaPct: pct(met, denom) },
+    };
+  }
+
   return {
     computeFlowFlags,
     computeFNVRate,
@@ -1577,6 +1685,7 @@ const compute = (() => {
     aggregateDaily,
     computeAuditAggregations,
     computeComplaintAggregations,
+    computeInstoreSLA,
     formatDuration,
     deviationClass,
     getWeekKeysForMonth,

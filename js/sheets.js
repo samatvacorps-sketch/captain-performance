@@ -12,6 +12,7 @@ const sheets = (() => {
   let _auditCache = null;
   let _complaintsCache = null;
   let _rosterCache = null;
+  let _instoreCache = null;
 
   // ── Public API ──────────────────────────────────────────────────────
 
@@ -338,5 +339,76 @@ const sheets = (() => {
 
   function getRosterCached() { return _rosterCache || []; }
 
-  return { fetchData, getCached, clearCache, lastFetched, fetchAuditData, getAuditCached, clearAuditCache, fetchComplaintsData, getComplaintsCached, clearComplaintsCache, fetchRosterData, getRosterCached };
+  // ── In-Store Orders With Time Data ──────────────────────────────────────
+  // Order-level rows for the In-store time SLA. Columns are resolved by header
+  // name so the sheet may be safely reordered without touching code.
+
+  async function fetchInstoreData(force = false) {
+    if (_instoreCache && !force) return _instoreCache;
+    const token = await auth.getToken();
+    if (!token) throw new Error('Not authenticated');
+    const url = `${BASE_URL}/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(CONFIG.INSTORE_DATA_RANGE)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`;
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) {
+      console.warn('In-store sheet fetch failed:', response.status);
+      _instoreCache = [];
+      return _instoreCache;
+    }
+    const json = await response.json();
+    const rows = json.values || [];
+    if (rows.length < 2) { _instoreCache = []; return _instoreCache; }
+
+    // Resolve logical field → column index from the header row.
+    const header = rows[0].map(h => _str(h).toLowerCase());
+    const idx = {};
+    for (const [field, headerName] of Object.entries(CONFIG.INSTORE_HEADERS)) {
+      idx[field] = header.indexOf(headerName.toLowerCase());
+    }
+    _instoreCache = rows.slice(1).map(r => _parseInstoreRow(r, idx)).filter(Boolean);
+    return _instoreCache;
+  }
+
+  function _parseInstoreRow(raw, idx) {
+    if (!raw || raw.length === 0) return null;
+    const at = (field) => (idx[field] >= 0 ? raw[idx[field]] : undefined);
+
+    const date = _parseDate(at('date_ts'));
+    if (!date) return null;
+    const _y = date.getFullYear(), _m = String(date.getMonth()+1).padStart(2,'0'), _d = String(date.getDate()).padStart(2,'0');
+    const dateIsoStr = `${_y}-${_m}-${_d}`;
+
+    // Stage timestamps (serial datetimes → Date). Time portion is in IST,
+    // interpreted in the browser's local zone (IST), so getHours() is correct.
+    const readyTs   = _parseDate(at('ready_to_assign_ts'));
+    const assignTs  = _parseDate(at('picker_assigned_ts'));
+    const startTs   = _parseDate(at('picking_started_ts'));
+    const completeTs = _parseDate(at('picking_completed_ts'));
+    const billTs    = _parseDate(at('billing_completed_ts'));
+
+    const _diffSec = (a, b) => (a && b ? Math.max(0, Math.round((b - a) / 1000)) : null);
+    const hourSrc = startTs || readyTs || date;
+    const dropRaw = _str(at('is_dropzone_available')).toUpperCase();
+
+    return {
+      order_id:        _str(at('order_id')),
+      employee_id:     _str(at('picker_id')),   // picker_id == employee_id elsewhere
+      outlet_name:     _str(at('outlet_name')),
+      ipo:             _num(at('ipo')),
+      instore_seconds: _num(at('instore_seconds')), // plain seconds, not a day-fraction
+      date,
+      dateStr:         String(at('date_ts')),
+      dateIsoStr,
+      hour:            hourSrc ? hourSrc.getHours() : null,
+      wait_sec:    _diffSec(readyTs, assignTs),       // assign_ready → picker assigned
+      assign_sec:  _diffSec(assignTs, startTs),       // assigned → picking started
+      pick_sec:    _diffSec(startTs, completeTs),      // picking started → completed
+      billing_sec: _diffSec(completeTs, billTs),       // completed → billing done
+      is_dropzone_available: dropRaw === 'Y' || dropRaw === 'YES' || dropRaw === 'TRUE',
+    };
+  }
+
+  function getInstoreCached() { return _instoreCache || []; }
+  function clearInstoreCache() { _instoreCache = null; }
+
+  return { fetchData, getCached, clearCache, lastFetched, fetchAuditData, getAuditCached, clearAuditCache, fetchComplaintsData, getComplaintsCached, clearComplaintsCache, fetchRosterData, getRosterCached, fetchInstoreData, getInstoreCached, clearInstoreCache };
 })();

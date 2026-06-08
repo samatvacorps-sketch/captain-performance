@@ -56,6 +56,9 @@
     <button class="tab-btn active" data-tab="store-overview" onclick="app.switchTab('store-overview')">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,12 5,7 9,10 15,4"/><polyline points="11,4 15,4 15,8"/></svg> Store Overview
     </button>
+    <button class="tab-btn" data-tab="key-metrics" onclick="app.switchTab('key-metrics')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><circle cx="8" cy="8" r="3"/><circle cx="8" cy="8" r="0.5" fill="currentColor"/></svg> Key Metrics
+    </button>
     <button class="tab-btn" data-tab="captain-deep-dive" onclick="app.switchTab('captain-deep-dive')">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14.5" y2="14.5"/></svg> Captain Deep Dive
     </button>
@@ -440,6 +443,26 @@
 
     <div id="inv-content">
       <p class="placeholder-text">Loading audit data…</p>
+    </div>
+  </section>
+
+  <!-- ── KEY METRICS (SLA) ──────────────────────────────────────────── -->
+  <section id="tab-key-metrics" class="tab-content hidden">
+
+    <!-- Header -->
+    <div class="flags-page-header">
+      <div>
+        <p class="flags-fleet-label">SLA Command Center</p>
+        <h2 class="flags-title">Key Metrics</h2>
+      </div>
+      <div class="flags-date-strip">
+        <span class="dd-control-label">Cycle</span>
+        <select id="km-preset" onchange="ui.onKmPresetChange()"></select>
+      </div>
+    </div>
+
+    <div id="key-metrics-content">
+      <p class="placeholder-text">Loading SLA data…</p>
     </div>
   </section>
 

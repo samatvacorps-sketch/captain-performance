@@ -46,6 +46,30 @@ const CONFIG = {
     in_store: 14,          // O
   },
 
+  // ── In-Store Orders With Time Sheet ──────────────────────────────────
+  // Order-level rows powering the In-store time SLA. Columns are resolved by
+  // header name (see INSTORE_HEADERS) so the sheet can be safely reordered.
+  INSTORE_DATA_RANGE: "'in-store orders with time'!A:P",
+  INSTORE_HEADERS: {
+    date_ts:              'date_ts',
+    order_id:             'order_id',
+    picker_id:            'picker_id',
+    ipo:                  'ipo',
+    outlet_name:          'outlet_name',
+    ready_to_assign_ts:   'order_ready_to_assign_ts_ist',
+    picker_assigned_ts:   'order_picker_assigned_ts_ist',
+    picking_started_ts:   'order_picking_started_ts_ist',
+    picking_completed_ts: 'order_picking_completed_ts_ist',
+    billing_completed_ts: 'order_billing_completed_ts_ist',
+    instore_seconds:      'assign_ready_to_billing_complete', // already in seconds
+    is_dropzone_available:'is_dropzone_available',
+  },
+
+  // ── In-Store SLA Rules ───────────────────────────────────────────────
+  // SLA% = (orders with instore_seconds <= THRESHOLD AND ipo <= IPO_CAP)
+  //        / (orders with ipo <= IPO_CAP). Large orders (ipo > cap) excluded.
+  INSTORE_SLA: { IPO_CAP: 6, TIME_THRESHOLD_SEC: 150 },
+
   // ── Roster Sheet ─────────────────────────────────────────────────────
   ROSTER_DATA_RANGE: 'Roster!A:G',
   ROSTER_COL: {

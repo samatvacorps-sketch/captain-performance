@@ -3263,6 +3263,43 @@ const ui = (() => {
     loadSlabMonth();
   }
 
+  // ── SLA Targets config helpers ────────────────────────────────────
+  function loadSlaTargetCycle() {
+    const cycle = document.getElementById('sla-target-cycle')?.value;
+    if (!cycle) return;
+    const t = _getSlaTargets(cycle);
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('sla-target-instore', t.instore);
+    set('sla-target-complaints', t.complaints);
+    set('sla-target-fillrate', t.fillrate);
+    const all = JSON.parse(localStorage.getItem('slaTargets') || '{}');
+    const note = document.getElementById('sla-target-note');
+    if (note) note.textContent = all[cycle] ? `Custom targets set for this cycle` : `Using default targets`;
+  }
+
+  function updateSlaTarget() {
+    const cycle = document.getElementById('sla-target-cycle')?.value;
+    if (!cycle) return;
+    const num = id => { const v = parseFloat(document.getElementById(id)?.value); return isNaN(v) ? undefined : v; };
+    const all = JSON.parse(localStorage.getItem('slaTargets') || '{}');
+    all[cycle] = {
+      instore:    num('sla-target-instore'),
+      complaints: num('sla-target-complaints'),
+      fillrate:   num('sla-target-fillrate'),
+    };
+    localStorage.setItem('slaTargets', JSON.stringify(all));
+    const note = document.getElementById('sla-target-note');
+    if (note) note.textContent = 'Custom targets set for this cycle';
+    const msg = document.getElementById('sla-target-saved-msg');
+    if (msg) { msg.style.display = ''; setTimeout(() => { msg.style.display = 'none'; }, 2000); }
+  }
+
+  function toggleComplaintSlaCategory() {
+    const boxes = document.querySelectorAll('.km-cat-checklist input[type="checkbox"]');
+    const checked = [...boxes].filter(b => b.checked).map(b => b.dataset.cat);
+    localStorage.setItem('complaintSlaCategories', JSON.stringify(checked));
+  }
+
   function renderConfigPanel() {
     const container = document.getElementById('config-content');
     if (!container) return;
@@ -3294,6 +3331,24 @@ const ui = (() => {
     const curMonth = new Date().toISOString().slice(0, 7);
     const existingOverrides = JSON.parse(localStorage.getItem('incentiveSlabOverrides') || '{}');
     const hasOverride = !!existingOverrides[curMonth];
+
+    // ── SLA Targets card data ──
+    const _slaDaily = sheets.getCached();
+    const slaCycleList = (_slaDaily && _slaDaily.length)
+      ? compute.aggregateBillingMonthly(_slaDaily.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id }))).map(d => d.month_key)
+      : [];
+    const slaTargetCycle = (_kmCycleKey && slaCycleList.includes(_kmCycleKey))
+      ? _kmCycleKey
+      : (slaCycleList[slaCycleList.length - 1] || curMonth);
+    const slaT = _getSlaTargets(slaTargetCycle);
+    const slaCycleOptions = (slaCycleList.length ? slaCycleList : [curMonth]).slice().reverse()
+      .map(k => `<option value="${k}"${k === slaTargetCycle ? ' selected' : ''}>${_billingMonthLabel(k)}</option>`).join('');
+    const complCats = [...new Set((sheets.getComplaintsCached() || []).map(r => r.complaint_category).filter(Boolean))].sort();
+    const _savedCatSet = _getComplaintSlaCategorySet();
+    const catChecks = complCats.map(cat => {
+      const checked = _savedCatSet ? _savedCatSet.has(cat.toLowerCase()) : !/mdnd|poor.*qual/i.test(cat.toLowerCase());
+      return `<label class="km-cat-check"><input type="checkbox" data-cat="${_esc(cat)}" ${checked ? 'checked' : ''} onchange="ui.toggleComplaintSlaCategory()"> ${_esc(cat)}</label>`;
+    }).join('');
 
     container.innerHTML = `
       <div class="config-card">
@@ -3384,6 +3439,48 @@ const ui = (() => {
         </div>
         <p class="config-hint" style="margin-top:6px">Time is the upper bound (exclusive). Rows without a match earn &#8377;0.</p>
       </div>
+
+      <div class="config-card config-card-wide">
+        <div class="config-card-header">
+          <div class="config-card-icon stat-icon-blue">${ICONS.barChart}</div>
+          <h3>SLA Targets (Key Metrics)</h3>
+        </div>
+        <p class="config-desc">Per merchant-cycle targets shown on the Key Metrics tab. In-store time is "higher is better"; complaints is "lower is better".</p>
+        <div class="config-month-row">
+          <span class="dd-control-label">Cycle</span>
+          <select id="sla-target-cycle" onchange="ui.loadSlaTargetCycle()">${slaCycleOptions}</select>
+          <span id="sla-target-note" class="config-hint" style="margin-left:8px"></span>
+        </div>
+        <div class="config-row" style="margin-top:14px;gap:24px;flex-wrap:wrap">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span class="dd-control-label">In-Store Time Target (%)</span>
+            <input type="number" id="sla-target-instore" min="0" max="100" step="0.5" value="${slaT.instore}" style="width:100px" />
+            <span class="config-hint" style="margin-top:2px">Default: ${_KM_TARGET_DEFAULTS.instore}%</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span class="dd-control-label">Complaints Target (%)</span>
+            <input type="number" id="sla-target-complaints" min="0" max="100" step="0.1" value="${slaT.complaints}" style="width:100px" />
+            <span class="config-hint" style="margin-top:2px">Default: ${_KM_TARGET_DEFAULTS.complaints}%</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span class="dd-control-label">Fill-Rate Target (%)</span>
+            <input type="number" id="sla-target-fillrate" min="0" max="100" step="0.5" value="${slaT.fillrate}" style="width:100px" />
+            <span class="config-hint" style="margin-top:2px">Phase 2 · Default: ${_KM_TARGET_DEFAULTS.fillrate}%</span>
+          </div>
+        </div>
+        <div class="config-row" style="margin-top:14px;gap:8px">
+          <button class="btn active" onclick="ui.updateSlaTarget()">Save Targets</button>
+          <span id="sla-target-saved-msg" class="slab-saved-msg" style="display:none">Saved!</span>
+        </div>
+        <div style="margin-top:18px">
+          <span class="dd-control-label">Qualifying Complaint Categories</span>
+          <p class="config-hint" style="margin:4px 0 8px">Checked categories count toward the Complaints SLA. MDND and Poor-Quality are excluded by default.</p>
+          <div class="km-cat-checklist">
+            ${complCats.length ? catChecks : '<span class="config-hint">No complaint categories loaded yet.</span>'}
+          </div>
+        </div>
+      </div>
+
       <div class="config-card config-card-wide">
         <div class="config-card-header">
           <div class="config-card-icon stat-icon-red">${ICONS.flag}</div>
@@ -3979,6 +4076,386 @@ const ui = (() => {
         </table>
       </div>`;
     _initTableSort(container.querySelector('.data-table'));
+  }
+
+  // ── Key Metrics (SLA Command Center) ──────────────────────────────
+
+  let _kmCycleKey = null; // selected merchant-cycle key "YYYY-MM"
+
+  // SLA target storage (per merchant cycle, edited in Config panel).
+  const _KM_TARGET_DEFAULTS = { instore: 90, complaints: 2.5, fillrate: 98 };
+  function _getSlaTargets(cycleKey) {
+    const all = JSON.parse(localStorage.getItem('slaTargets') || '{}');
+    const t = all[cycleKey] || {};
+    return {
+      instore:    t.instore    != null ? t.instore    : _KM_TARGET_DEFAULTS.instore,
+      complaints: t.complaints != null ? t.complaints : _KM_TARGET_DEFAULTS.complaints,
+      fillrate:   t.fillrate   != null ? t.fillrate   : _KM_TARGET_DEFAULTS.fillrate,
+    };
+  }
+
+  // Qualifying complaint categories for the SLA. Returns an explicit lowercased
+  // Set when the user has saved a selection, else null (apply default rule).
+  function _getComplaintSlaCategorySet() {
+    const stored = localStorage.getItem('complaintSlaCategories');
+    if (stored) {
+      try {
+        const arr = JSON.parse(stored);
+        if (Array.isArray(arr)) return new Set(arr.map(s => String(s).toLowerCase()));
+      } catch { /* ignore */ }
+    }
+    return null;
+  }
+  function _isQualifyingComplaint(cat) {
+    const c = (cat || '').toLowerCase();
+    const set = _getComplaintSlaCategorySet();
+    if (set) return set.has(c);
+    // Default: include everything except MDND and Poor-Quality.
+    return c !== '' && !/mdnd|poor.*qual/i.test(c);
+  }
+
+  function _kmHeatColor(pct, hasData) {
+    if (!hasData) return 'var(--bg-elevated, #1c2230)';
+    const h = Math.max(0, Math.min(120, (pct / 100) * 120)); // 0=red → 120=green
+    return `hsl(${h}, 55%, 30%)`;
+  }
+
+  function initKeyMetrics() {
+    const sel = document.getElementById('km-preset');
+    if (!sel) return;
+    const daily = sheets.getCached();
+    if (!daily || daily.length === 0) { sel.innerHTML = ''; return; }
+
+    const monthly = compute.aggregateBillingMonthly(
+      daily.map(r => ({ date: r.date, dateStr: r.dateStr, employee_id: r.employee_id }))
+    );
+    sel.innerHTML = monthly.slice().reverse()
+      .map(d => `<option value="${d.month_key}">${_billingMonthLabel(d.month_key)}</option>`)
+      .join('');
+
+    if (!_kmCycleKey || !monthly.some(d => d.month_key === _kmCycleKey)) {
+      _kmCycleKey = monthly.length ? monthly[monthly.length - 1].month_key : null;
+    }
+    if (_kmCycleKey) sel.value = _kmCycleKey;
+  }
+
+  function onKmPresetChange() {
+    const sel = document.getElementById('km-preset');
+    if (sel) _kmCycleKey = sel.value;
+    renderKeyMetrics();
+  }
+
+  function renderKeyMetrics() {
+    const container = document.getElementById('key-metrics-content');
+    if (!container) return;
+
+    const dailyData   = _supervisorFilter(sheets.getCached());
+    const instoreAll  = _supervisorFilter(sheets.getInstoreCached() || []);
+    const complAll    = _supervisorFilter(sheets.getComplaintsCached() || []);
+
+    const cycleKey = _kmCycleKey;
+    if (!cycleKey) {
+      container.innerHTML = '<p class="placeholder-text">No data available yet. Hit Refresh after loading the source sheets.</p>';
+      return;
+    }
+
+    // Picker id → name map (from Daily Metrics)
+    const names = new Map();
+    dailyData.forEach(r => {
+      if (r.employee_id && r.employee_name && !names.has(r.employee_id)) names.set(r.employee_id, r.employee_name);
+    });
+    const nameOf = id => names.get(id) || id || 'Unknown';
+
+    const targets = _getSlaTargets(cycleKey);
+
+    // Cycle date window (26th prev month → 25th cycle month)
+    const [cy, cmo] = cycleKey.split('-').map(Number);
+    const cycleStart = new Date(cy, cmo - 2, 26).setHours(0, 0, 0, 0);
+    const cycleEnd   = new Date(cy, cmo - 1, 25).setHours(23, 59, 59, 999);
+    const inWindow = r => r.date && r.date >= cycleStart && r.date <= cycleEnd;
+
+    // ── In-store SLA (trend over all data + drill-downs scoped to cycle) ──
+    const instoreSLA = instoreAll.length ? compute.computeInstoreSLA(instoreAll, cycleKey) : null;
+
+    // ── Complaints SLA (scoped to cycle window) ──
+    const dailyCycle = dailyData.filter(inWindow);
+    const qualCompl  = complAll.filter(r => inWindow(r) && _isQualifyingComplaint(r.complaint_category));
+    const complAgg   = compute.computeComplaintAggregations(qualCompl, dailyCycle);
+    const complCycle = complAgg ? (complAgg.storeSummary.merchantCycle || []).find(c => c.cycleKey === cycleKey) : null;
+    const complOrders = complCycle ? complCycle.totalOrdersPicked
+      : dailyCycle.reduce((s, r) => s + (r.checkout_orders || 0), 0);
+    const complItems  = complCycle ? complCycle.totalComplaints : qualCompl.length;
+    const complPct    = complOrders > 0 ? +(complItems / complOrders * 100).toFixed(2) : null;
+    const complInStore  = complCycle ? complCycle.inStoreYes : qualCompl.filter(r => r.in_store).length;
+    const complOutStore = complCycle ? complCycle.inStoreNo  : qualCompl.filter(r => !r.in_store).length;
+
+    const instorePct = instoreSLA ? instoreSLA.totals.slaPct : null;
+
+    // ── Scorecards ──
+    const scorecards = `
+      <div class="km-score-row">
+        ${_kmScoreCard('In-Store Time', 'Orders ≤ 2.5 min · IPO ≤ 6',
+          instorePct, '%', targets.instore, 'high',
+          instoreSLA ? `${_fmt(instoreSLA.totals.met)} / ${_fmt(instoreSLA.totals.denom)} orders met` : 'No in-store data')}
+        ${_kmScoreCard('Complaints', 'Qualifying items ÷ orders',
+          complPct, '%', targets.complaints, 'low',
+          `${_fmt(complItems)} items · ${_fmt(complOrders)} orders`)}
+        ${_kmFillRatePlaceholder(targets.fillrate)}
+      </div>`;
+
+    // ── In-store drill-down sections ──
+    const instoreHtml = instoreSLA ? `
+      <div class="km-section">
+        <div class="tiers-section-header"><span class="tiers-section-pip" style="background:#60a5fa;"></span>
+          <h3 class="tiers-section-title">In-Store Time — What's Dragging It Down</h3></div>
+        ${_kmCycleTrend(instoreSLA.cycles, targets.instore, cycleKey)}
+        <div class="km-grid-2">
+          ${_kmHourHeatmap(instoreSLA.byHour, targets.instore)}
+          ${_kmStageBars(instoreSLA.byStage)}
+        </div>
+        <div class="km-grid-2">
+          ${_kmIpoBands(instoreSLA.byIpoBand)}
+          ${_kmDropzoneNote()}
+        </div>
+        <div class="km-table-block">
+          <h4 class="km-block-title">Slowest Pickers (worst SLA first)</h4>
+          <div id="km-picker-table"></div>
+        </div>
+      </div>` : `
+      <div class="km-section">
+        <div class="tiers-section-header"><span class="tiers-section-pip" style="background:#60a5fa;"></span>
+          <h3 class="tiers-section-title">In-Store Time</h3></div>
+        <p class="placeholder-text">No in-store data. Add the "in-store orders with time" tab to the source sheet and hit Refresh.</p>
+      </div>`;
+
+    // ── Complaints drill-down section ──
+    const complHtml = `
+      <div class="km-section">
+        <div class="tiers-section-header"><span class="tiers-section-pip" style="background:#ff6b6b;"></span>
+          <h3 class="tiers-section-title">Complaints — Where They Come From</h3></div>
+        <div class="km-grid-2">
+          ${_kmComplaintSplit(complInStore, complOutStore, complItems)}
+          ${_kmComplaintCategories(complCycle ? complCycle.byCategory : {}, complItems)}
+        </div>
+        <div class="km-table-block">
+          <h4 class="km-block-title">Per-Picker Complaints (this cycle)</h4>
+          <div id="km-compl-picker-table"></div>
+        </div>
+      </div>`;
+
+    container.innerHTML = scorecards + instoreHtml + complHtml;
+
+    // Picker tables (built after innerHTML so sort can attach)
+    if (instoreSLA) {
+      const el = document.getElementById('km-picker-table');
+      if (el) {
+        el.innerHTML = _kmPickerTable(instoreSLA.byPicker, nameOf, targets.instore);
+        _initTableSort(el.querySelector('.data-table'));
+      }
+    }
+    const cEl = document.getElementById('km-compl-picker-table');
+    if (cEl) {
+      const capRows = complAgg ? [...complAgg.captainPerf.values()] : [];
+      cEl.innerHTML = _kmComplaintPickerTable(capRows, nameOf);
+      _initTableSort(cEl.querySelector('.data-table'));
+    }
+  }
+
+  // ── Key Metrics render helpers ────────────────────────────────────
+
+  function _kmScoreCard(title, sub, value, unit, target, direction, footnote) {
+    const has = value !== null && value !== undefined && !isNaN(value);
+    const meet = has && (direction === 'high' ? value >= target : value <= target);
+    const cls = has ? (meet ? 'km-good' : 'km-bad') : 'km-na';
+    const valStr = has ? `${_fmt(value, unit === '%' ? 1 : 0)}${unit}` : '—';
+    const arrow = direction === 'high' ? '↑ higher is better' : '↓ lower is better';
+    const gap = has ? (meet ? 'On target' : `Target ${_fmt(target, 1)}${unit} · ${arrow}`) : 'No data';
+    return `
+      <div class="km-score-card ${cls}">
+        <div class="km-score-head">
+          <span class="km-score-title">${title}</span>
+          <span class="km-score-badge">${has ? (meet ? 'MET' : 'MISS') : 'N/A'}</span>
+        </div>
+        <div class="km-score-value">${valStr}</div>
+        <div class="km-score-target">Target: ${_fmt(target, 1)}${unit}</div>
+        <div class="km-score-sub">${sub}</div>
+        <div class="km-score-foot">${_esc(footnote)}</div>
+        <div class="km-score-gap">${gap}</div>
+      </div>`;
+  }
+
+  function _kmFillRatePlaceholder(target) {
+    return `
+      <div class="km-score-card km-na km-soon">
+        <div class="km-score-head">
+          <span class="km-score-title">Fill Rate</span>
+          <span class="km-score-badge">SOON</span>
+        </div>
+        <div class="km-score-value">—</div>
+        <div class="km-score-target">Target: ${_fmt(target, 1)}%</div>
+        <div class="km-score-sub">Delivered in full ÷ checkout orders</div>
+        <div class="km-score-foot">Needs PNA / missing-item feed</div>
+        <div class="km-score-gap">Phase 2</div>
+      </div>`;
+  }
+
+  function _kmCycleTrend(cycles, target, activeKey) {
+    if (!cycles || !cycles.length) return '';
+    const recent = cycles.slice(-8);
+    const bars = recent.map(c => {
+      const meet = c.slaPct >= target;
+      const active = c.key === activeKey;
+      return `
+        <div class="km-trend-col${active ? ' km-trend-active' : ''}" title="${_esc(c.label)} · ${c.slaPct}% (${c.met}/${c.denom})">
+          <div class="km-trend-bar-wrap">
+            <div class="km-trend-bar" style="height:${Math.max(2, c.slaPct)}%;background:${meet ? '#34d399' : '#f87171'};"></div>
+          </div>
+          <div class="km-trend-pct">${c.slaPct}%</div>
+          <div class="km-trend-lbl">${_esc(c.label.split('–')[0].trim())}</div>
+        </div>`;
+    }).join('');
+    return `
+      <div class="km-trend-block">
+        <h4 class="km-block-title">SLA % by Cycle <span class="km-target-line">target ${_fmt(target,1)}%</span></h4>
+        <div class="km-trend-row">${bars}</div>
+      </div>`;
+  }
+
+  function _kmHourHeatmap(byHour, target) {
+    const cells = byHour.map(h => {
+      const has = h.denom > 0;
+      const color = _kmHeatColor(h.pct, has);
+      const lbl = `${String(h.hour).padStart(2, '0')}`;
+      return `<div class="km-heat-cell" style="background:${color};" title="${lbl}:00 · ${has ? h.pct + '% (' + h.met + '/' + h.denom + ')' : 'no orders'}">
+        <span class="km-heat-hr">${lbl}</span>
+        <span class="km-heat-val">${has ? h.pct : '—'}</span>
+      </div>`;
+    }).join('');
+    return `
+      <div class="km-card">
+        <h4 class="km-block-title">Hourly Breakdown <span class="km-target-line">green ≥ ${_fmt(target,0)}%</span></h4>
+        <div class="km-heat-grid">${cells}</div>
+      </div>`;
+  }
+
+  function _kmStageBars(byStage) {
+    const max = Math.max(1, ...byStage.map(s => s.avgSec));
+    const rows = byStage.map(s => `
+      <div class="km-stage-row">
+        <span class="km-stage-lbl">${s.label}</span>
+        <div class="km-stage-track"><div class="km-stage-fill" style="width:${(s.avgSec / max * 100).toFixed(0)}%;"></div></div>
+        <span class="km-stage-val">${compute.formatDuration(s.avgSec)}</span>
+      </div>`).join('');
+    return `
+      <div class="km-card">
+        <h4 class="km-block-title">Bottleneck Stage <span class="km-target-line">avg on breached orders</span></h4>
+        ${rows}
+      </div>`;
+  }
+
+  function _kmIpoBands(bands) {
+    const rows = bands.map(b => `
+      <div class="km-stage-row">
+        <span class="km-stage-lbl">${b.label}</span>
+        <div class="km-stage-track"><div class="km-stage-fill" style="width:${b.pct}%;background:${b.pct >= 90 ? '#34d399' : b.pct >= 75 ? '#fbbf24' : '#f87171'};"></div></div>
+        <span class="km-stage-val">${b.denom ? b.pct + '%' : '—'}</span>
+      </div>`).join('');
+    return `
+      <div class="km-card">
+        <h4 class="km-block-title">SLA % by Order Size</h4>
+        ${rows}
+      </div>`;
+  }
+
+  function _kmDropzoneNote() {
+    return `
+      <div class="km-card km-card-muted">
+        <h4 class="km-block-title">How to read this</h4>
+        <p class="km-help">Red hour cells = slots breaching the 2.5-min SLA — staff those windows. The bottleneck bar shows which stage eats the most time on breached orders: <b>Assign wait</b> → staffing/availability, <b>Picking</b> → picker speed, <b>Billing</b> → checkout/packing. The picker table below names who to coach.</p>
+      </div>`;
+  }
+
+  function _kmPickerTable(byPicker, nameOf, target) {
+    if (!byPicker.length) return '<p class="placeholder-text">No picker data for this cycle.</p>';
+    const rows = byPicker.map(p => {
+      const cls = p.pct >= target ? 'cell-green' : p.pct >= target - 10 ? 'cell-yellow' : 'cell-red';
+      return `<tr>
+        <td>${_esc(nameOf(p.employee_id))}</td>
+        <td data-sort="${p.orders}">${_fmt(p.orders)}</td>
+        <td data-sort="${p.breached}">${_fmt(p.breached)}</td>
+        <td data-sort="${p.pct}" class="${cls}">${p.pct}%</td>
+        <td data-sort="${p.median || 0}">${p.median != null ? compute.formatDuration(p.median) : '—'}</td>
+        <td data-sort="${p.p90 || 0}">${p.p90 != null ? compute.formatDuration(p.p90) : '—'}</td>
+      </tr>`;
+    }).join('');
+    return `
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr>
+            <th>Picker</th><th>Orders (IPO≤6)</th><th>Breached</th><th>SLA %</th><th>Median Time</th><th>P90 Time</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function _kmComplaintSplit(inStore, outStore, total) {
+    const inPct  = total > 0 ? +(inStore / total * 100).toFixed(1) : 0;
+    const outPct = total > 0 ? +(outStore / total * 100).toFixed(1) : 0;
+    return `
+      <div class="km-card">
+        <h4 class="km-block-title">In-Store (Picker Fault) vs Out-Store</h4>
+        <div class="km-split-bar">
+          <div class="km-split-seg" style="width:${inPct}%;background:#f87171;" title="In-store ${inPct}%"></div>
+          <div class="km-split-seg" style="width:${outPct}%;background:#60a5fa;" title="Out-store ${outPct}%"></div>
+        </div>
+        <div class="km-split-legend">
+          <span><i style="background:#f87171"></i> In-store ${_fmt(inStore)} (${inPct}%)</span>
+          <span><i style="background:#60a5fa"></i> Out-store ${_fmt(outStore)} (${outPct}%)</span>
+        </div>
+        <p class="km-help">In-store complaints are picker-controllable. A high in-store share points coaching at the floor; a high out-store share points at upstream/quality.</p>
+      </div>`;
+  }
+
+  function _kmComplaintCategories(byCategory, total) {
+    const entries = Object.entries(byCategory || {}).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) return `<div class="km-card"><h4 class="km-block-title">Qualifying Categories</h4><p class="placeholder-text">No qualifying complaints this cycle.</p></div>`;
+    const max = Math.max(1, ...entries.map(e => e[1]));
+    const rows = entries.map(([cat, n]) => `
+      <div class="km-stage-row">
+        <span class="km-stage-lbl">${_esc(cat)}</span>
+        <div class="km-stage-track"><div class="km-stage-fill" style="width:${(n / max * 100).toFixed(0)}%;background:#fbbf24;"></div></div>
+        <span class="km-stage-val">${_fmt(n)} · ${total ? (n / total * 100).toFixed(1) : 0}%</span>
+      </div>`).join('');
+    return `
+      <div class="km-card">
+        <h4 class="km-block-title">Qualifying Categories</h4>
+        ${rows}
+      </div>`;
+  }
+
+  function _kmComplaintPickerTable(capRows, nameOf) {
+    const rows = capRows
+      .filter(c => c.totalComplaints > 0)
+      .sort((a, b) => b.totalComplaints - a.totalComplaints)
+      .map(c => `<tr>
+        <td>${_esc(nameOf(c.employee_id))}</td>
+        <td data-sort="${c.totalComplaints}">${_fmt(c.totalComplaints)}</td>
+        <td data-sort="${c.inStoreYes}">${_fmt(c.inStoreYes)}</td>
+        <td data-sort="${c.totalOrdersPicked}">${_fmt(c.totalOrdersPicked)}</td>
+        <td data-sort="${c.complaintRate}">${c.complaintRate}%</td>
+        <td>${_esc(c.topCategory)}</td>
+      </tr>`).join('');
+    if (!rows) return '<p class="placeholder-text">No qualifying complaints for this cycle.</p>';
+    return `
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr>
+            <th>Picker</th><th>Qualifying Items</th><th>In-Store</th><th>Orders</th><th>In-Store Rate</th><th>Top Category</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
   }
 
   // ── Complaints Deep Dive ──────────────────────────────────────────
@@ -4876,6 +5353,12 @@ const ui = (() => {
     onInvPresetChange,
     onInvDateChange,
     renderInventoryHealth,
+    initKeyMetrics,
+    renderKeyMetrics,
+    onKmPresetChange,
+    loadSlaTargetCycle,
+    updateSlaTarget,
+    toggleComplaintSlaCategory,
     initComplaintsDeepDive,
     onComplPeriodChange,
     onComplPresetChange,
@@ -4927,6 +5410,7 @@ const app = (() => {
       const raw = await sheets.fetchData(true);
       await sheets.fetchAuditData(true);
       await sheets.fetchComplaintsData(true);
+      await sheets.fetchInstoreData(true);
       await sheets.fetchRosterData(true);
 
       // Compute stats pipeline (filter supervisors before stats/flagging)
@@ -4951,6 +5435,7 @@ const app = (() => {
       ui.initTiersView();
       ui.initInventoryHealth();
       ui.initComplaintsDeepDive();
+      ui.initKeyMetrics();
       ui.initIncentivePeriods();
 
       // Render active tab
@@ -5004,6 +5489,7 @@ const app = (() => {
       case 'captain-profile':   ui.renderCaptainProfile(); break;
       case 'tier-analysis':     ui.renderTiersView(); break;
       case 'inventory-health':       ui.renderInventoryHealth(); break;
+      case 'key-metrics':            ui.renderKeyMetrics(); break;
       case 'complaints-deep-dive':   ui.renderComplaintsDeepDive(); break;
       case 'incentives':             ui.renderIncentives(); break;
       case 'config-panel':           ui.renderConfigPanel(); break;
