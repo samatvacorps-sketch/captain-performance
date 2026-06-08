@@ -4225,14 +4225,17 @@ const ui = (() => {
     return [...out.values()].sort((a, b) => b.days - a.days);
   }
 
-  // Pickers active in a given hour (>1 order), for the click-through.
+  // Pickers active in a given hour (>1 IPO≤6 order), for the click-through.
+  // Operates on the SLA population (IPO≤6) so "orders" and "breached" align.
   function _kmPickerDetailForHour(hour) {
+    const THRESH = CONFIG.INSTORE_SLA.TIME_THRESHOLD_SEC;
     const m = new Map();
-    for (const r of _kmInstoreWin) {
+    for (const r of _kmCycleRows) {
       if (r.hour !== hour) continue;
       let e = m.get(r.employee_id);
-      if (!e) { e = { employee_id: r.employee_id, orders: 0 }; m.set(r.employee_id, e); }
+      if (!e) { e = { employee_id: r.employee_id, orders: 0, breached: 0 }; m.set(r.employee_id, e); }
       e.orders++;
+      if ((r.instore_seconds || 0) > THRESH) e.breached++;
     }
     return [...m.values()].filter(p => p.orders > 1).sort((a, b) => b.orders - a.orders);
   }
@@ -4832,10 +4835,11 @@ const ui = (() => {
       <td>${_esc(_kmPickerNames.get(p.employee_id) || p.employee_id || 'Unknown')}</td>
       <td>${_esc(p.employee_id || '—')}</td>
       <td data-sort="${p.orders}">${_fmt(p.orders)}</td>
+      <td data-sort="${p.breached}" style="color:${p.breached ? _KM_GRADE_COLOR.below : 'inherit'};font-weight:${p.breached ? '700' : '400'};">${_fmt(p.breached)}</td>
     </tr>`).join('');
-    _kmOpenModal(`Active Pickers · ${lbl} slot`, `${rows.length} picker${rows.length === 1 ? '' : 's'} (>1 order)`, _kmPeriodText(),
+    _kmOpenModal(`Active Pickers · ${lbl} slot · orders count IPO ≤ 6 only`, `${rows.length} picker${rows.length === 1 ? '' : 's'} (>1 order)`, _kmPeriodText(),
       `${_fmt(rows.length)} picker${rows.length === 1 ? '' : 's'}`,
-      `<th>Picker</th><th>Captain ID</th><th>Orders in slot</th>`, body);
+      `<th>Picker</th><th>Captain ID</th><th>Orders in slot (IPO ≤ 6)</th><th>Breached</th>`, body);
   }
 
   function _showHourRosterDetail(hour) {

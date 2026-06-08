@@ -1618,7 +1618,8 @@ const compute = (() => {
     const hourPickerCounts = Array.from({ length: 24 }, () => new Map());
     for (const r of drillSource) {
       if (r.hour === null || r.hour < 0 || r.hour >= 24) continue;
-      byHour[r.hour].totalOrders++;
+      byHour[r.hour].totalOrders++;            // all orders (any IPO)
+      if (!inScope(r)) continue;               // picker count is over the SLA population (IPO≤6)
       const hp = hourPickerCounts[r.hour];
       hp.set(r.employee_id, (hp.get(r.employee_id) || 0) + 1);
     }
