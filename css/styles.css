@@ -3871,7 +3871,7 @@ body,
   /* Key Metrics */
   .km-score-row { grid-template-columns: 1fr; }
   .km-grid-2 { grid-template-columns: 1fr; }
-  .km-heat-grid { grid-template-columns: repeat(8, 1fr); }
+  .km-hour-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
 /* ── Key Metrics (SLA Command Center) ───────────────────────────────── */
@@ -3950,17 +3950,41 @@ body,
 .km-trend-active .km-trend-pct { color: #60a5fa; }
 .km-trend-active .km-trend-lbl { color: #60a5fa; font-weight: 700; }
 
-/* Hourly heatmap */
-.km-heat-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; }
-.km-heat-cell {
-  border-radius: 7px; display: flex; flex-direction: column; gap: 1px;
-  align-items: center; justify-content: center; color: var(--text-muted); min-height: 90px;
-  padding: 7px 2px; border: 1px solid var(--border-subtle);
+/* Hourly breakdown — refined cards */
+.km-hour-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+.km-hour-legend { display: flex; gap: 14px; font-size: 0.66rem; color: var(--text-muted); }
+.km-hour-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.km-hour-legend i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+
+.km-hour-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; }
+.km-hour-card {
+  position: relative; border-radius: 12px; padding: 12px 13px 11px;
+  background: color-mix(in srgb, var(--km-accent) 9%, var(--card-bg));
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--km-accent);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
-.km-heat-cell.km-heat-filled { color: #0f1722; border-color: rgba(0,0,0,0.18); }
-.km-heat-hr { font-size: 0.62rem; opacity: 0.85; }
-.km-heat-val { font-size: 0.98rem; font-weight: 800; margin-bottom: 2px; }
-.km-heat-stat { font-size: 0.57rem; font-weight: 600; opacity: 0.82; line-height: 1.25; }
+.km-hour-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.28); }
+.km-hour-empty { background: var(--card-bg); border-left-color: var(--border); opacity: 0.55; }
+.km-hour-top { display: flex; align-items: center; justify-content: space-between; }
+.km-hour-time { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em; color: var(--text-muted); }
+.km-hour-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--km-accent); }
+.km-hour-pct { font-size: 1.7rem; font-weight: 800; line-height: 1.1; margin: 4px 0 10px; color: var(--km-accent); }
+.km-hour-pct-unit { font-size: 0.85rem; font-weight: 700; opacity: 0.7; margin-left: 1px; }
+.km-hour-empty-note { font-size: 0.66rem; color: var(--text-muted); }
+
+.km-hour-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.km-hour-stat {
+  display: flex; flex-direction: column; gap: 1px; align-items: flex-start;
+  padding: 5px 7px; border-radius: 7px; background: rgba(255,255,255,0.04);
+  border: 1px solid transparent; text-align: left;
+}
+.km-hour-stat .v { font-size: 0.84rem; font-weight: 800; color: var(--text); line-height: 1.1; }
+.km-hour-stat .l { font-size: 0.56rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-muted); }
+button.km-hour-stat { cursor: pointer; font-family: inherit; transition: background 0.12s, border-color 0.12s; }
+button.km-hour-click:not(.km-hour-disabled):hover { background: rgba(96,165,250,0.16); border-color: rgba(96,165,250,0.5); }
+button.km-hour-click:not(.km-hour-disabled) .v { color: #60a5fa; }
+button.km-hour-disabled { cursor: default; opacity: 0.6; }
 
 /* Clickable breached-orders count in the picker table */
 .km-breach-btn {

@@ -4086,6 +4086,9 @@ const ui = (() => {
   let _kmCycleKey = null;          // merchant-cycle key "YYYY-MM" for target lookup
   let _kmDateMode = false;         // true once a custom date range is in play
   let _kmCycleRows = [];           // in-scope (IPO≤6) in-store rows for the period
+  let _kmInstoreWin = [];          // ALL in-store rows for the period (any IPO)
+  let _kmWinStart = -Infinity;     // selected window bounds (ms)
+  let _kmWinEnd = Infinity;
   let _kmPickerNames = new Map();  // employee_id → name
   let _kmDetailPeriod = { start: '', end: '' };
   let _kmDetailEscHandler = null;
@@ -4148,40 +4151,90 @@ const ui = (() => {
     return set;
   }
 
-  function _kmManpowerByHour(startMs, endMs) {
-    if (!isFinite(startMs) || !isFinite(endMs)) return null;
-    const roster = _supervisorFilter(sheets.getRosterCached() || []);
-    if (!roster.length) return null;
+  // Roster snapshots are weekly (effective date = the week's Monday). A snapshot
+  // applies until the captain's NEXT snapshot supersedes it, capped at 14 days so
+  // stale rows for departed captains don't count forever.
+  const _ROSTER_STALE_CAP_MS = 14 * 86400000;
 
-    // Per-captain effective-dated entries, sorted ascending.
+  function _kmRosterByCaptain() {
+    const roster = _supervisorFilter(sheets.getRosterCached() || []);
     const byCap = new Map();
     for (const r of roster) {
       const eff = _rosterEffDay(r.eff_date);
       if (eff == null) continue;
       const hours = _coverHours(_rosterTimeToHour(r.shift_start), _rosterTimeToHour(r.shift_end));
       if (!hours.length) continue;
-      if (!byCap.has(r.employee_id)) byCap.set(r.employee_id, []);
-      byCap.get(r.employee_id).push({ eff, hours, offs: _parseOffDays(r.off_day) });
+      if (!byCap.has(r.employee_id)) byCap.set(r.employee_id, { name: r.employee_name, entries: [] });
+      byCap.get(r.employee_id).entries.push({ eff, hours: new Set(hours), offs: _parseOffDays(r.off_day), shift: r.shift });
     }
-    for (const arr of byCap.values()) arr.sort((a, b) => a.eff - b.eff);
+    for (const v of byCap.values()) v.entries.sort((a, b) => a.eff - b.eff);
+    return byCap;
+  }
 
-    const total = new Array(24).fill(0);
-    const DAY = 86400000;
-    const startDay = new Date(startMs); startDay.setHours(0, 0, 0, 0);
-    const endDay   = new Date(endMs);   endDay.setHours(0, 0, 0, 0);
-    let dayCount = 0;
-    for (let t = startDay.getTime(); t <= endDay.getTime(); t += DAY) {
-      dayCount++;
-      const weekday = new Date(t).getDay();
-      for (const arr of byCap.values()) {
-        let entry = null;
-        for (const e of arr) { if (e.eff <= t) entry = e; else break; }
-        if (!entry || entry.offs.has(weekday)) continue;
-        for (const h of entry.hours) total[h]++;
-      }
+  // The roster entry in effect on day `t`: latest snapshot ≤ t, valid until the
+  // next snapshot supersedes it (or 14 days, whichever comes first).
+  function _kmActiveEntry(entries, t) {
+    let entry = null, nextEff = Infinity;
+    for (const e of entries) {
+      if (e.eff <= t) entry = e;
+      else { nextEff = e.eff; break; }
     }
-    if (!dayCount) return null;
-    return total.map(v => v / dayCount);
+    if (!entry) return null;
+    const validUntil = Math.min(nextEff, entry.eff + _ROSTER_STALE_CAP_MS);
+    return t < validUntil ? entry : null;
+  }
+
+  function _eachDay(startMs, endMs, fn) {
+    const DAY = 86400000;
+    const sD = new Date(startMs); sD.setHours(0, 0, 0, 0);
+    const eD = new Date(endMs);   eD.setHours(0, 0, 0, 0);
+    let n = 0;
+    for (let t = sD.getTime(); t <= eD.getTime(); t += DAY) { fn(t, new Date(t).getDay()); n++; }
+    return n;
+  }
+
+  function _kmManpowerByHour(startMs, endMs) {
+    if (!isFinite(startMs) || !isFinite(endMs)) return null;
+    const byCap = _kmRosterByCaptain();
+    if (!byCap.size) return null;
+    const total = new Array(24).fill(0);
+    const days = _eachDay(startMs, endMs, (t, weekday) => {
+      for (const v of byCap.values()) {
+        const e = _kmActiveEntry(v.entries, t);
+        if (!e || e.offs.has(weekday)) continue;
+        for (const h of e.hours) total[h]++;
+      }
+    });
+    if (!days) return null;
+    return total.map(v => v / days);
+  }
+
+  // Captains rostered to a given hour across the window (for the click-through).
+  function _kmRosterDetailForHour(hour) {
+    const byCap = _kmRosterByCaptain();
+    const out = new Map();
+    _eachDay(_kmWinStart, _kmWinEnd, (t, weekday) => {
+      for (const [id, v] of byCap) {
+        const e = _kmActiveEntry(v.entries, t);
+        if (!e || e.offs.has(weekday) || !e.hours.has(hour)) continue;
+        let o = out.get(id);
+        if (!o) { o = { employee_id: id, name: v.name, shift: e.shift, days: 0 }; out.set(id, o); }
+        o.days++;
+      }
+    });
+    return [...out.values()].sort((a, b) => b.days - a.days);
+  }
+
+  // Pickers active in a given hour (>1 order), for the click-through.
+  function _kmPickerDetailForHour(hour) {
+    const m = new Map();
+    for (const r of _kmInstoreWin) {
+      if (r.hour !== hour) continue;
+      let e = m.get(r.employee_id);
+      if (!e) { e = { employee_id: r.employee_id, orders: 0 }; m.set(r.employee_id, e); }
+      e.orders++;
+    }
+    return [...m.values()].filter(p => p.orders > 1).sort((a, b) => b.orders - a.orders);
   }
 
   // SLA targets are three-tiered per merchant cycle (Baseline / SLA 1 / SLA 2),
@@ -4352,6 +4405,9 @@ const ui = (() => {
     const instoreSLA = instoreWin.length ? compute.computeInstoreSLA(instoreWin, null) : null;
     const CAP = CONFIG.INSTORE_SLA.IPO_CAP;
     _kmCycleRows = instoreWin.filter(r => r.ipo > 0 && r.ipo <= CAP); // SLA population, for breach drill-down
+    _kmInstoreWin = instoreWin;
+    _kmWinStart = isFinite(startMs) ? startMs : (instoreWin.length ? Math.min(...instoreWin.map(r => +r.date)) : Date.now());
+    _kmWinEnd   = isFinite(endMs)   ? endMs   : (instoreWin.length ? Math.max(...instoreWin.map(r => +r.date)) : Date.now());
     const instorePct = (instoreSLA && instoreSLA.totals.denom)
       ? +(instoreSLA.totals.met / instoreSLA.totals.denom * 100).toFixed(2) : null;
     const manpowerByHour = _kmManpowerByHour(startMs, endMs);
@@ -4417,6 +4473,15 @@ const ui = (() => {
       </div>`;
 
     container.innerHTML = scorecards + instoreHtml + complHtml;
+
+    // Hourly cell click-throughs (pickers / rostered)
+    container.querySelectorAll('.km-hour-click').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const hour = parseInt(btn.dataset.kmHour, 10);
+        if (btn.dataset.kmKind === 'pickers') _showHourPickersDetail(hour);
+        else _showHourRosterDetail(hour);
+      });
+    });
 
     // Picker tables (built after innerHTML so sort can attach)
     if (instoreSLA) {
@@ -4490,6 +4555,16 @@ const ui = (() => {
       </div>`;
   }
 
+  function _kmHourStat(value, label, hour, kind) {
+    const v = _fmt(value);
+    if (kind) {
+      const disabled = !value;
+      return `<button type="button" class="km-hour-stat km-hour-click${disabled ? ' km-hour-disabled' : ''}"${disabled ? ' disabled' : ''} data-km-hour="${hour}" data-km-kind="${kind}">
+        <span class="v">${v}</span><span class="l">${label}</span></button>`;
+    }
+    return `<div class="km-hour-stat"><span class="v">${v}</span><span class="l">${label}</span></div>`;
+  }
+
   function _kmHourHeatmap(byHour, tiers, manpower) {
     const cells = byHour.map(h => {
       const has = h.denom > 0;
@@ -4497,23 +4572,37 @@ const ui = (() => {
       const ros = manpower ? Math.round(manpower[h.hour]) : null;
       const tier = has ? _kmTierReached(h.pct, tiers, 'high').tier : 'na';
       const color = _KM_GRADE_COLOR[tier];
-      const dark = has; // bright tier fills → dark text; muted no-data → light text
-      const lbl = `${String(h.hour).padStart(2, '0')}`;
-      const stats = has ? `
-        <span class="km-heat-stat">${_fmt(breached)} breached</span>
-        <span class="km-heat-stat">${_fmt(h.totalOrders)} orders</span>
-        <span class="km-heat-stat">${_fmt(h.activePickers)} pickers</span>
-        ${ros != null ? `<span class="km-heat-stat">${_fmt(ros)} rostered</span>` : ''}` : '';
-      return `<div class="km-heat-cell${dark ? ' km-heat-filled' : ''}" style="background:${color};" title="${lbl}:00 · ${has ? h.pct + '% SLA (' + h.met + '/' + h.denom + ' IPO≤6) · ' + _fmt(h.totalOrders) + ' total orders · ' + _fmt(h.activePickers) + ' active pickers' + (ros != null ? ' · ~' + _fmt(ros) + ' rostered/day' : '') : 'no orders'}">
-        <span class="km-heat-hr">${lbl}:00</span>
-        <span class="km-heat-val">${has ? h.pct + '%' : '—'}</span>
-        ${stats}
+      const lbl = `${String(h.hour).padStart(2, '0')}:00`;
+      if (!has) {
+        return `<div class="km-hour-card km-hour-empty" style="--km-accent:${color}">
+          <div class="km-hour-top"><span class="km-hour-time">${lbl}</span></div>
+          <div class="km-hour-pct">—</div>
+          <div class="km-hour-empty-note">no orders</div>
+        </div>`;
+      }
+      return `<div class="km-hour-card" style="--km-accent:${color}" title="${lbl} · ${h.pct}% SLA (${h.met}/${h.denom} IPO≤6)">
+        <div class="km-hour-top"><span class="km-hour-time">${lbl}</span><span class="km-hour-dot"></span></div>
+        <div class="km-hour-pct">${h.pct}<span class="km-hour-pct-unit">%</span></div>
+        <div class="km-hour-stats">
+          ${_kmHourStat(h.totalOrders, 'orders')}
+          ${_kmHourStat(breached, 'breached')}
+          ${_kmHourStat(h.activePickers, 'pickers', h.hour, 'pickers')}
+          ${ros != null ? _kmHourStat(ros, 'rostered', h.hour, 'roster') : _kmHourStat(0, 'rostered')}
+        </div>
       </div>`;
     }).join('');
     return `
       <div class="km-card">
-        <h4 class="km-block-title">Hourly Breakdown <span class="km-target-line">red&lt;base · orange=base · yellow=SLA1 · green=SLA2</span></h4>
-        <div class="km-heat-grid">${cells}</div>
+        <div class="km-hour-head">
+          <h4 class="km-block-title" style="margin:0">Hourly Breakdown</h4>
+          <div class="km-hour-legend">
+            <span><i style="background:${_KM_GRADE_COLOR.below}"></i>below base</span>
+            <span><i style="background:${_KM_GRADE_COLOR.baseline}"></i>baseline</span>
+            <span><i style="background:${_KM_GRADE_COLOR.sla1}"></i>SLA 1</span>
+            <span><i style="background:${_KM_GRADE_COLOR.sla2}"></i>SLA 2</span>
+          </div>
+        </div>
+        <div class="km-hour-grid">${cells}</div>
       </div>`;
   }
 
@@ -4693,6 +4782,75 @@ const ui = (() => {
     document.addEventListener('keydown', _kmDetailEscHandler);
     _initTableSort(modal.querySelector('.data-table'));
     modal.querySelector('.compl-detail-close')?.focus();
+  }
+
+  // Shared modal shell for Key Metrics drill-downs.
+  function _kmOpenModal(kicker, heading, sub, summary, theadHtml, bodyHtml) {
+    _closeKmDetail();
+    const modal = document.createElement('div');
+    modal.id = 'km-detail-modal';
+    modal.className = 'compl-detail-backdrop';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.innerHTML = `
+      <div class="compl-detail-modal">
+        <div class="compl-detail-header">
+          <div>
+            <p class="compl-detail-kicker">${_esc(kicker)}</p>
+            <h3>${_esc(heading)}</h3>
+            <p class="compl-detail-subtitle">${_esc(sub)}</p>
+          </div>
+          <button type="button" class="compl-detail-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="compl-detail-summary"><span>${summary}</span></div>
+        <div class="table-wrapper compl-detail-table-wrapper">
+          <table class="data-table compl-detail-table">
+            <thead><tr>${theadHtml}</tr></thead>
+            <tbody>${bodyHtml}</tbody>
+          </table>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('.compl-detail-close')?.addEventListener('click', _closeKmDetail);
+    modal.addEventListener('click', (e) => { if (e.target === modal) _closeKmDetail(); });
+    _kmDetailEscHandler = (e) => { if (e.key === 'Escape') _closeKmDetail(); };
+    document.addEventListener('keydown', _kmDetailEscHandler);
+    _initTableSort(modal.querySelector('.data-table'));
+    modal.querySelector('.compl-detail-close')?.focus();
+  }
+
+  function _kmPeriodText() {
+    return _kmDetailPeriod.start && _kmDetailPeriod.end
+      ? `${_kmDetailPeriod.start} to ${_kmDetailPeriod.end}` : 'Selected period';
+  }
+
+  function _showHourPickersDetail(hour) {
+    const rows = _kmPickerDetailForHour(hour);
+    if (!rows.length) return;
+    const lbl = `${String(hour).padStart(2, '0')}:00`;
+    const body = rows.map(p => `<tr>
+      <td>${_esc(_kmPickerNames.get(p.employee_id) || p.employee_id || 'Unknown')}</td>
+      <td>${_esc(p.employee_id || '—')}</td>
+      <td data-sort="${p.orders}">${_fmt(p.orders)}</td>
+    </tr>`).join('');
+    _kmOpenModal(`Active Pickers · ${lbl} slot`, `${rows.length} picker${rows.length === 1 ? '' : 's'} (>1 order)`, _kmPeriodText(),
+      `${_fmt(rows.length)} picker${rows.length === 1 ? '' : 's'}`,
+      `<th>Picker</th><th>Captain ID</th><th>Orders in slot</th>`, body);
+  }
+
+  function _showHourRosterDetail(hour) {
+    const rows = _kmRosterDetailForHour(hour);
+    if (!rows.length) return;
+    const lbl = `${String(hour).padStart(2, '0')}:00`;
+    const body = rows.map(c => `<tr>
+      <td>${_esc(c.name || _kmPickerNames.get(c.employee_id) || c.employee_id || 'Unknown')}</td>
+      <td>${_esc(c.employee_id || '—')}</td>
+      <td>${_esc(c.shift || '—')}</td>
+      <td data-sort="${c.days}">${_fmt(c.days)}</td>
+    </tr>`).join('');
+    _kmOpenModal(`Rostered · ${lbl} slot`, `${rows.length} captain${rows.length === 1 ? '' : 's'} rostered`, _kmPeriodText(),
+      `${_fmt(rows.length)} captain${rows.length === 1 ? '' : 's'}`,
+      `<th>Captain</th><th>Captain ID</th><th>Shift</th><th>Days rostered</th>`, body);
   }
 
   function _closeKmDetail() {
