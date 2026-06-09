@@ -257,6 +257,11 @@ const charts = (() => {
         labels,
         datasets: [
           {
+            label: 'Ready to Assign (min)',
+            data: aggregated.map(d => toMin(d.avg_ready_to_assign || 0)),
+            backgroundColor: ALPHA(COLORS.teal, 0.75),
+          },
+          {
             label: 'Pick Time/Order (min)',
             data: aggregated.map(d => toMin(d.avg_picking_time_per_order || 0)),
             backgroundColor: ALPHA(COLORS.accent, 0.75),

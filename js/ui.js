@@ -327,6 +327,7 @@ const ui = (() => {
 
     const auditData      = _supervisorFilter(sheets.getAuditCached() || []);
     const complaintsData = _supervisorFilter(sheets.getComplaintsCached() || []);
+    const instoreData    = _supervisorFilter(sheets.getInstoreCached() || []);
 
     // Filter by date range
     const startVal = document.getElementById('overview-start')?.value;
@@ -336,13 +337,14 @@ const ui = (() => {
     const filtered      = data.filter(r => r.date && r.date >= startMs && r.date <= endMs);
     const filteredAudit = auditData ? auditData.filter(r => r.date && r.date >= startMs && r.date <= endMs) : [];
     const filteredCompl = complaintsData ? complaintsData.filter(r => r.date && r.date >= startMs && r.date <= endMs) : [];
+    const filteredInstore = instoreData ? instoreData.filter(r => r.date && r.date >= startMs && r.date <= endMs) : [];
 
     const period = document.getElementById('overview-period')?.value || 'weekly';
     const aggregated = period === 'daily'
-      ? compute.aggregateDaily(filtered, filteredAudit, filteredCompl)
+      ? compute.aggregateDaily(filtered, filteredAudit, filteredCompl, filteredInstore)
       : period === 'weekly'
-        ? compute.aggregateWeekly(filtered, filteredAudit, filteredCompl)
-        : compute.aggregateBillingMonthly(filtered, filteredAudit, filteredCompl);
+        ? compute.aggregateWeekly(filtered, filteredAudit, filteredCompl, filteredInstore)
+        : compute.aggregateBillingMonthly(filtered, filteredAudit, filteredCompl, filteredInstore);
 
     // Charts
     charts.renderOrdersHoursChart('chart-orders-hours', aggregated);
@@ -387,6 +389,7 @@ const ui = (() => {
       <th>Orders Picked</th>
       <th>PPI</th>
       <th>Picking Hours</th>
+      <th>Avg Ready to Assign</th>
       <th>Avg Delay to Start</th>
       <th>Avg Pick Time</th>
       <th>Avg Billing Time</th>
@@ -407,6 +410,7 @@ const ui = (() => {
       <td>${_fmt(d.total_orders_picked)}</td>
       <td>${compute.formatDuration(d.avg_ppi)}</td>
       <td>${_fmt(d.total_picking_hours, 1)} h</td>
+      <td>${compute.formatDuration(d.avg_ready_to_assign)}</td>
       <td>${compute.formatDuration(d.avg_assigned_to_started)}</td>
       <td>${compute.formatDuration(d.avg_picking_time_per_order)}</td>
       <td>${compute.formatDuration(d.avg_billing_time)}</td>

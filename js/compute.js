@@ -230,7 +230,7 @@ const compute = (() => {
    * auditData and complaintsData are from sub-sheets and used as primary
    * sources for rack and complaint totals respectively.
    */
-  function aggregateWeekly(data, auditData = [], complaintsData = []) {
+  function aggregateWeekly(data, auditData = [], complaintsData = [], instoreData = []) {
     // Build rack totals by week from Audits sub-sheet
     const auditByWeek = {};
     for (const row of auditData) {
@@ -251,6 +251,13 @@ const compute = (() => {
       complByWeek[wk].byCategory[cat] = (complByWeek[wk].byCategory[cat] || 0) + 1;
     }
 
+    const readyByWeek = {};
+    for (const row of instoreData) {
+      if (!row.date) continue;
+      const wk = _isoWeekKey(row.date);
+      _addReadyBucket(readyByWeek, wk, row);
+    }
+
     const byWeek = {};
     for (const row of data) {
       if (!row.date) continue;
@@ -263,12 +270,12 @@ const compute = (() => {
 
     return Object.values(byWeek)
       .sort((a, b) => a.week_start - b.week_start)
-      .map(g => _summarise(g, auditByWeek[g.week_key] || 0, complByWeek[g.week_key] || null));
+      .map(g => _summarise(g, auditByWeek[g.week_key] || 0, complByWeek[g.week_key] || null, _readyBucketAvg(readyByWeek[g.week_key])));
   }
 
   // ── 7. Monthly Aggregation ───────────────────────────────────────────
 
-  function aggregateMonthly(data, auditData = [], complaintsData = []) {
+  function aggregateMonthly(data, auditData = [], complaintsData = [], instoreData = []) {
     // Build rack totals by month from Audits sub-sheet
     const auditByMonth = {};
     for (const row of auditData) {
@@ -289,6 +296,13 @@ const compute = (() => {
       complByMonth[mk].byCategory[cat] = (complByMonth[mk].byCategory[cat] || 0) + 1;
     }
 
+    const readyByMonth = {};
+    for (const row of instoreData) {
+      if (!row.date) continue;
+      const mk = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}`;
+      _addReadyBucket(readyByMonth, mk, row);
+    }
+
     const byMonth = {};
     for (const row of data) {
       if (!row.date) continue;
@@ -299,7 +313,7 @@ const compute = (() => {
 
     return Object.values(byMonth)
       .sort((a, b) => a.month_key.localeCompare(b.month_key))
-      .map(g => _summarise(g, auditByMonth[g.month_key] || 0, complByMonth[g.month_key] || null));
+      .map(g => _summarise(g, auditByMonth[g.month_key] || 0, complByMonth[g.month_key] || null, _readyBucketAvg(readyByMonth[g.month_key])));
   }
 
   // ── 8b. Billing-cycle Monthly Aggregation ───────────────────────────
@@ -324,7 +338,7 @@ const compute = (() => {
     return `${MONTHS[startDate.getMonth()]} 26 \u2013 ${MONTHS[endDate.getMonth()]} 25, ${endDate.getFullYear()}`;
   }
 
-  function aggregateBillingMonthly(data, auditData = [], complaintsData = []) {
+  function aggregateBillingMonthly(data, auditData = [], complaintsData = [], instoreData = []) {
     const auditByMonth = {};
     for (const row of auditData) {
       if (!row.date) continue;
@@ -343,6 +357,13 @@ const compute = (() => {
       complByMonth[mk].byCategory[cat] = (complByMonth[mk].byCategory[cat] || 0) + 1;
     }
 
+    const readyByMonth = {};
+    for (const row of instoreData) {
+      if (!row.date) continue;
+      const mk = _billingMonthKey(row.date);
+      _addReadyBucket(readyByMonth, mk, row);
+    }
+
     const byMonth = {};
     for (const row of data) {
       if (!row.date) continue;
@@ -354,7 +375,7 @@ const compute = (() => {
     return Object.values(byMonth)
       .sort((a, b) => a.month_key.localeCompare(b.month_key))
       .map(g => {
-        const s = _summarise(g, auditByMonth[g.month_key] || 0, complByMonth[g.month_key] || null);
+        const s = _summarise(g, auditByMonth[g.month_key] || 0, complByMonth[g.month_key] || null, _readyBucketAvg(readyByMonth[g.month_key]));
         s.label = _billingMonthLabel(g.month_key);
         return s;
       });
@@ -362,7 +383,7 @@ const compute = (() => {
 
   // ── 8. Daily Aggregation ─────────────────────────────────────────────
 
-  function aggregateDaily(data, auditData = [], complaintsData = []) {
+  function aggregateDaily(data, auditData = [], complaintsData = [], instoreData = []) {
     const auditByDate = {};
     for (const row of auditData) {
       if (!row.date) continue;
@@ -381,6 +402,12 @@ const compute = (() => {
       complByDate[dk].byCategory[cat] = (complByDate[dk].byCategory[cat] || 0) + 1;
     }
 
+    const readyByDate = {};
+    for (const row of instoreData) {
+      if (!row.date) continue;
+      _addReadyBucket(readyByDate, _dk(row.date), row);
+    }
+
     const byDate = {};
     for (const row of data) {
       if (!row.date) continue;
@@ -392,7 +419,7 @@ const compute = (() => {
     return Object.values(byDate)
       .sort((a, b) => a.date - b.date)
       .map(g => ({
-        ..._summarise(g, auditByDate[g.date_key] || 0, complByDate[g.date_key] || null),
+        ..._summarise(g, auditByDate[g.date_key] || 0, complByDate[g.date_key] || null, _readyBucketAvg(readyByDate[g.date_key])),
         date_key: g.date_key,
         label: g.date_key,
       }));
@@ -400,6 +427,18 @@ const compute = (() => {
 
   function _dk(date) {
     return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+  }
+
+  function _addReadyBucket(buckets, key, row) {
+    const v = row.wait_sec;
+    if (v === null || v === undefined || isNaN(v)) return;
+    if (!buckets[key]) buckets[key] = { sum: 0, n: 0 };
+    buckets[key].sum += v;
+    buckets[key].n++;
+  }
+
+  function _readyBucketAvg(bucket) {
+    return bucket && bucket.n > 0 ? bucket.sum / bucket.n : 0;
   }
 
   // ── Summary Helper ────────────────────────────────────────────────────
@@ -414,7 +453,7 @@ const compute = (() => {
     return `${startStr} – ${endStr} (${weekEnd.getFullYear()})`;
   }
 
-  function _summarise(group, subRacks = 0, subCompl = null) {
+  function _summarise(group, subRacks = 0, subCompl = null, subReadyToAssign = 0) {
     const rows = group.rows;
     const n = rows.length;
     if (n === 0) return group;
@@ -435,6 +474,10 @@ const compute = (() => {
     const fnvRows = rows.filter(r => r.flows?.is_fnv);
 
     const compl = subCompl || { total: 0, inStoreYes: 0, inStoreNo: 0, byCategory: {} };
+    const avgReadyToAssign = subReadyToAssign;
+    const avgPickingTime = weightedAvg('picking_time_per_order', 'checkout_orders', r => r.flows?.is_picking);
+    const avgAssignedToStarted = weightedAvg('assigned_to_started_per_order', 'checkout_orders', r => r.flows?.is_picking);
+    const avgBillingTime = weightedAvg('billing_time_per_order', 'checkout_orders', r => r.flows?.is_picking);
 
     return {
       ...group,
@@ -453,10 +496,11 @@ const compute = (() => {
       complaints_by_category: compl.byCategory,
 
       avg_ppi:                           avg('ppi', r => r.flows?.is_picking),
-      avg_picking_time_per_order:        avg('picking_time_per_order', r => r.flows?.is_picking),
-      avg_total_time_per_order:          weightedAvg('total_time_per_order', 'checkout_orders', r => r.flows?.is_picking),
-      avg_assigned_to_started:           avg('assigned_to_started_per_order', r => r.flows?.is_picking),
-      avg_billing_time:                  avg('billing_time_per_order', r => r.flows?.is_picking),
+      avg_ready_to_assign:               avgReadyToAssign,
+      avg_picking_time_per_order:        avgPickingTime,
+      avg_total_time_per_order:          avgReadyToAssign + avgAssignedToStarted + avgPickingTime + avgBillingTime,
+      avg_assigned_to_started:           avgAssignedToStarted,
+      avg_billing_time:                  avgBillingTime,
       avg_iph:                           avg('iph', r => r.flows?.is_putting),
       avg_fnv_audit_rate:                fnvRows.length > 0
                                            ? fnvRows.reduce((a, r) => a + (r.fnv_audit_rate || 0), 0) / fnvRows.length
