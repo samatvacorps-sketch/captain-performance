@@ -1734,7 +1734,43 @@ const compute = (() => {
     };
   }
 
+  // ── Fill Rate SLA ──────────────────────────────────────────────────
+  // Order-level: an order is "not in full" if it had >=1 PNA OR >=1
+  // item_missing complaint. Affected orders are the UNION of those two sets
+  // (an order with both, or with several PNAs/missing items, counts once).
+  // Fill Rate % = (checkoutOrders - affected) / checkoutOrders.
+  //
+  //  pnaRows     — PNA rows already filtered to the window (need .order_id)
+  //  missingRows — item_missing complaint rows for the window (need .order_id)
+  //  checkoutOrders — total picked orders in the window (the denominator)
+  function computeFillRate(pnaRows, missingRows, checkoutOrders) {
+    const pnaOrders = new Set();
+    for (const r of (pnaRows || [])) if (r && r.order_id) pnaOrders.add(r.order_id);
+    const missOrders = new Set();
+    for (const r of (missingRows || [])) if (r && r.order_id) missOrders.add(r.order_id);
+
+    const affected = new Set(pnaOrders);
+    let both = 0;
+    for (const o of missOrders) {
+      if (affected.has(o)) both++;
+      affected.add(o);
+    }
+
+    const orders = checkoutOrders || 0;
+    const inFull = Math.max(0, orders - affected.size);
+    return {
+      checkoutOrders: orders,
+      affected:   affected.size,
+      pnaOrders:  pnaOrders.size,
+      missOrders: missOrders.size,
+      bothOrders: both,
+      inFull,
+      pct: orders > 0 ? +(inFull / orders * 100).toFixed(2) : null,
+    };
+  }
+
   return {
+    computeFillRate,
     computeFlowFlags,
     computeFNVRate,
     computeStoreStats,

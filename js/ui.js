@@ -222,7 +222,6 @@ const ui = (() => {
       localStorage.setItem('theme', 'light');
     }
     // Re-render current tab so charts pick up new theme colors
-    // Re-render current tab so charts pick up new theme colors
     try { app.renderCurrentTab?.(); } catch (_) {}
   }
 
@@ -321,9 +320,76 @@ const ui = (() => {
     renderStoreOverview();
   }
 
+  // ── Store Overview: SLA band ───────────────────────────────────────
+  // Cycle-to-date position on the three SLA targets, always pinned to the
+  // CURRENT billing cycle (26th → 25th) regardless of the date filter below.
+  // Cards click through to the Key Metrics tab.
+  function _renderOverviewSlaBand() {
+    const el = document.getElementById('overview-sla-band');
+    if (!el) return;
+    const instore = sheets.getInstoreCached() || [];
+    const compl = sheets.getComplaintsCached() || [];
+    if (!instore.length && !compl.length) { el.innerHTML = ''; return; }
+
+    const DAY = 86400000;
+    const now = new Date();
+    const cycleKey = _billingCycleKeyOf(now);
+    const [cy, cm] = cycleKey.split('-').map(Number);
+    const cycleStart = new Date(cy, cm - 2, 26).getTime();
+    const cycleEnd   = new Date(cy, cm - 1, 25, 23, 59, 59, 999).getTime();
+    const targets = _getSlaTargets(cycleKey);
+    const snap = _kmSnapshot(cycleStart, Math.min(cycleEnd, Date.now()));
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const yday = _kmSnapshot(today.getTime() - DAY, today.getTime() - 1);
+
+    const card = (title, value, tiers, direction, ydayPct, foot) => {
+      const r = _kmTierReached(value, tiers, direction);
+      return `
+        <button type="button" class="ov-sla-card ${r.cls}" onclick="app.switchTab('key-metrics')">
+          <div class="ov-sla-head"><span class="ov-sla-title">${title}</span><span class="km-score-badge">${r.label}</span></div>
+          <div class="ov-sla-value">${value != null ? value + '%' : '—'}</div>
+          <div class="ov-sla-foot">${foot}</div>
+          <div class="ov-sla-yday">T-1: <strong>${ydayPct != null ? ydayPct + '%' : '—'}</strong> · SLA 2 at ${tiers.sla2}%</div>
+        </button>`;
+    };
+
+    el.innerHTML = `
+      <div class="ov-sla-band-head">
+        <span class="ov-sla-band-title">SLA Position — ${_billingMonthLabel(cycleKey)}</span>
+        <span class="ov-sla-band-hint">cycle to date · tap a card for the full breakdown</span>
+      </div>
+      <div class="ov-sla-grid">
+        ${card('In-Store Time', snap.instore.pct, targets.instore, 'high', yday.instore.pct,
+          `${_fmt(snap.instore.met)} / ${_fmt(snap.instore.denom)} orders ≤ 2.5 min (IPO ≤ 6)`)}
+        ${card('Complaints', snap.compl.pct, targets.complaints, 'low', yday.compl.pct,
+          `${_fmt(snap.compl.items)} qualifying items · ${_fmt(snap.compl.orders)} orders`)}
+        ${_ovFillRateCard(card, snap, yday, targets)}
+      </div>`;
+  }
+
+  // Fill Rate card for the Store Overview SLA band. Uses the shared `card`
+  // builder when PNA / missing data exists for the cycle, else a placeholder.
+  function _ovFillRateCard(card, snap, yday, targets) {
+    const fill = snap.fill;
+    const hasData = fill && (fill.pnaOrders > 0 || fill.missOrders > 0) && fill.checkoutOrders > 0;
+    if (!hasData) {
+      return `
+        <button type="button" class="ov-sla-card km-tier-na km-soon" onclick="app.switchTab('key-metrics')">
+          <div class="ov-sla-head"><span class="ov-sla-title">Fill Rate</span><span class="km-score-badge">NO DATA</span></div>
+          <div class="ov-sla-value">—</div>
+          <div class="ov-sla-foot">Delivered in full ÷ checkout orders</div>
+          <div class="ov-sla-yday">No PNA / missing-item rows this cycle</div>
+        </button>`;
+    }
+    return card('Fill Rate', fill.pct, targets.fillrate, 'high', yday.fill ? yday.fill.pct : null,
+      `${_fmt(fill.inFull)} / ${_fmt(fill.checkoutOrders)} in full · ${_fmt(fill.affected)} short`);
+  }
+
   function renderStoreOverview() {
     const data = app.getFlaggedData();
     if (!data || data.length === 0) return;
+
+    _renderOverviewSlaBand();
 
     const auditData      = _supervisorFilter(sheets.getAuditCached() || []);
     const complaintsData = _supervisorFilter(sheets.getComplaintsCached() || []);
@@ -3378,7 +3444,7 @@ const ui = (() => {
         </div>
         <div class="config-detail-row">
           <span class="dd-control-label">Sheet</span>
-          <span class="config-detail-value">Sheet1 (columns A–V)</span>
+          <span class="config-detail-value">Daily Metrics (A:V) · Audits · Complaints · Roster · PNAs · In-store Time (separate book)</span>
         </div>
         <div class="config-detail-row">
           <span class="dd-control-label">Rows loaded</span>
@@ -3472,7 +3538,7 @@ const ui = (() => {
           <tbody>
             ${_slaTargetRow('In-Store Time', 'instore', slaT.instore, '↑')}
             ${_slaTargetRow('Complaints', 'complaints', slaT.complaints, '↓')}
-            ${_slaTargetRow('Fill Rate (Phase 2)', 'fillrate', slaT.fillrate, '↑')}
+            ${_slaTargetRow('Fill Rate', 'fillrate', slaT.fillrate, '↑')}
           </tbody>
         </table>
         <div class="config-row" style="margin-top:14px;gap:8px">
@@ -4431,17 +4497,70 @@ const ui = (() => {
     const complOutStore = cTot ? cTot.inStoreNo  : 0;
     const complByCategory = cTot ? cTot.byCategory : {};
 
+    // ── Fill Rate SLA (over the selected window) ──
+    // Affected orders = union of distinct order_ids with >=1 PNA OR >=1
+    // item_missing complaint; fill = (orders - affected) / orders.
+    const missCat = (CONFIG.FILL_RATE?.MISSING_CATEGORY || 'item_missing').toLowerCase();
+    const pnaWin     = _supervisorFilter(sheets.getPnaCached() || []).filter(inWindow);
+    const missingWin = complAll.filter(r => inWindow(r) && (r.complaint_category || '').toLowerCase() === missCat);
+    const fill = compute.computeFillRate(pnaWin, missingWin, complOrders);
+    const fillPct = fill.pct;
+
+    // ── Deltas vs the preceding window of equal length ──
+    let instDelta = '', complDelta = '', fillDelta = '';
+    if (isFinite(startMs) && isFinite(endMs)) {
+      const len = endMs - startMs + 1;
+      const prev = _kmSnapshot(startMs - len, startMs - 1);
+      instDelta  = _kmDeltaChip(instorePct, prev.instore.pct, 'high');
+      complDelta = _kmDeltaChip(complPct, prev.compl.pct, 'low');
+      fillDelta  = _kmDeltaChip(fillPct, prev.fill ? prev.fill.pct : null, 'high');
+    }
+
     // ── Scorecards ──
     const scorecards = `
       <div class="km-score-row">
         ${_kmScoreCard('In-Store Time', 'Orders ≤ 2.5 min · IPO ≤ 6',
           instorePct, '%', targets.instore, 'high',
-          instoreSLA ? `${_fmt(instoreSLA.totals.met)} / ${_fmt(instoreSLA.totals.denom)} orders met` : 'No in-store data')}
+          instoreSLA ? `${_fmt(instoreSLA.totals.met)} / ${_fmt(instoreSLA.totals.denom)} orders met` : 'No in-store data',
+          instDelta)}
         ${_kmScoreCard('Complaints', 'Qualifying items ÷ orders',
           complPct, '%', targets.complaints, 'low',
-          `${_fmt(complItems)} items · ${_fmt(complOrders)} orders`)}
-        ${_kmFillRatePlaceholder(targets.fillrate)}
+          `${_fmt(complItems)} items · ${_fmt(complOrders)} orders`,
+          complDelta)}
+        ${_kmFillRateCard(fillPct, targets.fillrate, fill, fillDelta)}
       </div>`;
+
+    // ── Yesterday strip + cycle pace ──
+    const ydayHtml = _kmYdayStrip(targets);
+    const paceHtml = _kmPaceSection(startVal, endVal,
+      { met: instoreSLA ? instoreSLA.totals.met : 0, denom: instoreSLA ? instoreSLA.totals.denom : 0 },
+      { items: complItems, orders: complOrders },
+      targets);
+
+    // ── Daily trend section (rendered as charts after innerHTML) ──
+    const instoreTrend = instoreSLA ? instoreSLA.daily : [];
+    const complaintsByDay = new Map();
+    for (const r of qualCompl) {
+      if (!r.dateStr) continue;
+      complaintsByDay.set(r.dateStr, (complaintsByDay.get(r.dateStr) || 0) + 1);
+    }
+    const ordersByDay = new Map();
+    for (const r of dailyWin) {
+      if (!r.dateIsoStr) continue;
+      ordersByDay.set(r.dateIsoStr, (ordersByDay.get(r.dateIsoStr) || 0) + (r.checkout_orders || 0));
+    }
+    const complTrendDays = [...ordersByDay.keys()].filter(k => ordersByDay.get(k) > 0).sort();
+    const showInstoreTrend = instoreTrend.length >= 2;
+    const showComplTrend = complTrendDays.length >= 2;
+    const trendHtml = (showInstoreTrend || showComplTrend) ? `
+      <div class="km-section">
+        <div class="tiers-section-header"><span class="tiers-section-pip" style="background:#34d399;"></span>
+          <h3 class="tiers-section-title">Daily Trend vs Targets</h3></div>
+        <div class="km-grid-2">
+          ${showInstoreTrend ? '<div class="km-card"><h4 class="km-block-title">In-Store SLA % by day</h4><div class="km-chart-wrap"><canvas id="km-trend-instore"></canvas></div></div>' : ''}
+          ${showComplTrend ? '<div class="km-card"><h4 class="km-block-title">Complaint % by day</h4><div class="km-chart-wrap"><canvas id="km-trend-compl"></canvas></div></div>' : ''}
+        </div>
+      </div>` : '';
 
     // ── In-store drill-down sections ──
     const instoreHtml = instoreSLA ? `
@@ -4453,6 +4572,10 @@ const ui = (() => {
           ${_kmStageBars(instoreSLA.byStage)}
           ${_kmIpoBands(instoreSLA.byIpoBand, targets.instore)}
         </div>
+        <div class="km-grid-2">
+          ${_kmWeekdayCard(_kmCycleRows, targets.instore)}
+          ${_kmDropzoneCard(_kmCycleRows, targets.instore)}
+        </div>
         <div class="km-table-block">
           <h4 class="km-block-title">Slowest Pickers (worst SLA first) <span class="km-target-line">click a Breached count to list those orders</span></h4>
           <div id="km-picker-table"></div>
@@ -4461,7 +4584,7 @@ const ui = (() => {
       <div class="km-section">
         <div class="tiers-section-header"><span class="tiers-section-pip" style="background:#60a5fa;"></span>
           <h3 class="tiers-section-title">In-Store Time</h3></div>
-        <p class="placeholder-text">No in-store data for this period. Ensure the "In-store Time" tab exists in the source sheet and hit Refresh.</p>
+        <p class="placeholder-text">No in-store data for this period. Ensure the in-store spreadsheet (INSTORE_SPREADSHEET_ID) is accessible and hit Refresh.</p>
       </div>`;
 
     // ── Complaints drill-down section ──
@@ -4479,7 +4602,21 @@ const ui = (() => {
         </div>
       </div>`;
 
-    container.innerHTML = scorecards + instoreHtml + complHtml;
+    container.innerHTML = scorecards + ydayHtml + paceHtml + trendHtml + instoreHtml + complHtml;
+
+    // Daily trend charts (canvases exist only after innerHTML lands).
+    if (showInstoreTrend) {
+      charts.renderKmTrendChart('km-trend-instore',
+        instoreTrend.map(d => d.label.slice(5)),
+        [{ label: 'In-store SLA %', data: instoreTrend.map(d => d.slaPct), color: '#60a5fa' }],
+        targets.instore, { yTitle: 'SLA %' });
+    }
+    if (showComplTrend) {
+      charts.renderKmTrendChart('km-trend-compl',
+        complTrendDays.map(k => k.slice(5)),
+        [{ label: 'Complaint %', data: complTrendDays.map(k => +((complaintsByDay.get(k) || 0) / ordersByDay.get(k) * 100).toFixed(2)), color: '#ff6b6b' }],
+        targets.complaints, { yTitle: 'Complaint %', beginAtZero: true });
+    }
 
     // Hourly cell click-throughs (pickers / rostered)
     container.querySelectorAll('.km-hour-click').forEach(btn => {
@@ -4530,7 +4667,7 @@ const ui = (() => {
       </span>`).join('')}</div>`;
   }
 
-  function _kmScoreCard(title, sub, value, unit, tiers, direction, footnote) {
+  function _kmScoreCard(title, sub, value, unit, tiers, direction, footnote, deltaHtml = '') {
     const has = value !== null && value !== undefined && !isNaN(value);
     const r = _kmTierReached(value, tiers, direction);
     const valStr = has ? `${_fmt(value, unit === '%' ? 2 : 0)}${unit}` : '—';
@@ -4541,24 +4678,304 @@ const ui = (() => {
           <span class="km-score-title">${title}</span>
           <span class="km-score-badge">${r.label}</span>
         </div>
-        <div class="km-score-value">${valStr}</div>
+        <div class="km-score-value">${valStr}${deltaHtml}</div>
         <div class="km-score-sub">${sub} · ${arrow}</div>
         ${_kmTierLadder(tiers, unit, r.tier)}
         <div class="km-score-foot">${_esc(footnote)}</div>
       </div>`;
   }
 
-  function _kmFillRatePlaceholder(tiers) {
+  // ── Shared SLA snapshot ───────────────────────────────────────────
+  // Point-in-time in-store SLA + complaint rate over an arbitrary window.
+  // Used by scorecard deltas, the Yesterday strip, and the Store Overview
+  // SLA band. Reads straight from the sheet caches (supervisor-filtered).
+  function _kmSnapshot(startMs, endMs) {
+    const inWin = r => r.date && r.date >= startMs && r.date <= endMs;
+    const CAP = CONFIG.INSTORE_SLA.IPO_CAP;
+    const THRESH = CONFIG.INSTORE_SLA.TIME_THRESHOLD_SEC;
+    let met = 0, denom = 0;
+    for (const r of _supervisorFilter(sheets.getInstoreCached() || [])) {
+      if (!inWin(r) || !(r.ipo > 0 && r.ipo <= CAP)) continue;
+      denom++;
+      if (r.instore_seconds > 0 && r.instore_seconds <= THRESH) met++;
+    }
+    let orders = 0;
+    for (const r of _supervisorFilter(sheets.getCached() || [])) {
+      if (inWin(r)) orders += r.checkout_orders || 0;
+    }
+    let items = 0;
+    const missingRows = [];
+    const missCat = (CONFIG.FILL_RATE?.MISSING_CATEGORY || 'item_missing').toLowerCase();
+    for (const r of _supervisorFilter(sheets.getComplaintsCached() || [])) {
+      if (!inWin(r)) continue;
+      if (_isQualifyingComplaint(r.complaint_category)) items++;
+      if ((r.complaint_category || '').toLowerCase() === missCat) missingRows.push(r);
+    }
+    const pnaRows = _supervisorFilter(sheets.getPnaCached() || []).filter(inWin);
+    const fill = compute.computeFillRate(pnaRows, missingRows, orders);
+    return {
+      instore: { met, denom, pct: denom ? +(met / denom * 100).toFixed(2) : null },
+      compl:   { items, orders, pct: orders > 0 ? +(items / orders * 100).toFixed(2) : null },
+      fill,
+    };
+  }
+
+  // ▲/▼ chip showing change vs a comparison value, colored by whether the
+  // move is an improvement for the metric's direction.
+  function _kmDeltaChip(cur, prev, direction, label = 'vs preceding period') {
+    if (cur == null || prev == null || isNaN(cur) || isNaN(prev)) return '';
+    const d = +(cur - prev).toFixed(2);
+    const improved = direction === 'high' ? d > 0 : d < 0;
+    const cls = d === 0 ? 'km-delta-flat' : improved ? 'km-delta-good' : 'km-delta-bad';
+    const arrow = d > 0 ? '▲' : d < 0 ? '▼' : '•';
+    return `<span class="km-delta-chip ${cls}" title="${_esc(label)}: ${prev}%">${arrow} ${Math.abs(d).toFixed(2)}</span>`;
+  }
+
+  // Jump straight to yesterday's view (used by the Yesterday strip).
+  function kmJumpT1() {
+    const sel = document.getElementById('km-preset');
+    if (sel) sel.value = 't1';
+    onKmPresetChange();
+  }
+
+  // Fill Rate scorecard. When there is no PNA + missing-item data for the
+  // window, falls back to the original "SOON" placeholder.
+  function _kmFillRateCard(value, tiers, fill, deltaHtml = '') {
+    const hasData = fill && (fill.pnaOrders > 0 || fill.missOrders > 0) && fill.checkoutOrders > 0;
+    if (!hasData) {
+      return `
+        <div class="km-score-card km-tier-na km-soon">
+          <div class="km-score-head">
+            <span class="km-score-title">Fill Rate</span>
+            <span class="km-score-badge">NO DATA</span>
+          </div>
+          <div class="km-score-value">—</div>
+          <div class="km-score-sub">Delivered in full ÷ checkout orders · ↑ higher is better</div>
+          ${_kmTierLadder(tiers, '%', 'na')}
+          <div class="km-score-foot">No PNA / missing-item rows for this period</div>
+        </div>`;
+    }
+    const foot = `${_fmt(fill.inFull)} / ${_fmt(fill.checkoutOrders)} in full · `
+      + `${_fmt(fill.affected)} short (${_fmt(fill.pnaOrders)} PNA · ${_fmt(fill.missOrders)} missing)`;
+    return _kmScoreCard('Fill Rate', 'Delivered in full ÷ checkout orders',
+      value, '%', tiers, 'high', foot, deltaHtml);
+  }
+
+  // ── Cycle pace & projection ───────────────────────────────────────
+  // Answers "will we land above each tier by the end of the window, and what
+  // does that require per remaining day?". Rendered only while the selected
+  // window is still open (end date is today or later) and has elapsed days.
+  // Remaining-day volume is assumed equal to the window's daily average.
+  function _kmPaceSection(startVal, endVal, inst, comp, targets) {
+    if (!startVal || !endVal) return '';
+    const DAY = 86400000;
+    const start = new Date(startVal); start.setHours(0, 0, 0, 0);
+    const end   = new Date(endVal);   end.setHours(0, 0, 0, 0);
+    const today = new Date();         today.setHours(0, 0, 0, 0);
+    if (end < today) return '';
+    const totalDays = Math.round((end - start) / DAY) + 1;
+    const elapsed = Math.min(totalDays, Math.max(0, Math.round((today - start) / DAY)));
+    const left = totalDays - elapsed;
+    if (elapsed < 1 || left < 1) return '';
+
+    // Recent form: last 7 elapsed days (clamped to the window start).
+    const recentStart = Math.max(start.getTime(), today.getTime() - 7 * DAY);
+    const recent = _kmSnapshot(recentStart, today.getTime() - 1);
+
+    const tierRow = (tierKey, statusCls, statusTxt, targetTxt) => `
+      <div class="km-pace-tier ${statusCls}">
+        <span class="km-pace-tier-lbl"><i style="background:${_KM_GRADE_COLOR[tierKey]}"></i>${targetTxt}</span>
+        <span class="km-pace-tier-req">${statusTxt}</span>
+      </div>`;
+
+    // ── In-store column ──
+    let instCol = '';
+    if (inst.denom > 0) {
+      const dailyDenom = inst.denom / elapsed;
+      const future = dailyDenom * left;
+      const recentPct = recent.instore.pct != null ? recent.instore.pct : +(inst.met / inst.denom * 100).toFixed(2);
+      const projected = +(((inst.met + recentPct / 100 * future) / (inst.denom + future)) * 100).toFixed(2);
+      const projTier = _kmTierReached(projected, targets.instore, 'high');
+      const rows = _KM_TIERS.map(tk => {
+        const t = targets.instore[tk];
+        const reqPct = ((t / 100) * (inst.denom + future) - inst.met) / future * 100;
+        const targetTxt = `${tk === 'baseline' ? 'Base' : tk === 'sla1' ? 'SLA 1' : 'SLA 2'} · ${t}%`;
+        if (reqPct <= 0)  return tierRow(tk, 'km-pace-locked', 'Locked in ✓', targetTxt);
+        if (reqPct > 100) return tierRow(tk, 'km-pace-lost',   'Out of reach', targetTxt);
+        return tierRow(tk, '', `needs ≥ ${reqPct.toFixed(1)}% / day`, targetTxt);
+      }).join('');
+      instCol = `
+        <div class="km-pace-col">
+          <div class="km-pace-head">In-Store Time</div>
+          <div class="km-pace-proj">Projected finish:
+            <strong style="color:${_KM_GRADE_COLOR[projTier.tier] || 'var(--text)'}">${projected}%</strong>
+            <span class="km-target-line">at last-7-day form (${recentPct}%)</span>
+          </div>
+          ${rows}
+        </div>`;
+    }
+
+    // ── Complaints column ──
+    let complCol = '';
+    if (comp.orders > 0) {
+      const dailyOrders = comp.orders / elapsed;
+      const future = dailyOrders * left;
+      const recentPct = recent.compl.pct != null ? recent.compl.pct : +(comp.items / comp.orders * 100).toFixed(2);
+      const projected = +(((comp.items + recentPct / 100 * future) / (comp.orders + future)) * 100).toFixed(2);
+      const projTier = _kmTierReached(projected, targets.complaints, 'low');
+      const rows = _KM_TIERS.map(tk => {
+        const t = targets.complaints[tk];
+        const allowed = Math.floor((t / 100) * (comp.orders + future) - comp.items);
+        const targetTxt = `${tk === 'baseline' ? 'Base' : tk === 'sla1' ? 'SLA 1' : 'SLA 2'} · ${t}%`;
+        if (allowed < 0) return tierRow(tk, 'km-pace-lost', 'Out of reach', targetTxt);
+        return tierRow(tk, '', `room for ${_fmt(allowed)} more (≈${(allowed / left).toFixed(1)}/day)`, targetTxt);
+      }).join('');
+      complCol = `
+        <div class="km-pace-col">
+          <div class="km-pace-head">Complaints</div>
+          <div class="km-pace-proj">Projected finish:
+            <strong style="color:${_KM_GRADE_COLOR[projTier.tier] || 'var(--text)'}">${projected}%</strong>
+            <span class="km-target-line">at last-7-day form (${recentPct}%)</span>
+          </div>
+          ${rows}
+        </div>`;
+    }
+
+    if (!instCol && !complCol) return '';
     return `
-      <div class="km-score-card km-tier-na km-soon">
-        <div class="km-score-head">
-          <span class="km-score-title">Fill Rate</span>
-          <span class="km-score-badge">SOON</span>
+      <div class="km-card km-pace-card">
+        <h4 class="km-block-title">Cycle Pace — day ${elapsed} of ${totalDays} · ${left} day${left === 1 ? '' : 's'} left
+          <span class="km-target-line">assumes remaining days carry the window's average volume</span></h4>
+        <div class="km-pace-grid">${instCol}${complCol}</div>
+      </div>`;
+  }
+
+  // ── Yesterday strip ───────────────────────────────────────────────
+  // One-line T-1 readout under the scorecards, independent of the selected
+  // window, with deltas vs T-2 and yesterday's weakest hour.
+  function _kmYdayStrip(targets) {
+    const DAY = 86400000;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const yS = today.getTime() - DAY, yE = today.getTime() - 1;
+    const y  = _kmSnapshot(yS, yE);
+    const t2 = _kmSnapshot(yS - DAY, yE - DAY);
+    if (y.instore.denom === 0 && y.compl.orders === 0) return '';
+
+    // Weakest hour yesterday (min SLA% among hours with ≥5 in-scope orders).
+    const CAP = CONFIG.INSTORE_SLA.IPO_CAP;
+    const THRESH = CONFIG.INSTORE_SLA.TIME_THRESHOLD_SEC;
+    const hours = new Map();
+    for (const r of _supervisorFilter(sheets.getInstoreCached() || [])) {
+      if (!r.date || r.date < yS || r.date > yE) continue;
+      if (!(r.ipo > 0 && r.ipo <= CAP) || r.hour == null) continue;
+      let h = hours.get(r.hour);
+      if (!h) { h = { denom: 0, met: 0 }; hours.set(r.hour, h); }
+      h.denom++;
+      if (r.instore_seconds > 0 && r.instore_seconds <= THRESH) h.met++;
+    }
+    let worstHour = null, worstPct = Infinity;
+    for (const [h, v] of hours) {
+      if (v.denom < 5) continue;
+      const p = v.met / v.denom * 100;
+      if (p < worstPct) { worstPct = p; worstHour = h; }
+    }
+
+    const ydate = new Date(yS);
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const instTier = _kmTierReached(y.instore.pct, targets.instore, 'high');
+    const complTier = _kmTierReached(y.compl.pct, targets.complaints, 'low');
+    const stat = (v, l, color) => `
+      <div class="km-yday-stat">
+        <span class="v"${color ? ` style="color:${color}"` : ''}>${v}</span><span class="l">${l}</span>
+      </div>`;
+
+    return `
+      <div class="km-yday-strip">
+        <div class="km-yday-label">
+          <span class="km-yday-kicker">Yesterday</span>
+          <span class="km-yday-date">${MONTHS[ydate.getMonth()]} ${ydate.getDate()}</span>
         </div>
-        <div class="km-score-value">—</div>
-        <div class="km-score-sub">Delivered in full ÷ checkout orders · ↑ higher is better</div>
-        ${_kmTierLadder(tiers, '%', 'na')}
-        <div class="km-score-foot">Phase 2 · needs PNA / missing-item feed</div>
+        <div class="km-yday-stats">
+          ${stat(
+            y.instore.pct != null ? `${y.instore.pct}% ${_kmDeltaChip(y.instore.pct, t2.instore.pct, 'high', 'vs T-2')}` : '—',
+            'In-store SLA', _KM_GRADE_COLOR[instTier.tier])}
+          ${stat(y.instore.denom ? `${_fmt(y.instore.met)}/${_fmt(y.instore.denom)}` : '—', 'orders met (IPO≤6)')}
+          ${stat(
+            y.compl.pct != null ? `${y.compl.pct}% ${_kmDeltaChip(y.compl.pct, t2.compl.pct, 'low', 'vs T-2')}` : '—',
+            'complaint rate', _KM_GRADE_COLOR[complTier.tier])}
+          ${stat(`${_fmt(y.compl.items)}`, 'qualifying complaints')}
+          ${stat(worstHour != null ? `${String(worstHour).padStart(2, '0')}:00 · ${worstPct.toFixed(0)}%` : '—', 'weakest hour')}
+        </div>
+        <button type="button" class="btn btn-secondary km-yday-btn" onclick="ui.kmJumpT1()">Open T-1 →</button>
+      </div>`;
+  }
+
+  // ── Day-of-week SLA pattern ───────────────────────────────────────
+  function _kmWeekdayCard(rows, tiers) {
+    const THRESH = CONFIG.INSTORE_SLA.TIME_THRESHOLD_SEC;
+    const NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const acc = Array.from({ length: 7 }, () => ({ denom: 0, met: 0 }));
+    for (const r of rows) {
+      if (!r.date) continue;
+      const a = acc[new Date(r.date).getDay()];
+      a.denom++;
+      if (r.instore_seconds > 0 && r.instore_seconds <= THRESH) a.met++;
+    }
+    const order = [1, 2, 3, 4, 5, 6, 0]; // Mon..Sun
+    const bars = order.map(d => {
+      const a = acc[d];
+      const pct = a.denom ? +(a.met / a.denom * 100).toFixed(1) : null;
+      const tier = pct != null ? _kmTierReached(pct, tiers, 'high').tier : 'na';
+      return `
+        <div class="km-stage-row">
+          <span class="km-stage-lbl">${NAMES[d]} <span class="km-target-line">${a.denom ? _fmt(a.denom) : ''}</span></span>
+          <div class="km-stage-track"><div class="km-stage-fill" style="width:${pct ?? 0}%;background:${_KM_GRADE_COLOR[tier]};"></div></div>
+          <span class="km-stage-val">${pct != null ? pct + '%' : '—'}</span>
+        </div>`;
+    }).join('');
+    return `
+      <div class="km-card">
+        <h4 class="km-block-title">SLA % by Day of Week <span class="km-target-line">order counts in grey</span></h4>
+        ${bars}
+      </div>`;
+  }
+
+  // ── Dropzone availability impact ──────────────────────────────────
+  function _kmDropzoneCard(rows, tiers) {
+    const THRESH = CONFIG.INSTORE_SLA.TIME_THRESHOLD_SEC;
+    const acc = { yes: { denom: 0, met: 0 }, no: { denom: 0, met: 0 } };
+    for (const r of rows) {
+      const a = r.is_dropzone_available ? acc.yes : acc.no;
+      a.denom++;
+      if (r.instore_seconds > 0 && r.instore_seconds <= THRESH) a.met++;
+    }
+    const pctOf = a => a.denom ? +(a.met / a.denom * 100).toFixed(1) : null;
+    const yesPct = pctOf(acc.yes), noPct = pctOf(acc.no);
+    if (yesPct === null || noPct === null) {
+      return `
+        <div class="km-card">
+          <h4 class="km-block-title">Dropzone Impact</h4>
+          <p class="placeholder-text" style="padding:10px 0">Not enough data to compare dropzone availability for this period.</p>
+        </div>`;
+    }
+    const row = (lbl, pct, a) => {
+      const tier = _kmTierReached(pct, tiers, 'high').tier;
+      return `
+        <div class="km-stage-row">
+          <span class="km-stage-lbl">${lbl} <span class="km-target-line">${_fmt(a.denom)}</span></span>
+          <div class="km-stage-track"><div class="km-stage-fill" style="width:${pct}%;background:${_KM_GRADE_COLOR[tier]};"></div></div>
+          <span class="km-stage-val">${pct}%</span>
+        </div>`;
+    };
+    const gap = +(yesPct - noPct).toFixed(1);
+    return `
+      <div class="km-card">
+        <h4 class="km-block-title">Dropzone Impact <span class="km-target-line">order counts in grey</span></h4>
+        ${row('Dropzone free', yesPct, acc.yes)}
+        ${row('Dropzone blocked', noPct, acc.no)}
+        <p class="km-help">${gap > 0
+          ? `Orders land ${gap} pts more often within SLA when a dropzone is free — keep dropzones clear during peak hours.`
+          : 'No meaningful SLA gap between dropzone states in this period.'}</p>
       </div>`;
   }
 
@@ -5768,6 +6185,7 @@ const ui = (() => {
     renderKeyMetrics,
     onKmPresetChange,
     onKmDateChange,
+    kmJumpT1,
     loadSlaTargetCycle,
     updateSlaTarget,
     toggleComplaintSlaCategory,
@@ -5823,6 +6241,7 @@ const app = (() => {
       await sheets.fetchAuditData(true);
       await sheets.fetchComplaintsData(true);
       await sheets.fetchInstoreData(true);
+      await sheets.fetchPnaData(true);
       await sheets.fetchRosterData(true);
 
       // Compute stats pipeline (filter supervisors before stats/flagging)
@@ -5859,10 +6278,24 @@ const app = (() => {
 
     } catch (err) {
       console.error('Dashboard load error:', err);
-      alert(`Failed to load data: ${err.message}`);
+      _showError(`Failed to load data: ${err.message}`);
     } finally {
       _setLoading(false);
     }
+  }
+
+  // Non-blocking error toast (replaces alert(), which froze the UI and
+  // looked broken on mobile). Auto-dismisses; click to dismiss early.
+  function _showError(msg) {
+    document.getElementById('app-error-toast')?.remove();
+    const el = document.createElement('div');
+    el.id = 'app-error-toast';
+    el.className = 'error-toast';
+    el.setAttribute('role', 'alert');
+    el.innerHTML = `<span>${String(msg).replace(/</g, '&lt;')}</span><button type="button" aria-label="Dismiss">&times;</button>`;
+    el.querySelector('button').addEventListener('click', () => el.remove());
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 12000);
   }
 
   function switchTab(tabId) {

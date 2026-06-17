@@ -4011,3 +4011,124 @@ button.km-hour-disabled { cursor: default; opacity: 0.6; }
 .km-cat-checklist { display: flex; flex-wrap: wrap; gap: 10px 18px; }
 .km-cat-check { display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: var(--text); cursor: pointer; }
 .km-cat-check input { accent-color: #60a5fa; }
+
+/* ── Key Metrics: delta chips ───────────────────────────────────────── */
+.km-delta-chip {
+  display: inline-block; vertical-align: middle; margin-left: 8px;
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.02em;
+  padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+}
+.km-delta-good { background: rgba(52,211,153,0.16);  color: #34d399; }
+.km-delta-bad  { background: rgba(248,113,113,0.16); color: #f87171; }
+.km-delta-flat { background: rgba(255,255,255,0.08); color: var(--text-muted); }
+
+/* ── Key Metrics: Yesterday strip ───────────────────────────────────── */
+.km-yday-strip {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  background: var(--card-bg); border: 1px solid var(--border-subtle);
+  border-radius: 12px; padding: 12px 18px; margin-bottom: 20px;
+}
+.km-yday-label { display: flex; flex-direction: column; gap: 1px; min-width: 76px; }
+.km-yday-kicker { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); opacity: 0.8; }
+.km-yday-date { font-size: 0.92rem; font-weight: 700; color: var(--text); }
+.km-yday-stats { display: flex; gap: 26px; flex-wrap: wrap; flex: 1; }
+.km-yday-stat { display: flex; flex-direction: column; gap: 2px; }
+.km-yday-stat .v { font-size: 1.02rem; font-weight: 800; color: var(--text); line-height: 1.15; white-space: nowrap; }
+.km-yday-stat .l { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.km-yday-btn { flex-shrink: 0; }
+
+/* ── Key Metrics: cycle pace ────────────────────────────────────────── */
+.km-pace-card { margin-bottom: 20px; }
+.km-pace-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.km-pace-head { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+.km-pace-proj { font-size: 0.8rem; color: var(--text); margin-bottom: 10px; }
+.km-pace-proj strong { font-size: 1.05rem; font-weight: 800; }
+.km-pace-tier {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 6px 10px; border-radius: 8px; margin-bottom: 5px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border-subtle);
+}
+.km-pace-tier-lbl { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.km-pace-tier-lbl i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.km-pace-tier-req { font-size: 0.74rem; font-weight: 700; color: var(--text); text-align: right; }
+.km-pace-locked { background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.3); }
+.km-pace-locked .km-pace-tier-req { color: #34d399; }
+.km-pace-lost { opacity: 0.6; }
+.km-pace-lost .km-pace-tier-req { color: #f87171; }
+
+/* ── Key Metrics: trend charts ──────────────────────────────────────── */
+.km-chart-wrap { position: relative; height: 240px; }
+
+/* ── Store Overview: SLA band ───────────────────────────────────────── */
+.ov-sla-band { margin-bottom: 24px; }
+.ov-sla-band-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.ov-sla-band-title { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+.ov-sla-band-hint { font-size: 0.68rem; color: var(--text-muted); }
+.ov-sla-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.ov-sla-card {
+  font-family: inherit; text-align: left; cursor: pointer;
+  background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--border); border-left: 4px solid var(--border);
+  border-radius: 12px; padding: 14px 16px;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.ov-sla-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
+.ov-sla-card.km-tier-sla2     { border-left-color: #34d399; }
+.ov-sla-card.km-tier-sla1     { border-left-color: #22d3ee; }
+.ov-sla-card.km-tier-baseline { border-left-color: #fbbf24; }
+.ov-sla-card.km-tier-below    { border-left-color: #f87171; }
+.ov-sla-card.km-tier-na       { border-left-color: #6b7280; }
+.ov-sla-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ov-sla-title { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.ov-sla-value { font-size: 1.8rem; font-weight: 800; line-height: 1.15; margin: 4px 0 2px; }
+.ov-sla-foot { font-size: 0.7rem; color: var(--text-muted); }
+.ov-sla-yday { font-size: 0.7rem; color: var(--text); margin-top: 8px; opacity: 0.9; }
+
+/* ── Error toast (replaces alert) ───────────────────────────────────── */
+.error-toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 20000; display: flex; align-items: center; gap: 14px;
+  max-width: min(520px, calc(100vw - 32px));
+  background: var(--card-bg); color: var(--text);
+  border: 1px solid rgba(248,113,113,0.55); border-left: 4px solid #f87171;
+  border-radius: 10px; padding: 12px 16px; font-size: 13px; line-height: 1.45;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+}
+.error-toast button {
+  background: none; border: none; color: var(--text-muted); font-size: 18px;
+  cursor: pointer; line-height: 1; padding: 2px;
+}
+.error-toast button:hover { color: var(--text); }
+
+/* ── Polish: sticky headers inside scrollable modal tables ──────────── */
+.compl-detail-table-wrapper thead th { position: sticky; top: 0; z-index: 2; }
+
+/* ── Responsive: new Key Metrics / Overview components ──────────────── */
+@media (max-width: 768px) {
+  .km-pace-grid { grid-template-columns: 1fr; }
+  .ov-sla-grid { grid-template-columns: 1fr; gap: 10px; }
+  .km-yday-strip { align-items: flex-start; gap: 12px; }
+  .km-yday-stats { gap: 16px; }
+  .km-yday-btn { width: 100%; }
+  .km-chart-wrap { height: 210px; }
+
+  /* Modals go full-screen on phones */
+  .compl-detail-backdrop { padding: 0; }
+  .compl-detail-modal { width: 100%; max-height: 100vh; height: 100%; border-radius: 0; }
+
+  /* Touch-friendlier date strips */
+  .flags-date-strip { padding: 10px 12px; width: 100%; }
+  .flags-date-strip input[type="date"],
+  .flags-date-strip input[type="month"],
+  .flags-date-strip select { font-size: 15px; padding: 8px 10px; }
+  .strip-divider { display: none; }
+}
+
+@media (max-width: 480px) {
+  .km-hour-grid { grid-template-columns: repeat(2, 1fr); }
+  .stat-cards-row { grid-template-columns: 1fr 1fr; }
+  .km-score-value { font-size: 1.9rem; }
+  .flags-title { font-size: 22px; }
+  .tab-content { padding: 10px; }
+  .header-right .btn { padding: 5px 8px; font-size: 10px; }
+}

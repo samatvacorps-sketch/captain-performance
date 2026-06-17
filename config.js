@@ -46,10 +46,36 @@ const CONFIG = {
     in_store: 14,          // O
   },
 
+  // ── PNAs Sheet (Product-Not-Available) ───────────────────────────────
+  // Order-level rows: each PNA = an item a picker could not find. Powers the
+  // Fill Rate SLA together with item_missing complaints. Columns are resolved
+  // by header name (see PNA_HEADERS), matching the "PNAs" tab built by
+  // google-apps-script/pna-merge.gs.
+  PNA_DATA_RANGE: 'PNAs!A:Z',
+  PNA_HEADERS: {
+    date:     'scheduleddate',
+    order_id: 'order_id',
+    picker_id:'picker_id',
+    pna_qty:  'pna_qty',
+  },
+
+  // ── Fill Rate Rules ──────────────────────────────────────────────────
+  // Fill Rate % = (checkout_orders - orders affected) / checkout_orders,
+  // where "affected" = the UNION of distinct order_ids that had >=1 PNA OR
+  // >=1 item_missing complaint in the window (an order counts once no matter
+  // how many PNAs / missing items it had).
+  FILL_RATE: { MISSING_CATEGORY: 'item_missing' },
+
   // ── In-Store Orders With Time Sheet ──────────────────────────────────
   // Order-level rows powering the In-store time SLA. Columns are resolved by
   // header name (see INSTORE_HEADERS) so the sheet can be safely reordered.
-  INSTORE_DATA_RANGE: "'In-store Time'!A:Q",
+  //
+  // The in-store feed is too large to keep inside the main workbook, so it
+  // lives in its own spreadsheet ("In-store time DB sheet"). When
+  // INSTORE_SPREADSHEET_ID is set, sheets.js fetches in-store rows from there;
+  // otherwise it falls back to the main SPREADSHEET_ID.
+  INSTORE_SPREADSHEET_ID: '1b_tcxssTynQU-ZQXyWQ-sgSUWDByppoHfXZe4EoldHo',
+  INSTORE_DATA_RANGE: "'In-store'!A:Q",
   INSTORE_HEADERS: {
     date_ts:              'date_ts',
     order_id:             'order_id',

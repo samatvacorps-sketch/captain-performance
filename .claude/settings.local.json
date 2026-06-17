@@ -5,7 +5,27 @@
       "Bash(xargs ls:*)",
       "Bash(gh repo:*)",
       "Bash(git --version)",
-      "Bash(curl -s https://api.github.com/users/samatvacorps-sketch)"
+      "Bash(curl -s https://api.github.com/users/samatvacorps-sketch)",
+      "Bash(git push:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(March\" fix\\).:*)",
+      "Bash(grep -E \"\\\\.\\(js|html\\)$\")",
+      "Bash(git -C /Users/vansh/Documents/Claude/Projects/Performance-tracking-DB log --oneline -30)",
+      "Bash(grep -n \"─\\\\{10,\\\\}\\\\|^  // ──\\\\|function init\\\\|function render\" /Users/vansh/Documents/Claude/Projects/Performance-tracking-DB/js/ui.js)",
+      "Bash(node --check /Users/vansh/Documents/Claude/Projects/Performance-tracking-DB/js/ui.js)",
+      "Bash(node --check /Users/vansh/Documents/Claude/Projects/Performance-tracking-DB/js/charts.js)",
+      "Bash(node --check /Users/vansh/Documents/Claude/Projects/Performance-tracking-DB/js/compute.js)",
+      "Bash(python3 -m http.server 8000 > /tmp/server.log 2>&1 & *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(kill 41544)",
+      "Bash(nohup python3 -m http.server 3000)",
+      "Bash(disown)",
+      "Bash(node --check config.js)",
+      "Bash(node --check js/sheets.js)",
+      "Bash(node --check js/compute.js)",
+      "Bash(node --check js/ui.js)",
+      "Bash(git rm *)"
     ]
   }
 }

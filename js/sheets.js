@@ -13,6 +13,7 @@ const sheets = (() => {
   let _complaintsCache = null;
   let _rosterCache = null;
   let _instoreCache = null;
+  let _pnaCache = null;
 
   // ── Public API ──────────────────────────────────────────────────────
 
@@ -359,7 +360,8 @@ const sheets = (() => {
     if (_instoreCache && !force) return _instoreCache;
     const token = await auth.getToken();
     if (!token) throw new Error('Not authenticated');
-    const url = `${BASE_URL}/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(CONFIG.INSTORE_DATA_RANGE)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`;
+    const instoreBook = CONFIG.INSTORE_SPREADSHEET_ID || CONFIG.SPREADSHEET_ID;
+    const url = `${BASE_URL}/${instoreBook}/values/${encodeURIComponent(CONFIG.INSTORE_DATA_RANGE)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`;
     const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!response.ok) {
       console.warn('In-store sheet fetch failed:', response.status);
@@ -422,5 +424,60 @@ const sheets = (() => {
   function getInstoreCached() { return _instoreCache || []; }
   function clearInstoreCache() { _instoreCache = null; }
 
-  return { fetchData, getCached, clearCache, lastFetched, fetchAuditData, getAuditCached, clearAuditCache, fetchComplaintsData, getComplaintsCached, clearComplaintsCache, fetchRosterData, getRosterCached, fetchInstoreData, getInstoreCached, clearInstoreCache };
+  // ── PNA Data (Product-Not-Available) ────────────────────────────────────
+  // Order-level rows for the Fill Rate SLA. Columns resolved by header name so
+  // the "PNAs" tab may be reordered without touching code.
+
+  async function fetchPnaData(force = false) {
+    if (_pnaCache && !force) return _pnaCache;
+    const token = await auth.getToken();
+    if (!token) throw new Error('Not authenticated');
+    const url = `${BASE_URL}/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(CONFIG.PNA_DATA_RANGE)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`;
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) {
+      console.warn('PNAs sheet fetch failed:', response.status);
+      _pnaCache = [];
+      return _pnaCache;
+    }
+    const json = await response.json();
+    const rows = json.values || [];
+    if (rows.length < 2) { _pnaCache = []; return _pnaCache; }
+
+    // Resolve logical field → column index from the header row.
+    const header = rows[0].map(h => _str(h).toLowerCase());
+    const idx = {};
+    for (const [field, headerName] of Object.entries(CONFIG.PNA_HEADERS)) {
+      idx[field] = header.indexOf(headerName.toLowerCase());
+    }
+    _pnaCache = rows.slice(1).map(r => _parsePnaRow(r, idx)).filter(Boolean);
+    return _pnaCache;
+  }
+
+  function _parsePnaRow(raw, idx) {
+    if (!raw || raw.length === 0) return null;
+    const at = (field) => (idx[field] >= 0 ? raw[idx[field]] : undefined);
+
+    const order_id = _str(at('order_id'));
+    if (!order_id) return null;
+
+    const date = _parseDate(at('date'));
+    let dateIsoStr = '';
+    if (date) {
+      const y = date.getFullYear(), m = String(date.getMonth()+1).padStart(2,'0'), d = String(date.getDate()).padStart(2,'0');
+      dateIsoStr = `${y}-${m}-${d}`;
+    }
+
+    return {
+      order_id,
+      employee_id: _str(at('picker_id')),
+      pna_qty:     _num(at('pna_qty')),
+      date,
+      dateIsoStr,
+    };
+  }
+
+  function getPnaCached() { return _pnaCache || []; }
+  function clearPnaCache() { _pnaCache = null; }
+
+  return { fetchData, getCached, clearCache, lastFetched, fetchAuditData, getAuditCached, clearAuditCache, fetchComplaintsData, getComplaintsCached, clearComplaintsCache, fetchRosterData, getRosterCached, fetchInstoreData, getInstoreCached, clearInstoreCache, fetchPnaData, getPnaCached, clearPnaCache };
 })();

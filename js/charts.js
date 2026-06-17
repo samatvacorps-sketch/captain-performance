@@ -1198,7 +1198,79 @@ const charts = (() => {
     });
   }
 
+  // ── Key Metrics: daily SLA trend with target lines ────────────────────
+  // series: [{ label, data, color }] · targets: { baseline, sla1, sla2 }
+  // Target tiers render as dashed horizontal lines so the trend reads
+  // directly against the three SLA levels.
+
+  function renderKmTrendChart(canvasId, labels, series, targets, opts = {}) {
+    _destroy(canvasId);
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if (!ctx) return;
+
+    const TIER_STYLES = [
+      { key: 'baseline', label: 'Baseline', color: '#fb923c' },
+      { key: 'sla1',     label: 'SLA 1',    color: '#facc15' },
+      { key: 'sla2',     label: 'SLA 2',    color: '#34d399' },
+    ];
+    const targetSets = targets ? TIER_STYLES
+      .filter(t => targets[t.key] != null)
+      .map(t => ({
+        label: `${t.label} (${targets[t.key]}%)`,
+        data: labels.map(() => targets[t.key]),
+        borderColor: t.color,
+        borderWidth: 1.5,
+        borderDash: [6, 5],
+        pointRadius: 0,
+        pointHitRadius: 0,
+        fill: false,
+        tension: 0,
+      })) : [];
+
+    const dataSets = series.map(s => ({
+      label: s.label,
+      data: s.data,
+      borderColor: s.color,
+      backgroundColor: ALPHA(s.color, 0.12),
+      fill: series.length === 1,
+      tension: 0.3,
+      pointRadius: 3,
+      spanGaps: true,
+    }));
+
+    const allVals = [
+      ...series.flatMap(s => s.data).filter(v => v != null),
+      ...targetSets.flatMap(t => t.data),
+    ];
+    // Pad proportionally to the value spread so small-scale metrics
+    // (complaint % ≈ 1) don't get flattened by fixed padding.
+    const maxV = Math.max(...allVals), minV = Math.min(...allVals);
+    const pad = Math.max(0.5, (maxV - minV) * 0.2);
+    const yMin = opts.beginAtZero ? 0 : Math.max(0, minV - pad);
+    const yMax = maxV + pad;
+
+    _instances[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets: [...dataSets, ...targetSets] },
+      options: {
+        ...BASE_OPTS,
+        maintainAspectRatio: false,
+        scales: {
+          ...BASE_OPTS.scales,
+          y: {
+            ...BASE_OPTS.scales.y,
+            beginAtZero: !!opts.beginAtZero,
+            min: isFinite(yMin) ? yMin : undefined,
+            max: isFinite(yMax) ? yMax : undefined,
+            title: { display: true, text: opts.yTitle || '%', color: TICK_COLOR },
+          },
+        },
+      },
+    });
+  }
+
   return {
+    renderKmTrendChart,
     renderOrdersHoursChart,
     renderTimeMetricsChart,
     renderIPHChart,
