@@ -4535,6 +4535,7 @@ const ui = (() => {
     const paceHtml = _kmPaceSection(startVal, endVal,
       { met: instoreSLA ? instoreSLA.totals.met : 0, denom: instoreSLA ? instoreSLA.totals.denom : 0 },
       { items: complItems, orders: complOrders },
+      fill,
       targets);
 
     // ── Daily trend section (rendered as charts after innerHTML) ──
@@ -4766,7 +4767,7 @@ const ui = (() => {
   // does that require per remaining day?". Rendered only while the selected
   // window is still open (end date is today or later) and has elapsed days.
   // Remaining-day volume is assumed equal to the window's daily average.
-  function _kmPaceSection(startVal, endVal, inst, comp, targets) {
+  function _kmPaceSection(startVal, endVal, inst, comp, fill, targets) {
     if (!startVal || !endVal) return '';
     const DAY = 86400000;
     const start = new Date(startVal); start.setHours(0, 0, 0, 0);
@@ -4841,12 +4842,43 @@ const ui = (() => {
         </div>`;
     }
 
-    if (!instCol && !complCol) return '';
+    // ── Fill Rate column ──
+    // Higher-is-better % like in-store, but the actionable lever is the number
+    // of "short" orders (>=1 PNA or missing item) still affordable — so the
+    // tier rows use the complaints-style "room for N more" framing.
+    let fillCol = '';
+    if (fill && fill.checkoutOrders > 0) {
+      const dailyOrders = fill.checkoutOrders / elapsed;
+      const future = dailyOrders * left;
+      const recentPct = (recent.fill && recent.fill.pct != null)
+        ? recent.fill.pct
+        : (fill.pct != null ? fill.pct : +(fill.inFull / fill.checkoutOrders * 100).toFixed(2));
+      const projected = +(((fill.inFull + recentPct / 100 * future) / (fill.checkoutOrders + future)) * 100).toFixed(2);
+      const projTier = _kmTierReached(projected, targets.fillrate, 'high');
+      const rows = _KM_TIERS.map(tk => {
+        const t = targets.fillrate[tk];
+        const allowed = Math.floor((1 - t / 100) * (fill.checkoutOrders + future) - fill.affected);
+        const targetTxt = `${tk === 'baseline' ? 'Base' : tk === 'sla1' ? 'SLA 1' : 'SLA 2'} · ${t}%`;
+        if (allowed < 0) return tierRow(tk, 'km-pace-lost', 'Out of reach', targetTxt);
+        return tierRow(tk, '', `room for ${_fmt(allowed)} more short${allowed === 1 ? '' : 's'} (≈${(allowed / left).toFixed(1)}/day)`, targetTxt);
+      }).join('');
+      fillCol = `
+        <div class="km-pace-col">
+          <div class="km-pace-head">Fill Rate</div>
+          <div class="km-pace-proj">Projected finish:
+            <strong style="color:${_KM_GRADE_COLOR[projTier.tier] || 'var(--text)'}">${projected}%</strong>
+            <span class="km-target-line">at last-7-day form (${recentPct}%)</span>
+          </div>
+          ${rows}
+        </div>`;
+    }
+
+    if (!instCol && !complCol && !fillCol) return '';
     return `
       <div class="km-card km-pace-card">
         <h4 class="km-block-title">Cycle Pace — day ${elapsed} of ${totalDays} · ${left} day${left === 1 ? '' : 's'} left
           <span class="km-target-line">assumes remaining days carry the window's average volume</span></h4>
-        <div class="km-pace-grid">${instCol}${complCol}</div>
+        <div class="km-pace-grid">${instCol}${complCol}${fillCol}</div>
       </div>`;
   }
 

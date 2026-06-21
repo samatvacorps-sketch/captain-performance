@@ -4039,7 +4039,7 @@ button.km-hour-disabled { cursor: default; opacity: 0.6; }
 
 /* ── Key Metrics: cycle pace ────────────────────────────────────────── */
 .km-pace-card { margin-bottom: 20px; }
-.km-pace-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.km-pace-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
 .km-pace-head { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
 .km-pace-proj { font-size: 0.8rem; color: var(--text); margin-bottom: 10px; }
 .km-pace-proj strong { font-size: 1.05rem; font-weight: 800; }
