@@ -272,6 +272,24 @@ const sheets = (() => {
     return isNaN(d) ? null : d;
   }
 
+  // In-store stage timestamps can arrive two ways depending on how the row was
+  // written to the In-store sheet:
+  //   • text  "2026-06-20 06:08:12.000"  → new Date() parses in local (IST) zone
+  //   • serial 46200.2556 (real datetime) → bare serial→Date lands the wall-clock
+  //     in UTC, so getHours() in an IST browser is shifted +5:30.
+  // The serial's wall-clock IS the intended IST time, so shift by the local tz
+  // offset to make serials and strings agree (getHours() = true IST hour).
+  function _parseInstoreTs(val) {
+    if (val === undefined || val === null || val === '') return null;
+    const n = Number(val);
+    if (!isNaN(n) && n > 1000) {
+      const ms = Math.round((n - 25569) * 86400 * 1000);
+      return new Date(ms + new Date(ms).getTimezoneOffset() * 60000);
+    }
+    const d = new Date(val);
+    return isNaN(d) ? null : d;
+  }
+
   /** Parse numeric field, returning 0 for blank/invalid. */
   function _num(val) {
     if (val === undefined || val === null || val === '') return 0;
@@ -393,11 +411,11 @@ const sheets = (() => {
 
     // Stage timestamps (serial datetimes → Date). Time portion is in IST,
     // interpreted in the browser's local zone (IST), so getHours() is correct.
-    const readyTs   = _parseDate(at('ready_to_assign_ts'));
-    const assignTs  = _parseDate(at('picker_assigned_ts'));
-    const startTs   = _parseDate(at('picking_started_ts'));
-    const completeTs = _parseDate(at('picking_completed_ts'));
-    const billTs    = _parseDate(at('billing_completed_ts'));
+    const readyTs   = _parseInstoreTs(at('ready_to_assign_ts'));
+    const assignTs  = _parseInstoreTs(at('picker_assigned_ts'));
+    const startTs   = _parseInstoreTs(at('picking_started_ts'));
+    const completeTs = _parseInstoreTs(at('picking_completed_ts'));
+    const billTs    = _parseInstoreTs(at('billing_completed_ts'));
 
     const _diffSec = (a, b) => (a && b ? Math.max(0, Math.round((b - a) / 1000)) : null);
     const hourSrc = startTs || readyTs || date;
