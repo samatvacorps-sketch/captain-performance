@@ -5008,7 +5008,7 @@ const ui = (() => {
         <div class="km-hour-top"><span class="km-hour-time">${lbl}</span><span class="km-hour-dot"></span></div>
         <div class="km-hour-pct">${h.pct}<span class="km-hour-pct-unit">%</span></div>
         <div class="km-hour-stats">
-          ${_kmHourStat(h.totalOrders, 'orders')}
+          ${_kmHourStat(h.denom, 'orders')}
           ${_kmHourStat(breached, 'breached')}
           ${_kmHourStat(h.activePickers, 'pickers', h.hour, 'pickers')}
           ${ros != null ? _kmHourStat(ros, 'rostered', h.hour, 'roster') : _kmHourStat(0, 'rostered')}
