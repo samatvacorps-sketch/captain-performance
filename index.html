@@ -126,38 +126,17 @@
     <!-- SLA Position Band (current billing cycle, renders via ui.js) -->
     <div id="overview-sla-band" class="ov-sla-band"></div>
 
-    <!-- Stat Cards -->
-    <div class="stat-cards-row">
-      <div class="stat-card">
-        <div class="stat-icon stat-icon-blue"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5L8 2l6 3.5v6L8 14 2 11.5z"/><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="5.5" x2="14" y2="5.5"/></svg></div>
-        <div>
-          <p class="stat-label">Total Orders Picked</p>
-          <p class="stat-value" id="stat-total-orders">—</p>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-icon-green"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><polyline points="8,5 8,8 10.5,10"/></svg></div>
-        <div>
-          <p class="stat-label">Avg Total Time</p>
-          <p class="stat-value" id="stat-avg-pick-time">—</p>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-icon-teal"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="9" width="3" height="6" rx="0.5"/><rect x="6.5" y="5" width="3" height="10" rx="0.5"/><rect x="11.5" y="2" width="3" height="13" rx="0.5"/></svg></div>
-        <div>
-          <p class="stat-label">Avg IPH</p>
-          <p class="stat-value" id="stat-avg-iph">—</p>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-icon-red"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5L1.5 13.5h13z"/><line x1="8" y1="6" x2="8" y2="9.5"/><circle cx="8" cy="11.5" r="0.5" fill="currentColor"/></svg></div>
-        <div>
-          <p class="stat-label">Total Complaints</p>
-          <p class="stat-value" id="stat-total-complaints">—</p>
-        </div>
-      </div>
-    </div>
+    <!-- KPI Cards (rendered by JS: pooled values, delta chips, sparklines) -->
+    <div id="overview-kpi-row" class="stat-cards-row"></div>
 
+    <!-- Exceptions feed: what needs attention today (always T-1 / cycle) -->
+    <div id="overview-exceptions" class="ov-exceptions"></div>
+
+    <!-- Explore charts (visible by default; toggle hides them, lazily re-rendered on expand) -->
+    <div class="ov-charts-header">
+      <button id="overview-charts-toggle" class="btn btn-secondary" onclick="ui.toggleOverviewCharts()">Hide charts ▾</button>
+    </div>
+    <div id="overview-charts-wrap" class="ov-charts-wrap">
     <!-- Bento Chart Grid -->
     <div class="bento-grid">
       <div class="bento-card bento-half">
@@ -251,6 +230,7 @@
         <canvas id="chart-staff-availability"></canvas>
       </div>
     </div>
+    </div><!-- /#overview-charts-wrap -->
 
     <!-- Summary Table -->
     <div class="table-section">
@@ -329,6 +309,9 @@
 
     <!-- Attendance Metrics Grid -->
     <div id="attendance-summary-cards" class="flags-bento-grid attendance-summary-grid"></div>
+
+    <!-- Shift adherence (rostered start vs first in-store activity) -->
+    <div id="attendance-adherence"></div>
 
     <!-- Attendance Grid -->
     <div class="flags-alerts-section">
@@ -520,6 +503,8 @@
       <div class="flags-date-strip">
         <span class="dd-control-label">Month</span>
         <select id="incentive-month" onchange="ui.onIncentiveMonthChange()"></select>
+        <span class="strip-divider"></span>
+        <button class="btn btn-secondary" onclick="ui.exportIncentivesCsv()" title="Payout register CSV for payroll (includes attendance bonus)">Export CSV</button>
       </div>
     </div>
 
@@ -549,11 +534,28 @@
 <!-- Scripts (order matters) -->
 <script src="js/icons.js"></script>
 <script src="config.js"></script>
+<script src="js/config-store.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/sheets.js"></script>
 <script src="js/compute.js"></script>
 <script src="js/charts.js"></script>
-<script src="js/ui.js"></script>
+<!-- ui modules (split from the former ui.js — order mirrors the original file) -->
+<script src="js/shared/core.js"></script>
+<script src="js/shared/periods.js"></script>
+<script src="js/tabs/store-overview.js"></script>
+<script src="js/tabs/deep-dive.js"></script>
+<script src="js/shared/tables.js"></script>
+<script src="js/tabs/attendance.js"></script>
+<script src="js/tabs/tier-analysis.js"></script>
+<script src="js/tabs/captain-profile.js"></script>
+<script src="js/tabs/config-panel.js"></script>
+<script src="js/shared/format.js"></script>
+<script src="js/tabs/inventory-health.js"></script>
+<script src="js/tabs/key-metrics.js"></script>
+<script src="js/tabs/complaints.js"></script>
+<script src="js/tabs/incentives.js"></script>
+<script src="js/ui-registry.js"></script>
+<script src="js/app.js"></script>
 <script>
   // Bootstrap
   window.addEventListener('load', () => {

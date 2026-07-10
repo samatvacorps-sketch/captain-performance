@@ -15,6 +15,159 @@ const sheets = (() => {
   let _instoreCache = null;
   let _pnaCache = null;
 
+  // ── IndexedDB session cache ─────────────────────────────────────────
+  // Parsed rows are persisted per dataset so the dashboard renders
+  // instantly on the next open (structured clone keeps Date objects),
+  // then refreshes from the network in the background. Best-effort:
+  // every failure path resolves to null and the app falls back to a
+  // normal blocking fetch.
+  const IDB_NAME = 'dsa-cache';
+  const IDB_STORE = 'datasets';
+  let _idb = null;
+
+  function _idbOpen() {
+    if (_idb) return Promise.resolve(_idb);
+    return new Promise((resolve) => {
+      if (!window.indexedDB) return resolve(null);
+      let req;
+      try { req = indexedDB.open(IDB_NAME, 1); } catch (e) { return resolve(null); }
+      req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+      req.onsuccess = () => { _idb = req.result; resolve(_idb); };
+      req.onerror = () => resolve(null);
+    });
+  }
+
+  async function _idbPut(key, rows) {
+    const db = await _idbOpen();
+    if (!db) return;
+    try {
+      db.transaction(IDB_STORE, 'readwrite')
+        .objectStore(IDB_STORE)
+        .put({ ts: Date.now(), rows }, key);
+    } catch (e) { /* quota / clone errors are non-fatal */ }
+  }
+
+  async function _idbGet(key) {
+    const db = await _idbOpen();
+    if (!db) return null;
+    return new Promise((resolve) => {
+      try {
+        const req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      } catch (e) { resolve(null); }
+    });
+  }
+
+  /**
+   * Populates the in-memory caches from IndexedDB (previous session's
+   * fetch). Returns { ts } of the daily dataset on a hit, null otherwise.
+   */
+  async function loadFromCache() {
+    const [daily, audits, complaints, instore, pna, roster, config, racks] = await Promise.all([
+      _idbGet('daily'), _idbGet('audits'), _idbGet('complaints'),
+      _idbGet('instore'), _idbGet('pna'), _idbGet('roster'), _idbGet('sheetconfig'),
+      _idbGet('racks'),
+    ]);
+    if (!daily || !Array.isArray(daily.rows) || daily.rows.length === 0) return null;
+    _cache           = daily.rows;
+    _auditCache      = audits?.rows || [];
+    _complaintsCache = complaints?.rows || [];
+    _instoreCache    = instore?.rows || [];
+    _pnaCache        = pna?.rows || [];
+    _rosterCache     = roster?.rows || [];
+    _lastFetched     = new Date(daily.ts);
+    if (config?.rows && typeof cfg !== 'undefined') {
+      _configCache = config.rows;
+      cfg.setSheetConfig(_configCache);
+    }
+    if (racks?.rows) _rackListCache = racks.rows;
+    return { ts: daily.ts };
+  }
+
+  // ── Sheet-backed business config (Config tab: key | value | notes) ────
+  // Missing tab is fine — the dashboard falls back to localStorage/defaults.
+  let _configCache = null;
+
+  function _parseConfigValue(raw) {
+    if (raw === undefined || raw === null) return undefined;
+    if (typeof raw === 'number' || typeof raw === 'boolean') return raw;
+    const s = String(raw).trim();
+    if (s === '') return undefined;
+    if (/^(true|false)$/i.test(s)) return s.toLowerCase() === 'true';
+    if (/^-?\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+    if (s[0] === '{' || s[0] === '[') {
+      try { return JSON.parse(s); } catch (e) { return s; }
+    }
+    return s;
+  }
+
+  async function fetchConfigData(force = false) {
+    if (_configCache && !force) return _configCache;
+    const token = await auth.getToken();
+    if (!token) throw new Error('Not authenticated');
+    const url = `${BASE_URL}/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent('Config!A:C')}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`;
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) {
+      console.warn('Config sheet fetch failed (tab may not exist yet):', response.status);
+      _configCache = {};
+      if (typeof cfg !== 'undefined') cfg.setSheetConfig(_configCache);
+      return _configCache;
+    }
+    const json = await response.json();
+    const rows = json.values || [];
+    const flat = {};
+    for (const row of rows) {
+      const key = _str(row?.[0]);
+      if (!key || key.startsWith('#') || key.toLowerCase() === 'key') continue;
+      const val = _parseConfigValue(row?.[1]);
+      if (val !== undefined) flat[key] = val;
+    }
+    _configCache = flat;
+    if (typeof cfg !== 'undefined') cfg.setSheetConfig(_configCache);
+    _idbPut('sheetconfig', _configCache);
+    return _configCache;
+  }
+
+  function getConfigCached() { return _configCache || {}; }
+
+  // ── Master Rack List (Racks tab) ────────────────────────────────────────
+  // Optional master list of every rack code in the store (column A; header
+  // row and `#`-prefixed rows ignored). Powers Inventory Health coverage %
+  // and the stale-rack queue. Missing tab degrades gracefully.
+  let _rackListCache = null;
+
+  // Fetched-vs-parsed row counts per dataset (Data Health panel).
+  const _parseStats = {};
+
+  async function fetchRackListData(force = false) {
+    if (_rackListCache && !force) return _rackListCache;
+    const token = await auth.getToken();
+    if (!token) throw new Error('Not authenticated');
+    const url = `${BASE_URL}/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent('Racks!A:A')}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`;
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) {
+      console.warn('Racks sheet fetch failed (tab may not exist yet):', response.status);
+      _rackListCache = [];
+      return _rackListCache;
+    }
+    const json = await response.json();
+    const rows = json.values || [];
+    const codes = [];
+    for (const row of rows) {
+      const c = _str(row?.[0]).toUpperCase();
+      if (!c || c === 'RACK_CODE' || c === 'RACK' || c === 'CODE' || c.startsWith('#')) continue;
+      codes.push(c);
+    }
+    _rackListCache = [...new Set(codes)];
+    _idbPut('racks', _rackListCache);
+    return _rackListCache;
+  }
+
+  function getRackListCached() { return _rackListCache || []; }
+
+  function getParseStats() { return _parseStats; }
+
   // ── Public API ──────────────────────────────────────────────────────
 
   /**
@@ -49,7 +202,9 @@ const sheets = (() => {
     // First row is headers — skip it, parse the rest
     const dataRows = rows.slice(1);
     _cache = dataRows.map(_parseRow).filter(Boolean);
+    _parseStats.daily = { fetched: dataRows.length, parsed: _cache.length };
     _lastFetched = new Date();
+    _idbPut('daily', _cache);
 
     return _cache;
   }
@@ -93,6 +248,8 @@ const sheets = (() => {
     }
 
     _auditCache = rows.slice(1).map(_parseAuditRow).filter(Boolean);
+    _parseStats.audits = { fetched: rows.length - 1, parsed: _auditCache.length };
+    _idbPut('audits', _auditCache);
     return _auditCache;
   }
 
@@ -159,6 +316,8 @@ const sheets = (() => {
     }
 
     _complaintsCache = rows.slice(1).map(_parseComplaintRow).filter(Boolean);
+    _parseStats.complaints = { fetched: rows.length - 1, parsed: _complaintsCache.length };
+    _idbPut('complaints', _complaintsCache);
     return _complaintsCache;
   }
 
@@ -341,6 +500,8 @@ const sheets = (() => {
     const rows = json.values || [];
     if (rows.length < 2) { _rosterCache = []; return _rosterCache; }
     _rosterCache = rows.slice(1).map(_parseRosterRow).filter(Boolean);
+    _parseStats.roster = { fetched: rows.length - 1, parsed: _rosterCache.length };
+    _idbPut('roster', _rosterCache);
     return _rosterCache;
   }
 
@@ -397,6 +558,8 @@ const sheets = (() => {
       idx[field] = header.indexOf(headerName.toLowerCase());
     }
     _instoreCache = rows.slice(1).map(r => _parseInstoreRow(r, idx)).filter(Boolean);
+    _parseStats.instore = { fetched: rows.length - 1, parsed: _instoreCache.length };
+    _idbPut('instore', _instoreCache);
     return _instoreCache;
   }
 
@@ -420,6 +583,10 @@ const sheets = (() => {
     const _diffSec = (a, b) => (a && b ? Math.max(0, Math.round((b - a) / 1000)) : null);
     const hourSrc = startTs || readyTs || date;
     const dropRaw = _str(at('is_dropzone_available')).toUpperCase();
+    // First captain action on the order — powers shift adherence (rostered
+    // start vs first activity). Prefer picking-started (captain action) over
+    // system-side assignment.
+    const actTs = startTs || assignTs || readyTs;
 
     return {
       order_id:        _str(at('order_id')),
@@ -431,6 +598,7 @@ const sheets = (() => {
       dateStr:         String(at('date_ts')),
       dateIsoStr,
       hour:            hourSrc ? hourSrc.getHours() : null,
+      act_ms:          actTs ? actTs.getTime() : null,
       wait_sec:    _diffSec(readyTs, assignTs),       // assign_ready → picker assigned
       assign_sec:  _diffSec(assignTs, startTs),       // assigned → picking started
       pick_sec:    _diffSec(startTs, completeTs),      // picking started → completed
@@ -468,6 +636,8 @@ const sheets = (() => {
       idx[field] = header.indexOf(headerName.toLowerCase());
     }
     _pnaCache = rows.slice(1).map(r => _parsePnaRow(r, idx)).filter(Boolean);
+    _parseStats.pna = { fetched: rows.length - 1, parsed: _pnaCache.length };
+    _idbPut('pna', _pnaCache);
     return _pnaCache;
   }
 
@@ -497,5 +667,5 @@ const sheets = (() => {
   function getPnaCached() { return _pnaCache || []; }
   function clearPnaCache() { _pnaCache = null; }
 
-  return { fetchData, getCached, clearCache, lastFetched, fetchAuditData, getAuditCached, clearAuditCache, fetchComplaintsData, getComplaintsCached, clearComplaintsCache, fetchRosterData, getRosterCached, fetchInstoreData, getInstoreCached, clearInstoreCache, fetchPnaData, getPnaCached, clearPnaCache };
+  return { fetchData, getCached, clearCache, lastFetched, loadFromCache, fetchAuditData, getAuditCached, clearAuditCache, fetchComplaintsData, getComplaintsCached, clearComplaintsCache, fetchRosterData, getRosterCached, fetchInstoreData, getInstoreCached, clearInstoreCache, fetchPnaData, getPnaCached, clearPnaCache, fetchConfigData, getConfigCached, fetchRackListData, getRackListCached, getParseStats };
 })();

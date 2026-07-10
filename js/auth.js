@@ -13,6 +13,7 @@ const auth = (() => {
 
   let tokenClient = null;
   let resolveTokenPromise = null;
+  let pendingTokenPromise = null;
 
   // ── Public API ──────────────────────────────────────────────────────
 
@@ -26,11 +27,19 @@ const auth = (() => {
     }, 100);
   }
 
-  /** Returns a valid access token, prompting sign-in if needed. */
+  /**
+   * Returns a valid access token, prompting sign-in if needed.
+   * Concurrent callers (parallel sheet fetches) share one in-flight
+   * request — otherwise each call would overwrite resolveTokenPromise
+   * and every caller but the last would hang forever.
+   */
   function getToken() {
     const cached = _getCachedToken();
     if (cached) return Promise.resolve(cached);
-    return _requestToken();
+    if (!pendingTokenPromise) {
+      pendingTokenPromise = _requestToken().finally(() => { pendingTokenPromise = null; });
+    }
+    return pendingTokenPromise;
   }
 
   function signOut() {

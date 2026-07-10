@@ -1,20 +1,33 @@
 # Dark Store Analytics Dashboard
 
-Vanilla JS dashboard for dark-store captain performance tracking. Google Sheets as data backend, Chart.js for charts, dark theme.
+Vanilla JS dashboard for dark-store captain performance tracking. Google Sheets as data backend, Chart.js for charts, dark theme. A phased redesign is underway — see `REDESIGN.md` for locked decisions and the build plan (Phase 0 foundations landed 2026-07).
 
 ## Architecture
 
 ```
-index.html          — Single-page app, tab-based navigation
-config.js           — Spreadsheet IDs, column mappings, metric definitions
-js/auth.js          — Google Identity Services OAuth (readonly scope)
-js/sheets.js        — Sheets API v4 fetch + parse + in-memory cache
-js/compute.js       — Pure data transforms: aggregation, flagging, incentives
-js/charts.js        — Chart.js wrappers (destroy/recreate pattern)
-js/ui.js            — DOM rendering (ui IIFE) + orchestrator (app IIFE)
-js/icons.js         — SVG icon constants
-css/styles.css      — Full dark theme, CSS variables
+index.html            — Single-page app, tab-based navigation; script order matters
+config.js             — Spreadsheet IDs, column mappings, metric definitions
+js/config-store.js    — `cfg` global: sheet Config tab > localStorage > defaults
+js/auth.js            — Google Identity Services OAuth (readonly scope)
+js/sheets.js          — Sheets API v4 fetch + parse + in-memory cache + IndexedDB session cache
+js/compute.js         — Pure data transforms: aggregation, flagging, incentives, pooled KPIs
+js/charts.js          — Chart.js wrappers (destroy/recreate pattern)
+js/shared/core.js     — cross-tab state: thresholds, weights, supervisor filter, theme, tab switching
+js/shared/periods.js  — `periods` global: T-1/T-2, full-span, preset parsing helpers
+js/shared/tables.js   — table sort/filter machinery, badges, captain cells
+js/shared/format.js   — _fmt, _esc, _isoDateStr, billing-month helpers
+js/tabs/*.js          — one file per tab (store-overview, deep-dive, attendance, tier-analysis,
+                        captain-profile, config-panel, inventory-health, key-metrics,
+                        complaints, incentives)
+js/ui-registry.js     — assembles the public `ui` object from the modules; sets window.ui
+js/app.js             — orchestrator (`app` IIFE): cache-first init, parallel refresh; sets window.app
+js/icons.js           — SVG icon constants
+css/styles.css        — Full dark theme, CSS variables
 ```
+
+**Split-module convention (Phase 0):** the former 6,400-line `ui.js` was split verbatim. Top-level declarations in `js/shared/*` and `js/tabs/*` are intentionally **global** (classic scripts, no build step) so tab modules cross-call each other and the shared helpers at runtime. Keep new top-level names unique across these files and never name one after a `window` built-in. `ui` and `app` are also bound onto `window` explicitly (inline `onclick` handlers and `auth.js`'s `if (window.app) app.init()` bootstrap need real window properties — a bare top-level `const` is only a global lexical binding).
+
+**Startup flow:** `auth.js` → `app.init()` → `sheets.loadFromCache()` (IndexedDB, previous session's parsed rows — Dates survive structured clone) → instant render + `.stale-banner` ("Showing data from …") → `app.refresh({ background: true })`. `app.refresh()` fetches all seven ranges (6 data sheets + Config) in a single `Promise.all`; `auth.getToken()` shares one in-flight token request across concurrent callers. Foreground refresh (the header button) still shows the blocking loader; background refresh never does.
 
 ## Data Sources (Google Sheets)
 
@@ -27,6 +40,10 @@ css/styles.css      — Full dark theme, CSS variables
 | PNAs | A:Z | resolved by header: `ScheduledDate`, `order_id`, `picker_id`, `pna_qty` (`PNA_HEADERS`). Powers Fill Rate. Merged by `pna-merge.gs`. |
 | Item Variance | A:Z | merged by `item-variance-merge.gs`; loaded but **not yet used** (on hold) |
 | In-store Time | 'In-store'!A:Q | **separate spreadsheet** `INSTORE_SPREADSHEET_ID`; resolved by header (`INSTORE_HEADERS`). Powers In-store SLA. |
+| Config | A:C | **business config** (key \| value \| notes). Dotted keys (`slaTargets.2026-07.instore.baseline`) or JSON blobs (`complaintSlaCategories`). Rows starting `#` are ignored. Created by `google-apps-script/config-setup.gs`. Missing tab is fine — falls back to localStorage/defaults. |
+| Racks | A:A | **master rack list** (every rack code in the store; header row + `#` rows ignored, deduped, uppercased). Powers Inventory Health coverage % + stale-rack queue. Missing tab degrades gracefully. |
+
+**Config resolution (`cfg` global, js/config-store.js):** sheet Config tab > localStorage > code defaults. Wired consumers: `_getSlaTargets` (`slaTargets.<cycle>.<metric>.<tier>`), `_getComplaintSlaCategorySet` (`complaintSlaCategories`), `_getSlabOverride` (`incentiveSlabs.<YYYY-MM>`), `_supervisorFilter` (`supervisorIds` replaces `CONFIG.SUPERVISOR_IDS` when set). Analysis knobs (flow thresholds, productivity weights, staff divisor) intentionally stay localStorage-only. The Config panel shows which source is active; sheet values win and the panel says so.
 
 **API options**: `valueRenderOption=UNFORMATTED_VALUE, dateTimeRenderOption=SERIAL_NUMBER`
 - Dates arrive as serial numbers (days since 1899-12-30). Parsed via `(n - 25569) * 86400 * 1000` ms.
@@ -87,6 +104,8 @@ All 5 tabs with a Quick Select dropdown (Store Overview, Captain Deep Dive, Tier
 These options set `_xxxDateMode = true` and call the tab's render function directly (bypassing the normal preset path). The Deep Dive handler also resets `_ddFilter = 'all'`.
 
 ## Incentive Business Rules
+
+**Incentive periods are calendar months / ISO weeks by policy** (confirmed 2026-07) — do NOT "fix" them to billing cycles; billing cycles apply to merchant SLAs only. The payroll CSV export (`ui.exportIncentivesCsv`) is the register of record: weekly picking + audit + attendance bonus + grand total per captain.
 
 **Picking (weekly):** Uses `app.getFlaggedData()` filtered by `flows.is_picking`. **Weighted avg** `total_time_per_order` (seconds) — `sum(time × orders) / sum(orders)`. Threshold on weekly `checkout_orders` sum.
 - 400+ orders/week: <70s=₹500, <75s=₹400, <80s=₹300, <90s=₹250, <110s=₹125
@@ -194,7 +213,28 @@ Columns: Captain | Score | Putaway Qty | **Putter Hours** | Items Put Away/Hr (a
 
 **`getWeekKeysForMonth(data, monthKey)`:** Uses `_weekStart(row.date)` (Monday of the row's ISO week) to determine month membership — not `row.date` itself. Ensures weeks straddling month boundaries are assigned to the month their Monday falls in.
 
+## Verification
+
+- `node tools/smoke-load.js .` — simulates the browser loading every `<script src>` from index.html in order (shared context, stub DOM/storage) and probes the public API. Catches load-order breaks, TDZ errors, and global-name collisions after any module change.
+- `node tools/test-compute.js` — 17 unit tests over the payroll/SLA-grade logic (fill rate union, in-store SLA thresholds, picking slabs + weighted averages, audit tiers + cap, all attendance-bonus rules, pooled KPIs, pace projection, robust scoring gates, billing-cycle boundaries, Monday week rule). **Run after any compute.js change — this is money math.**
+- Plus `node --check` on touched files.
+
+## Redesign features (Phases 1–5, landed 2026-07)
+
+- **Morning Briefing** (js/tabs/store-overview.js): SLA band cards carry pace lines (`compute.projectCyclePace` — same math as KM Cycle Pace); KPI cards are pooled with delta chips + inline SVG sparklines; **exceptions feed** (`_renderOverviewExceptions`) is always T-1/cycle-based regardless of the date filter; the 10 bento charts are visible by default with a "Hide charts" toggle (`localStorage('overviewChartsOpen')`; charts only render while visible — hidden canvases misbehave).
+- **Robust captain scoring** (`compute.computeCaptainScores`): window-level, volume-gated (20 orders / 50 put qty / 5 racks / 50 FNV qty, min cohort 4 — overridable via sheet Config `scoring.*`), median/MAD z capped at ±4, positive = worse; composite = Σ max(0, z). The old per-day mean/SD `flagSlackers` pipeline still powers legacy views; new features use the robust scorer.
+- **Coaching list** (deep-dive.js `_buildCoachingCard`): top 5 by composite ≥ 1.5 with plain-language reasons and trend vs the preceding window of equal length.
+- **Captain 360** (captain-profile.js `openCaptain360` / `_build360Section`): every `_captainCell` in the dashboard drills through to it. Shows window SLA contribution, PNA involvement, month-to-date incentives, coaching signals.
+- **Incentive nudges** (incentives.js `_buildIncentiveNudges`): current week/month near-misses only (next slab within 15s, order thresholds within reach, audit tier boundaries within 12 racks). **CSV export** `ui.exportIncentivesCsv()` = payroll register incl. attendance bonus.
+- **Shift adherence** (attendance.js `_renderShiftAdherence`): rostered start (Roster col E, day-fraction or "HH:MM") vs first in-store activity (`act_ms` on parsed in-store rows). Pickers only; ±6h outliers excluded; grace via Config `adherence.graceMin` (default 30).
+- **Inventory coverage** (inventory-health.js `_renderRackCoverage`): needs the `Racks` tab (col A = master rack codes) in the main book; window coverage % + stale-rack queue (Config `inventory.staleDays`, default 30). Staleness uses ALL audit history, coverage uses the window.
+- **Complaints**: product repeat-offender table (2+ items, unique orders) and an "Unusual Days" Poisson control band (mean + 2·√mean over the window; needs ≥7 days).
+- **Data Health** (config-panel.js `_buildDataHealthCard`): fetched-vs-parsed counts per sheet (`sheets.getParseStats()` — live only after a network refresh, not from IndexedDB cache), cross-sheet unmatched-ID counts, missing days in the daily span, duplicate in-store order rows.
+
 ## Common Pitfalls
+
+- **Overview stat cards** use `compute.computeWindowKpis(filteredRows)` — pooled, volume-weighted KPIs over raw daily rows. Do NOT average period-bucket averages (a 200-order week would weigh the same as a 6,000-order week). Note `avgTotalTimePerOrder` here is the weighted col-Q average (same definition as incentives/Deep Dive), while `_summarise().avg_total_time_per_order` is a composed stage-sum including in-store ready-to-assign — different populations, different numbers; unify remaining call sites in Phase 1.
+- **T-1/T-2 quick-selects** go through `periods.setDayPair(startId, endId, daysAgo)` (js/shared/periods.js). Don't re-inline the date math in tab handlers.
 
 - **Rack counts**: Daily Metrics `racks_audited` (col H) can differ from Audits sheet `audit_codes.length`. All rack-dependent metrics (Tier Analysis, Captain Deep Dive actual/store HPR, `_tierMetrics`) now use the `auditRacksMap` pattern — see above.
 - **`audit_hours_per_rack` on rows**: Not pre-computed in `flagSlackers` anymore. Compute it on-demand: `(auditor_active_time / 3600) / racksFromAuditMap`.

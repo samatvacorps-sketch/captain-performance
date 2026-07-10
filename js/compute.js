@@ -509,6 +509,214 @@ const compute = (() => {
     };
   }
 
+  // ── Robust Captain Scoring (Phase 2) ─────────────────────────────────
+  // Replaces per-day mean/SD z-scores with window-level, volume-gated,
+  // median/MAD-based scores. Captains below a flow's volume gate are not
+  // scored in that flow (a picker with 3 orders can't be "Critical").
+  // Composite = Σ max(0, robust z) over gated flows — severity-weighted,
+  // unlike the old count-of-flags.
+
+  const SCORING_GATES = { minOrders: 20, minPutQty: 50, minAuditRacks: 5, minFnvQty: 50, minCohort: 4 };
+
+  function _median(arr) {
+    if (!arr.length) return null;
+    const s = arr.slice().sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  }
+
+  function _madScale(arr, med) {
+    // 1.4826 × MAD ≈ SD for normal data; robust to outliers.
+    const dev = arr.map(v => Math.abs(v - med));
+    const mad = _median(dev);
+    return mad ? mad * 1.4826 : 0;
+  }
+
+  /**
+   * Scores one window of daily rows. Returns:
+   *   { captains: Map<empId, { employee_name, flows, composite, reasons }>,
+   *     flowStats: { picking|putting|audit|fnv: { median, scale, n } } }
+   *
+   * flows[flow] = { value, volume, gated, z, pctWorse } — z is direction-
+   * adjusted (positive = worse) and capped at ±4.
+   *
+   * captainAuditRacks (optional Map empId→racks from the Audits sheet) is
+   * preferred over summing Daily Metrics col H, matching the Deep Dive /
+   * Inventory Health convention.
+   */
+  function _scoreWindow(rows, captainAuditRacks, g) {
+    const acc = new Map();
+    for (const r of rows || []) {
+      let a = acc.get(r.employee_id);
+      if (!a) {
+        a = { employee_name: r.employee_name, orders: 0, timeSum: 0, timeOrders: 0,
+              putQty: 0, putSec: 0, auditSec: 0, rackSum: 0, fnvQty: 0, fnvSec: 0 };
+        acc.set(r.employee_id, a);
+      }
+      if (r.picker_active_time > 0 && r.checkout_orders > 0) {
+        a.orders += r.checkout_orders;
+        if (r.total_time_per_order > 0) {
+          a.timeSum += r.total_time_per_order * r.checkout_orders;
+          a.timeOrders += r.checkout_orders;
+        }
+      }
+      if (r.putter_active_time > 0) { a.putQty += r.putaway_qty || 0; a.putSec += r.putter_active_time; }
+      if (r.auditor_active_time > 0) { a.auditSec += r.auditor_active_time; a.rackSum += r.racks_audited || 0; }
+      if (r.fnv_active_time > 0) { a.fnvQty += r.audited_qty || 0; a.fnvSec += r.fnv_active_time; }
+    }
+
+    // Per-captain flow values + volume gates
+    const captains = new Map();
+    for (const [id, a] of acc) {
+      const racks = captainAuditRacks?.get(id) ?? a.rackSum;
+      const flows = {
+        picking: {
+          value: a.timeOrders > 0 ? a.timeSum / a.timeOrders : null,     // sec/order, HIGH bad
+          volume: a.orders, gated: a.orders >= g.minOrders && a.timeOrders > 0,
+        },
+        putting: {
+          value: a.putSec > 0 ? a.putQty / (a.putSec / 3600) : null,     // items/hr, LOW bad
+          volume: a.putQty, gated: a.putQty >= g.minPutQty && a.putSec > 0,
+        },
+        audit: {
+          value: (racks > 0 && a.auditSec > 0) ? (a.auditSec / 3600) / racks : null, // hr/rack, HIGH bad
+          volume: racks, gated: racks >= g.minAuditRacks && a.auditSec > 0,
+        },
+        fnv: {
+          value: a.fnvSec > 0 ? a.fnvQty / (a.fnvSec / 3600) : null,     // qty/hr, LOW bad
+          volume: a.fnvQty, gated: a.fnvQty >= g.minFnvQty && a.fnvSec > 0,
+        },
+      };
+      captains.set(id, { employee_id: id, employee_name: a.employee_name, flows, composite: 0, reasons: [] });
+    }
+
+    // Store-level robust stats per flow over gated captains
+    const FLOW_DIR = { picking: 'HIGH', putting: 'LOW', audit: 'HIGH', fnv: 'LOW' };
+    const flowStats = {};
+    for (const flow of Object.keys(FLOW_DIR)) {
+      const vals = [...captains.values()]
+        .map(c => c.flows[flow])
+        .filter(f => f.gated && f.value !== null && !isNaN(f.value))
+        .map(f => f.value);
+      const med = vals.length >= g.minCohort ? _median(vals) : null;
+      flowStats[flow] = { median: med, scale: med !== null ? _madScale(vals, med) : 0, n: vals.length };
+    }
+
+    // Robust z + percentile + reasons
+    for (const c of captains.values()) {
+      for (const [flow, dir] of Object.entries(FLOW_DIR)) {
+        const f = c.flows[flow];
+        const st = flowStats[flow];
+        f.z = null; f.pctWorse = null;
+        if (!f.gated || f.value === null || st.median === null) continue;
+        if (st.scale > 0) {
+          const raw = dir === 'HIGH' ? (f.value - st.median) / st.scale : (st.median - f.value) / st.scale;
+          f.z = Math.max(-4, Math.min(4, +raw.toFixed(2)));
+        } else {
+          f.z = 0;
+        }
+        // Share of the gated cohort performing better than this captain
+        const peers = [...captains.values()].map(o => o.flows[flow]).filter(o => o.gated && o.value !== null);
+        if (peers.length > 1) {
+          const better = peers.filter(o => dir === 'HIGH' ? o.value < f.value : o.value > f.value).length;
+          f.pctWorse = Math.round(better / (peers.length - 1) * 100);
+        }
+        if (f.z > 0) c.composite += f.z;
+      }
+      c.composite = +c.composite.toFixed(2);
+
+      // Plain-language reasons for flows at z ≥ 1
+      const R = [];
+      const fk = c.flows;
+      const st = flowStats;
+      if (fk.picking.z >= 1) R.push(`Picking ${formatDuration(fk.picking.value)}/order vs store median ${formatDuration(st.picking.median)} — slower than ${fk.picking.pctWorse}% of pickers (${fk.picking.volume.toLocaleString()} orders)`);
+      if (fk.putting.z >= 1) R.push(`Putaway ${Math.round(fk.putting.value)}/hr vs median ${Math.round(st.putting.median)} — below ${fk.putting.pctWorse}% of putters (${fk.putting.volume.toLocaleString()} items)`);
+      if (fk.audit.z >= 1)   R.push(`Audit ${Math.round(fk.audit.value * 60)} min/rack vs median ${Math.round(st.audit.median * 60)} — slower than ${fk.audit.pctWorse}% of auditors (${fk.audit.volume} racks)`);
+      if (fk.fnv.z >= 1)     R.push(`FNV audit ${Math.round(fk.fnv.value)}/hr vs median ${Math.round(st.fnv.median)} (${fk.fnv.volume.toLocaleString()} qty)`);
+      c.reasons = R;
+    }
+
+    return { captains, flowStats };
+  }
+
+  /**
+   * Robust, volume-gated captain scores for a window, with an optional
+   * trend vs the preceding window (same gates). See _scoreWindow.
+   */
+  function computeCaptainScores(rows, prevRows = null, captainAuditRacks = null, gates = {}) {
+    const g = { ...SCORING_GATES, ...(gates || {}) };
+    const cur = _scoreWindow(rows, captainAuditRacks, g);
+    const prev = (prevRows && prevRows.length) ? _scoreWindow(prevRows, null, g) : null;
+    for (const c of cur.captains.values()) {
+      const p = prev ? prev.captains.get(c.employee_id) : null;
+      c.prevComposite = p ? p.composite : null;
+      c.trend = p == null ? 'na'
+        : c.composite - p.composite > 0.5 ? 'worse'
+        : p.composite - c.composite > 0.5 ? 'better'
+        : 'flat';
+    }
+    return cur;
+  }
+
+  // ── Cycle Pace Projection ────────────────────────────────────────────
+
+  /**
+   * Projects a rate metric to the end of an open window, assuming the
+   * remaining days carry the window's average daily volume and perform at
+   * `recentPct` (typically last-7-day form). Works for both directions —
+   * pass the numerator that matches the pct definition (met orders,
+   * complaint items, in-full orders...).
+   *
+   * Returns { projected, future, recentPct } or null when not projectable.
+   * Shared by the Key Metrics pace card and the Store Overview SLA band —
+   * keep both flowing through here so their numbers agree.
+   */
+  function projectCyclePace(numerator, denom, recentPct, elapsedDays, daysLeft) {
+    if (!denom || denom <= 0 || elapsedDays < 1 || daysLeft < 1) return null;
+    const future = (denom / elapsedDays) * daysLeft;
+    const rp = (recentPct !== null && recentPct !== undefined)
+      ? recentPct
+      : +(numerator / denom * 100).toFixed(2);
+    const projected = +(((numerator + rp / 100 * future) / (denom + future)) * 100).toFixed(2);
+    return { projected, future, recentPct: +(+rp).toFixed(2) };
+  }
+
+  // ── Pooled Window KPIs ───────────────────────────────────────────────
+
+  /**
+   * Pooled KPIs over raw daily rows for a date window — weighted by volume
+   * rather than averaged across period buckets, so a 200-order week doesn't
+   * count the same as a 6,000-order week. Single source for headline cards.
+   *
+   * avgTotalTimePerOrder uses the weighted average of col Q by checkout
+   * orders over picking-active rows — the same definition as
+   * computePickingIncentives and the Deep Dive summary.
+   * pooledIph = total putaway qty ÷ total putter hours (true store rate).
+   */
+  function computeWindowKpis(rows) {
+    let orders = 0, timeSum = 0, timeOrders = 0;
+    let putawayQty = 0, putterSec = 0, pickerSec = 0;
+    for (const r of rows || []) {
+      orders += r.checkout_orders || 0;
+      if (r.picker_active_time > 0 && r.total_time_per_order > 0 && r.checkout_orders > 0) {
+        timeSum    += r.total_time_per_order * r.checkout_orders;
+        timeOrders += r.checkout_orders;
+      }
+      if (r.putter_active_time > 0) {
+        putawayQty += r.putaway_qty || 0;
+        putterSec  += r.putter_active_time;
+      }
+      pickerSec += r.picker_active_time || 0;
+    }
+    return {
+      totalOrders:          orders,
+      avgTotalTimePerOrder: timeOrders > 0 ? timeSum / timeOrders : 0, // seconds
+      pooledIph:            putterSec > 0 ? putawayQty / (putterSec / 3600) : 0,
+      totalPickingHours:    pickerSec / 3600,
+      totalPutawayQty:      putawayQty,
+    };
+  }
+
   // ── Utility Functions ─────────────────────────────────────────────────
 
   function _isActiveInFlow(row, flow) {
@@ -1268,10 +1476,9 @@ const compute = (() => {
 
   /**
    * Returns distinct ISO week keys that "belong" to a given month.
-   * Assignment rule: a week belongs to the month containing its Thursday
-   * (same ISO-8601 principle used for year assignment). This means:
-   *  - W14 2026 (Mar 30–Apr 5): Thursday = Apr 2 → April  ✓
-   *  - W9  2026 (Feb 23–Mar 1): Thursday = Feb 26 → February ✓ (won't bleed into March)
+   * Assignment rule: a week belongs to the month its MONDAY falls in
+   * (see CLAUDE.md — weeks straddling month boundaries go to the month
+   * of their Monday). E.g. W14 2026 (Mon Mar 30 – Sun Apr 5) → March.
    * @param {Array} data - daily metric rows
    * @param {string} monthKey - "YYYY-MM"
    * @returns {string[]} sorted week keys
@@ -1773,6 +1980,9 @@ const compute = (() => {
     computeFillRate,
     computeFlowFlags,
     computeFNVRate,
+    computeWindowKpis,
+    projectCyclePace,
+    computeCaptainScores,
     computeStoreStats,
     computePersonalAvgs,
     flagSlackers,
